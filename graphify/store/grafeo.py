@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from collections import defaultdict
 import math
 from pathlib import Path
 import threading
@@ -119,51 +120,107 @@ class GrafeoStore(GraphStore):
 
     def upsert_nodes(self, nodes: Iterable[NodeRecord]) -> None:
         with self.transaction():
+            nodes = list(nodes)
+            if not nodes:
+                return
+            nodes = list({node.id: node for node in nodes}.values())
+            prior = {row['id']: row['kind'] for row in self._execute(
+                "MATCH (n:_GraphifyNode) WHERE n.id IN $ids "
+                "RETURN n.id AS id, n._graphify_kind AS kind", {"ids": [n.id for n in nodes]})}
+            groups: dict[str, list[dict]] = defaultdict(list)
             for node in nodes:
                 if not isinstance(node.id, str) or not node.id:
                     raise ValueError("nodes require nonempty string IDs")
                 kind = _kind(node.attributes)
-                label = _identifier(kind)
+                _identifier(kind)
                 props = encode_record(node.attributes)
                 props.update(id=node.id, _graphify_kind=kind)
-                old = self._execute(
-                    "MATCH (n:_GraphifyNode {id:$id}) RETURN n._graphify_kind AS kind",
-                    {"id": node.id},
-                )
-                if old and old[0]["kind"] != kind:
+                old = prior.get(node.id)
+                if old and old != kind:
                     self._execute(
-                        f"MATCH (n:_GraphifyNode {{id:$id}}) REMOVE n:{_identifier(old[0]['kind'])}",
+                        f"MATCH (n:_GraphifyNode {{id:$id}}) REMOVE n:{_identifier(old)}",
                         {"id": node.id},
                     )
+                prior[node.id] = kind
+                groups[kind].append({"id": node.id, "props": props})
+            for kind, rows in groups.items():
                 self._execute(
-                    f"MERGE (n:_GraphifyNode {{id:$id}}) SET n = $props SET n:{label}",
-                    {"id": node.id, "props": props},
+                    f"FOR row IN $rows MERGE (n:_GraphifyNode {{id:row.id}}) "
+                    f"SET n = row.props SET n:{_identifier(kind)}", {"rows": rows},
                 )
                 self._dirty = True
 
     def upsert_edges(self, edges: Iterable[EdgeRecord]) -> None:
         with self.transaction():
+            edges = list(edges)
+            if not edges:
+                return
+            # A batch may repeat an ID; its last complete record wins.
+            edges = list({edge.id: edge for edge in edges}.values())
+            endpoints = {v for edge in edges for v in (edge.source, edge.target)}
+            present = {row['id'] for row in self._execute(
+                "MATCH (n:_GraphifyNode) WHERE n.id IN $ids RETURN n.id AS id",
+                {"ids": sorted(endpoints)})}
+            if endpoints - present:
+                raise ValueError(f"edge endpoint does not exist: {sorted(endpoints - present)[0]!r}")
+            prior = {row['id']: row for row in self._execute(
+                "MATCH (a:_GraphifyNode)-[e]->(b:_GraphifyNode) "
+                "WHERE e._graphify_edge_id IN $ids RETURN e._graphify_edge_id AS id, "
+                "a.id AS source, b.id AS target, type(e) AS relation",
+                {"ids": [edge.id for edge in edges]})}
+            inserts: dict[str, list[dict]] = defaultdict(list)
+            updates: dict[str, list[dict]] = defaultdict(list)
             for edge in edges:
                 if not isinstance(edge.id, str) or not edge.id:
                     raise ValueError("edges require nonempty string storage IDs")
                 relation = edge.attributes.get("relation", "related_to")
                 if not isinstance(relation, str):
                     raise ValueError("edge relation must be a string")
-                edge_type = _identifier(relation)
-                for endpoint in (edge.source, edge.target):
-                    if self.get_node(endpoint) is None:
-                        raise ValueError(f"edge endpoint does not exist: {endpoint!r}")
+                _identifier(relation)
                 props = encode_record(edge.attributes)
                 props["_graphify_edge_id"] = edge.id
+                old = prior.get(edge.id)
+                same = old and (old['source'], old['target'], old['relation']) == (
+                    edge.source, edge.target, relation)
+                if old and not same:
+                    self.delete_edges([edge.id])
+                row = {"id": edge.id, "source": edge.source, "target": edge.target, "props": props}
+                (updates if same else inserts)[relation].append(row)
+            for relation, rows in inserts.items():
                 self._execute(
-                    "MATCH (:_GraphifyNode)-[e]->(:_GraphifyNode) "
-                    "WHERE e._graphify_edge_id = $id DELETE e", {"id": edge.id},
+                    "FOR row IN $rows MATCH (a:_GraphifyNode {id:row.source}), "
+                    "(b:_GraphifyNode {id:row.target}) "
+                    f"INSERT (a)-[e:{_identifier(relation)}]->(b) SET e = row.props", {"rows": rows},
                 )
+            for relation, rows in updates.items():
                 self._execute(
-                    f"MATCH (a:_GraphifyNode {{id:$source}}), (b:_GraphifyNode {{id:$target}}) "
-                    f"INSERT (a)-[e:{edge_type}]->(b) SET e = $props",
-                    {"source": edge.source, "target": edge.target, "props": props},
+                    f"FOR row IN $rows MATCH (a:_GraphifyNode {{id:row.source}})-"
+                    f"[e:{_identifier(relation)}]->(b:_GraphifyNode {{id:row.target}}) "
+                    "WHERE e._graphify_edge_id = row.id SET e = row.props", {"rows": rows},
                 )
+            self._dirty = True
+
+    def delete_edges(self, ids: Iterable[str]) -> None:
+        with self.transaction():
+            ids = list(ids)
+            if ids:
+                self._execute("MATCH (:_GraphifyNode)-[e]->(:_GraphifyNode) "
+                              "WHERE e._graphify_edge_id IN $ids DELETE e", {"ids": ids})
+                self._dirty = True
+
+    def delete_nodes(self, ids: Iterable[str]) -> None:
+        with self.transaction():
+            ids = list(ids)
+            if ids:
+                self._execute("MATCH (n:_GraphifyNode) WHERE n.id IN $ids DETACH DELETE n",
+                              {"ids": ids})
+                self._dirty = True
+
+    def delete_metadata(self, keys: Iterable[str]) -> None:
+        with self.transaction():
+            keys = list(keys)
+            if keys:
+                self._execute("MATCH (n:_GraphifyMetadata) WHERE n.id IN $ids DELETE n", {"ids": keys})
                 self._dirty = True
 
     def delete_by_source_file(self, source_file: str, *, origin: str | None = None) -> None:

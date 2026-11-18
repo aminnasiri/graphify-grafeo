@@ -106,6 +106,15 @@ class GraphStore(ABC):
     def upsert_edges(self, edges: Iterable[EdgeRecord]) -> None: ...
 
     @abstractmethod
+    def delete_nodes(self, ids: Iterable[str]) -> None: ...
+
+    @abstractmethod
+    def delete_edges(self, ids: Iterable[str]) -> None: ...
+
+    @abstractmethod
+    def delete_metadata(self, keys: Iterable[str]) -> None: ...
+
+    @abstractmethod
     def delete_by_source_file(self, source_file: str, *, origin: str | None = None) -> None:
         """Purge owned nodes/edges and incident arcs, optionally scoped by _origin.
 

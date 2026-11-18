@@ -7,13 +7,23 @@ graph backend for every feature. There is no `JsonStore`, optional Grafeo extra,
 or `store=json` selection. JSON remains an explicit import/export format, with
 the existing node-link schema (version 1).
 
-**Phase 1 status:** the storage contract, database adapter and interchange API
-are implemented. Existing extraction, CLI, watch, hook, MCP, PR and export
+**Phase 2 status:** the storage contract, database adapter, interchange API and
+incremental reconciliation are implemented. Existing extraction, CLI, watch, hook, MCP, PR and export
 consumers have not yet switched to it. They still read/write `graph.json` until
 their integration phase. Do not delete a project's current graph or assume that
 opening a store migrates it automatically.
 
 ## Storage API
+
+`graphify.store.pipeline.sync_graph()` computes record deltas and commits only
+changed records and metadata. `update_extraction()` reuses `build_merge` or the
+raw merge path with an in-memory baseline; `update_communities()` changes node
+assignments and atomically saves labels and membership signatures. Per-file
+manifest rows are separate metadata records, so changing one hash does not
+rewrite the other rows. A stale `expected_revision` raises
+`ConcurrentUpdateError` instead of overwriting another writer. Surviving native
+node and edge IDs remain unchanged, including incoming evidence from unchanged
+files. Grafeo may still checkpoint larger storage sections internally.
 
 ```python
 from graphify.store import EdgeRecord, NodeRecord, open_store

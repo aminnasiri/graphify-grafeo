@@ -443,6 +443,25 @@ def to_json(G: nx.Graph, communities: dict[int, list[str]], output_path: str, *,
             # The guard passed; free its copies of both graphs before export.
             del existing_nodes, new_node_list, existing_ids
 
+    data = to_data(G, communities, community_labels=community_labels, original_links=original_links,
+                   built_at_commit=built_at_commit, output_path=output_path)
+    from graphify.paths import write_json_atomic
+    # Atomic write: a crash/ENOSPC mid-write must not truncate a good graph.json.
+    write_json_atomic(output_path, data, compact=True)
+    return True
+
+
+def to_data(G: nx.Graph, communities: dict[int, list[str]], *,
+            community_labels: dict[int, str] | None = None,
+            original_links: list[dict] | None = None,
+            built_at_commit: str | None = None,
+            output_path: str | Path | None = None) -> dict:
+    """Canonical node-link interchange data, without filesystem side effects."""
+    from graphify.build import take_dedup_remap, take_shrink_accounting
+    take_dedup_remap(G)
+    take_shrink_accounting(G)
+    G.graph.pop("_replaced_sources", None)
+    existing_path = Path(output_path) if output_path is not None else None
     node_community = _node_community_map(communities)
     _labels: dict[int, str] = {int(k): v for k, v in (community_labels or {}).items()}
     try:
@@ -537,7 +556,7 @@ def to_json(G: nx.Graph, communities: dict[int, list[str]], output_path: str, *,
         # dangling-member shape #1916 removed.
         _prev_hyperedges = None
         try:
-            if existing_path.exists():
+            if existing_path is not None and existing_path.exists():
                 from graphify.security import check_graph_file_size_cap
                 check_graph_file_size_cap(existing_path)
                 _prev = json.loads(existing_path.read_text(encoding="utf-8"))
@@ -567,13 +586,12 @@ def to_json(G: nx.Graph, communities: dict[int, list[str]], output_path: str, *,
     # Fallback provenance comes from the repo the graph is being written INTO
     # (output_path lives in <target>/graphify-out/), never the shell's cwd —
     # the same cwd-anchoring mistake #2316 fixed for `update`.
-    commit = built_at_commit if built_at_commit is not None else _git_head(Path(output_path).resolve().parent)
+    commit = built_at_commit if built_at_commit is not None else (
+        _git_head(Path(output_path).resolve().parent) if output_path is not None else None
+    )
     if commit:
         data["built_at_commit"] = commit
-    from graphify.paths import write_json_atomic
-    # Atomic write: a crash/ENOSPC mid-write must not truncate a good graph.json.
-    write_json_atomic(output_path, data, compact=True)
-    return True
+    return data
 
 
 def prune_dangling_edges(graph_data: dict) -> tuple[dict, int]:

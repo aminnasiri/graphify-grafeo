@@ -2575,7 +2575,7 @@ def deduplicate_by_label(nodes: list[dict], edges: list[dict]) -> tuple[list[dic
     return deduped_nodes, deduped_edges
 
 
-def _load_existing_graph(graph_path: Path) -> "tuple[list, list, list, bool] | None":
+def _load_existing_graph(graph_path: Path, *, data: dict | None = None) -> "tuple[list, list, list, bool] | None":
     """Load (nodes, edges, hyperedges, directed) from an existing graph.json for
     an incremental merge, accepting both the ``links`` and ``edges`` spellings
     and either hyperedge persistence slot (top-level or ``graph.hyperedges``).
@@ -2592,17 +2592,18 @@ def _load_existing_graph(graph_path: Path) -> "tuple[list, list, list, bool] | N
     exists but cannot be parsed — callers must refuse to overwrite rather
     than silently replace a possibly-recoverable graph.
     """
-    if not graph_path.exists():
-        return None
-    from graphify.security import check_graph_file_size_cap
-    check_graph_file_size_cap(graph_path)
-    try:
-        data = json.loads(graph_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
-        raise RuntimeError(
-            f"Cannot read {graph_path} for incremental merge: {exc}. "
-            "Delete the file and run a full rebuild."
-        ) from exc
+    if data is None:
+        if not graph_path.exists():
+            return None
+        from graphify.security import check_graph_file_size_cap
+        check_graph_file_size_cap(graph_path)
+        try:
+            data = json.loads(graph_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            raise RuntimeError(
+                f"Cannot read {graph_path} for incremental merge: {exc}. "
+                "Delete the file and run a full rebuild."
+            ) from exc
     links_key = "links" if "links" in data else "edges"
     nodes = list(data.get("nodes", []))
     edges = list(data.get(links_key, []))
@@ -2728,6 +2729,7 @@ def merge_raw_extraction(
     root: "str | Path | None" = None,
     *,
     ast_sources: "Iterable[str | Path] | None" = None,
+    existing_data: dict | None = None,
 ) -> dict:
     """Merge the existing raw graph.json forward into a fresh raw extraction
     (the ``extract --no-cluster`` incremental path, #2169).
@@ -2759,7 +2761,7 @@ def merge_raw_extraction(
     overwrite it. No-op when ``graph_path`` does not exist.
     """
     graph_path = Path(graph_path)
-    loaded = _load_existing_graph(graph_path)
+    loaded = _load_existing_graph(graph_path, data=existing_data)
     if loaded is None:
         return new
     existing_nodes, existing_edges, existing_hyperedges, _ = loaded
@@ -2872,6 +2874,7 @@ def build_merge(
     dedup_llm_backend: str | None = None,
     root: str | Path | None = None,
     ast_sources: "Iterable[str | Path] | None" = None,
+    existing_data: dict | None = None,
 ) -> nx.Graph:
     """Load existing graph.json and return it merged with ``new_chunks``.
 
@@ -2900,7 +2903,7 @@ def build_merge(
     # build itself), so a one-shot iterator must be materialised first.
     new_chunks = list(new_chunks)
     graph_path = Path(graph_path if graph_path is not None else _default_graph_json())
-    _loaded = _load_existing_graph(graph_path)
+    _loaded = _load_existing_graph(graph_path, data=existing_data)
     if _loaded is not None:
         existing_nodes, existing_edges, existing_hyperedges, existing_directed = _loaded
         had_graph = True

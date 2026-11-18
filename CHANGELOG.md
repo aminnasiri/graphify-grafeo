@@ -4,6 +4,12 @@ Full release notes with details on each version: [GitHub Releases](https://githu
 
 ## Unreleased
 
+- Phase 2: apply reconciled graph deltas in one Grafeo transaction with
+  per-file hash metadata, optimistic revision checks and stable native IDs.
+  Reuse existing source/tier reconciliation and update community properties
+  without rewriting edges. Batch node/edge writes and expose an in-memory
+  canonical serializer for pipeline integration.
+
 - Breaking: require Python 3.12+ and `grafeo>=0.6.3,<0.7`; update the CI matrix
   and lint/type-check targets accordingly.
 - Add the Phase 1 `GraphStore` contract and its sole implementation,
