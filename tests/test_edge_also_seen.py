@@ -2,12 +2,14 @@
 
 `build_from_json` keeps one edge per pair and relation, and since #3711 the
 higher-confidence edge wins. The loser used to vanish: an AMBIGUOUS semantic
-duplicate of an INFERRED dispatch edge left no trace in graph.json. The winner
+duplicate of an INFERRED dispatch edge left no trace in graph.grafeo. The winner
 now carries the loser's confidence / score / file / line in `also_seen`, and
 `path` unions those tags into the hop label the way it already does for
 parallel edges.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import json
 
@@ -114,7 +116,7 @@ def test_identical_duplicate_adds_nothing():
 
 
 def test_rebuild_from_written_graph_is_idempotent():
-    """An update re-feeds graph.json links through the build with fresh edges."""
+    """An update re-feeds graph.grafeo links through the build with fresh edges."""
     G = build_from_json(_report_extraction([dict(WEAK_DISPATCH)]))
     data = json_graph.node_link_data(G, edges="links")
     for link in data["links"]:
@@ -136,8 +138,8 @@ def test_malformed_also_seen_on_disk_is_sanitized():
 
 def _path_graph(tmp_path):
     G = build_from_json(_report_extraction([dict(WEAK_DISPATCH)]))
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps(json_graph.node_link_data(G, edges="links")))
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps(json_graph.node_link_data(G, edges="links")))
     return p, G
 
 
@@ -165,7 +167,7 @@ def test_report_cs_extraction_keeps_semantic_duplicate(tmp_path):
     from graphify.extract import extract
 
     src = tmp_path / "Report.cs"
-    src.write_text(REPORT_CS)
+    _graph_write_text(src, REPORT_CS)
     ext = extract([src], cache_root=tmp_path)
     ext["edges"].append(dict(WEAK_DISPATCH))
     d = _dispatch(build_from_json(ext, root=tmp_path))

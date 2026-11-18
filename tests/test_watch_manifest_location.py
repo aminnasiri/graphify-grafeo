@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text, write_text as _graph_write_text
 """#2316: `graphify update <target>` must write manifest.json into the TARGET's
 graphify-out/, not the process CWD's.
 
@@ -23,11 +25,8 @@ import pytest
 def _corpus(base: Path, name: str, func: str) -> Path:
     d = base / name
     d.mkdir()
-    (d / f"{name}_file.py").write_text(
-        f"def {func}():\n    return helper_{func}()\n\n"
-        f"def helper_{func}():\n    return 1\n",
-        encoding="utf-8",
-    )
+    _graph_write_text(d / f"{name}_file.py", f"def {func}():\n    return helper_{func}()\n\n"
+        f"def helper_{func}():\n    return 1\n", encoding="utf-8")
     return d
 
 
@@ -52,16 +51,16 @@ def test_manifest_lands_in_the_target_not_the_cwd(two_projects, monkeypatch, no_
     target_manifest = proj_b / "graphify-out" / "manifest.json"
     cwd_manifest = proj_a / "graphify-out" / "manifest.json"
 
-    assert target_manifest.exists(), (
+    assert _graph_exists(target_manifest), (
         "manifest.json must land next to the graph it describes, in the target's "
         f"graphify-out/ (#2316); {target_manifest} is missing"
     )
-    assert not cwd_manifest.exists(), (
+    assert not _graph_exists(cwd_manifest), (
         "an update targeting another project must not create a manifest in the "
         f"CWD project; found {cwd_manifest}"
     )
 
-    rows = json.loads(target_manifest.read_text(encoding="utf-8"))
+    rows = json.loads(_graph_read_text(target_manifest, encoding="utf-8"))
     assert rows, "target manifest is empty — nothing for the next incremental run"
     assert any("projb_file.py" in k for k in rows), (
         f"target manifest should describe the target's files; got {sorted(rows)}"
@@ -83,7 +82,7 @@ def test_second_run_reaches_the_same_topology_early_return(two_projects, monkeyp
     target_manifest = proj_b / "graphify-out" / "manifest.json"
     # Remove it so a second write is the only thing that can recreate it, which
     # keeps this test honest about which run produced the file.
-    target_manifest.unlink(missing_ok=True)
+    _graph_unlink(target_manifest, missing_ok=True)
 
     capsys.readouterr()
     assert _rebuild_code(proj_b, acquire_lock=False) is True
@@ -96,11 +95,11 @@ def test_second_run_reaches_the_same_topology_early_return(two_projects, monkeyp
         "test no longer covers that save_manifest site"
     )
 
-    assert target_manifest.exists(), (
+    assert _graph_exists(target_manifest), (
         "the unchanged-topology early-return path must also write the manifest "
         "into the target's graphify-out/ (#2316)"
     )
-    assert not (proj_a / "graphify-out" / "manifest.json").exists(), (
+    assert not _graph_exists(proj_a / "graphify-out" / "manifest.json"), (
         "the unchanged-topology path wrote the manifest into the CWD project"
     )
 
@@ -120,12 +119,12 @@ def test_update_does_not_destroy_the_cwd_projects_own_manifest(two_projects, mon
     # Give proj_a a legitimate manifest of its own, the way `update .` would.
     assert _rebuild_code(Path("."), acquire_lock=False) is True
     own_manifest = proj_a / "graphify-out" / "manifest.json"
-    before = own_manifest.read_text(encoding="utf-8")
+    before = _graph_read_text(own_manifest, encoding="utf-8")
     assert "proja_file.py" in before, "precondition: proj_a must have its own rows"
 
     assert _rebuild_code(proj_b, acquire_lock=False) is True
 
-    after = own_manifest.read_text(encoding="utf-8")
+    after = _graph_read_text(own_manifest, encoding="utf-8")
     assert after == before, (
         "updating another project must leave the CWD project's manifest untouched; "
         f"before={before!r} after={after!r}"
@@ -149,9 +148,9 @@ def test_relative_target_manifest_keys_stay_portable(two_projects, monkeypatch):
     assert _rebuild_code(relative_target, acquire_lock=False) is True
 
     target_manifest = proj_b / "graphify-out" / "manifest.json"
-    assert target_manifest.exists(), "manifest missing from the target (#2316)"
+    assert _graph_exists(target_manifest), "manifest missing from the target (#2316)"
 
-    rows = json.loads(target_manifest.read_text(encoding="utf-8"))
+    rows = json.loads(_graph_read_text(target_manifest, encoding="utf-8"))
     absolute_keys = [k for k in rows if Path(k).is_absolute()]
     assert not absolute_keys, (
         "manifest keys must be stored relative to the target so the manifest is "
@@ -167,7 +166,7 @@ def test_built_at_commit_comes_from_the_target_repo(two_projects, monkeypatch):
 
     ``_git_head()`` ran ``git rev-parse HEAD`` with no ``cwd=``, so it read the
     invoking repo. An update of project B from project A stamped A's commit into
-    B's graph.json — provenance that is confidently wrong (cf. #2081).
+    B's graph.grafeo — provenance that is confidently wrong (cf. #2081).
     """
     import subprocess
 
@@ -196,9 +195,9 @@ def test_built_at_commit_comes_from_the_target_repo(two_projects, monkeypatch):
     monkeypatch.chdir(proj_a)
     assert _rebuild_code(proj_b, acquire_lock=False) is True
 
-    graph = json.loads((proj_b / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+    graph = json.loads(_graph_read_text(proj_b / "graphify-out" / "graph.grafeo", encoding="utf-8"))
     assert graph.get("built_at_commit") == head_b, (
-        "graph.json must record the commit of the repo it describes; got "
+        "graph.grafeo must record the commit of the repo it describes; got "
         f"{graph.get('built_at_commit')!r}, expected {head_b!r} "
         f"(the invoking repo's HEAD is {head_a!r})"
     )
@@ -222,7 +221,7 @@ def test_relative_target_manifest_is_consumable_by_detect_incremental(
     assert _rebuild_code(relative_target, acquire_lock=False) is True
 
     manifest_path = proj_b / "graphify-out" / "manifest.json"
-    assert manifest_path.exists(), "manifest missing from the target (#2316)"
+    assert _graph_exists(manifest_path), "manifest missing from the target (#2316)"
 
     # Simulate the next run from a *different* CWD, as a driver script would.
     monkeypatch.chdir(proj_b.parent)

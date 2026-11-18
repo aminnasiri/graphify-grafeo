@@ -6,6 +6,8 @@ rendered workflow with a clean intermediate directory so this contract cannot
 drift again.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, is_file as _graph_is_file, read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import os
@@ -44,7 +46,7 @@ def _run_code(script: str, *, cwd: Path, root: Path) -> subprocess.CompletedProc
     # sidecar instead of a substituted literal; Step 1 writes it, so simulate that.
     out = cwd / "graphify-out"
     out.mkdir(parents=True, exist_ok=True)
-    (out / ".graphify_root").write_text(root.as_posix(), encoding="utf-8")
+    _graph_write_text(out / ".graphify_root", root.as_posix(), encoding="utf-8")
     script = script.replace("IS_DIRECTED", "False")
     env = {
         **os.environ,
@@ -99,11 +101,11 @@ def test_codex_code_only_update_materializes_and_merges_fresh_ast(tmp_path: Path
 
     root = tmp_path
     changed = root / "changed.py"
-    changed.write_text("def replacement():\n    return 2\n", encoding="utf-8")
+    _graph_write_text(changed, "def replacement():\n    return 2\n", encoding="utf-8")
     added = root / "added.py"
-    added.write_text("def added_symbol():\n    return 3\n", encoding="utf-8")
+    _graph_write_text(added, "def added_symbol():\n    return 3\n", encoding="utf-8")
     notes = root / "notes.md"
-    notes.write_text("# Existing semantic source\n", encoding="utf-8")
+    _graph_write_text(notes, "# Existing semantic source\n", encoding="utf-8")
     deleted = root / "deleted.py"
     out = tmp_path / "graphify-out"
     out.mkdir()
@@ -112,13 +114,13 @@ def test_codex_code_only_update_materializes_and_merges_fresh_ast(tmp_path: Path
     # to ensure the fast path replaces it rather than carrying it into Part C.
     extraction_path = out / ".graphify_extract.json"
     semantic_path = out / ".graphify_semantic.json"
-    assert not extraction_path.exists()
-    semantic_path.write_text(json.dumps({
+    assert not _graph_exists(extraction_path)
+    _graph_write_text(semantic_path, json.dumps({
         "nodes": [{"id": "stale_semantic", "label": "stale"}],
         "edges": [],
         "hyperedges": [],
     }), encoding="utf-8")
-    (out / ".graphify_detect.json").write_text(json.dumps({
+    _graph_write_text(out / ".graphify_detect.json", json.dumps({
         "files": {"code": [str(changed), str(added)]},
     }), encoding="utf-8")
 
@@ -152,12 +154,12 @@ assert saved == 1
     )
     semantic_cache = out / "cache" / "semantic"
     cache_before = {
-        path.relative_to(semantic_cache).as_posix(): path.read_bytes()
-        for path in semantic_cache.rglob("*") if path.is_file()
+        path.relative_to(semantic_cache).as_posix(): _graph_read_bytes(path)
+        for path in semantic_cache.rglob("*") if _graph_is_file(path)
     }
 
-    graph_path = out / "graph.json"
-    graph_path.write_text(json.dumps({
+    graph_path = out / "graph.grafeo"
+    _graph_write_text(graph_path, json.dumps({
         "nodes": [
             {"id": "old_changed", "label": "old function", "source_file": "changed.py",
              "source_location": "L1", "_origin": "ast"},
@@ -180,7 +182,7 @@ assert saved == 1
         ],
         "hyperedges": [],
     }), encoding="utf-8")
-    (out / ".graphify_incremental.json").write_text(json.dumps({
+    _graph_write_text(out / ".graphify_incremental.json", json.dumps({
         "deleted_files": [str(deleted)],
         "new_files": {"code": [str(changed), str(added)]},
         "files": {"code": [str(changed), str(added)], "document": [str(notes)]},
@@ -188,11 +190,11 @@ assert saved == 1
 
     _run_code(ast_blocks[0], cwd=tmp_path, root=root)
     _run_code(empty_semantic_blocks[0], cwd=tmp_path, root=root)
-    semantic = json.loads(semantic_path.read_text(encoding="utf-8"))
+    semantic = json.loads(_graph_read_text(semantic_path, encoding="utf-8"))
     assert semantic["nodes"] == []
     _run_code(part_c_blocks[0], cwd=tmp_path, root=root)
 
-    extraction = json.loads(extraction_path.read_text(encoding="utf-8"))
+    extraction = json.loads(_graph_read_text(extraction_path, encoding="utf-8"))
     extraction_ids = {node["id"] for node in extraction["nodes"]}
     assert any("replacement" in node_id for node_id in extraction_ids)
     assert any("added_symbol" in node_id for node_id in extraction_ids)
@@ -200,11 +202,11 @@ assert saved == 1
 
     _run_code(merge_blocks[0], cwd=tmp_path, root=root)
     cache_after = {
-        path.relative_to(semantic_cache).as_posix(): path.read_bytes()
-        for path in semantic_cache.rglob("*") if path.is_file()
+        path.relative_to(semantic_cache).as_posix(): _graph_read_bytes(path)
+        for path in semantic_cache.rglob("*") if _graph_is_file(path)
     }
     assert cache_after == cache_before
-    merged = json.loads(extraction_path.read_text(encoding="utf-8"))
+    merged = json.loads(_graph_read_text(extraction_path, encoding="utf-8"))
     merged_nodes = {node["id"]: node for node in merged["nodes"]}
     assert "old_changed" not in merged_nodes
     assert "old_deleted" not in merged_nodes

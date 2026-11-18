@@ -66,7 +66,7 @@ Det var det. Du får **tre filer**:
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 Den lagrede grafen inkluderer `graph.schema_version` slik at integrasjoner kan oppdage
@@ -117,7 +117,7 @@ Hva du får ut av boksen:
 | **Gudenoder** | De mest tilkoblede konseptene, slik at du ser hva alt flyter gjennom |
 | **Fellesskap** | Grafen delt opp i delsystemer (Leiden), med LLM-frie etiketter |
 | **Lenker på tvers av filer** | `calls` / `imports` / `inherits` / `mixes_in` løst opp på tvers av ~40 språk via tree-sitter AST |
-| **Query, path, explain** | Still et spørsmål, spor stien mellom to ting, eller forklar ett konsept, alt mot `graph.json` |
+| **Query, path, explain** | Still et spørsmål, spor stien mellom to ting, eller forklar ett konsept, alt mot `graph.grafeo` |
 | **Begrunnelse + dokumentreferanser** | `# NOTE:` / `# WHY:`-kommentarer og ADR/RFC-sitater blir førsteklasses noder koblet til koden |
 | **Utover kode** | Dokumenter, PDF-filer, bilder og video/lyd kartlegges alle inn i samme graf |
 | **Lokalt først** | Kode parses lokalt med tree-sitter (ingen LLM, ingenting forlater maskinen din); kun den semantiske gjennomgangen av dokumenter/medier kaller en backend, og kun hvis du konfigurerer en |
@@ -402,7 +402,7 @@ Commit eller del grafen slik at hele teamet ditt spør mot den samme konteksten,
 
 ## Bruke grafen direkte
 
-Utover AI-assistenten din kan du spørre `graph.json` rett fra CLI-en med `graphify query`, `graphify path` og `graphify explain`. Et navn som matcher flere noder, avvises med kandidatene listet opp i stedet for gjettet. Skript kan lese utfallet fra exit-koden: `0` et svar, `3` et tvetydig navn, `4` ingen matchende node. Se **[Still bedre grafspørsmål](https://docs.graphify.com/guides/querying)** og **[spørringsreferansen](https://docs.graphify.com/reference/query)**.
+Utover AI-assistenten din kan du spørre `graph.grafeo` rett fra CLI-en med `graphify query`, `graphify path` og `graphify explain`. Et navn som matcher flere noder, avvises med kandidatene listet opp i stedet for gjettet. Skript kan lese utfallet fra exit-koden: `0` et svar, `3` et tvetydig navn, `4` ingen matchende node. Se **[Still bedre grafspørsmål](https://docs.graphify.com/guides/querying)** og **[spørringsreferansen](https://docs.graphify.com/reference/query)**.
 
 ---
 

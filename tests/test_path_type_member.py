@@ -9,6 +9,8 @@ type's membership edges, refuses several matches with their ids, and fails
 closed when the type exists but declares no such member.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import os
@@ -45,15 +47,15 @@ def report_graph(tmp_path_factory) -> Path:
     tmp_path = tmp_path_factory.mktemp("report")
     src = tmp_path / "src"
     src.mkdir()
-    (src / "Report.cs").write_text(_REPORT_CS)
+    _graph_write_text(src / "Report.cs", _REPORT_CS)
     old = os.getcwd()
     try:
         os.chdir(src)
         r = extract([Path("Report.cs")], cache_root=tmp_path / "cache")
     finally:
         os.chdir(old)
-    gp = tmp_path / "graph.json"
-    gp.write_text(json.dumps({
+    gp = tmp_path / "graph.grafeo"
+    _graph_write_text(gp, json.dumps({
         "directed": False, "multigraph": False, "graph": {},
         "nodes": r["nodes"], "links": r["edges"],
     }))
@@ -61,8 +63,8 @@ def report_graph(tmp_path_factory) -> Path:
 
 
 def _write_nodes(tmp_path, nodes, links) -> Path:
-    gp = tmp_path / "graph.json"
-    gp.write_text(json.dumps({
+    gp = tmp_path / "graph.grafeo"
+    _graph_write_text(gp, json.dumps({
         "directed": False, "multigraph": False, "graph": {},
         "nodes": [
             {"id": i, "label": lbl, "source_file": sf, "source_location": loc}
@@ -78,7 +80,7 @@ def _write_nodes(tmp_path, nodes, links) -> Path:
 
 def _load(gp: Path):
     return json_graph.node_link_graph(
-        {**json.loads(gp.read_text()), "directed": True}, edges="links")
+        {**json.loads(_graph_read_text(gp)), "directed": True}, edges="links")
 
 
 def _path(monkeypatch, capsys, gp, src, tgt):

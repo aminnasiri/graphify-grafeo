@@ -1,6 +1,6 @@
-"""Every edge endpoint in graph.json must be a declared node (#2873).
+"""Every edge endpoint in graph.grafeo must be a declared node (#2873).
 
-`graph.json` used to ship `imports`/`imports_from`/`re_exports` edges whose
+`graph.grafeo` used to ship `imports`/`imports_from`/`re_exports` edges whose
 target was an external module (stdlib, a third-party dependency) with no
 matching entry in `nodes[]`. Every loader (networkx `node_link_graph`)
 materialises such an endpoint as an attribute-less phantom node, so the node
@@ -11,6 +11,8 @@ never stub a non-import relation (a sourceless external call target stays
 suppressed per #3156).
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 from pathlib import Path
@@ -105,25 +107,20 @@ def test_no_cluster_update_leaves_no_undeclared_endpoint(tmp_path: Path):
 
     corpus = tmp_path / "corpus"
     (corpus / "pkg").mkdir(parents=True)
-    (corpus / "pkg" / "a.py").write_text(
-        "import typing\nfrom pathlib import Path\nfrom .b import helper\n\n"
-        "def go(x: 'typing.Any') -> None:\n    helper(Path(str(x)))\n",
-        encoding="utf-8",
-    )
-    (corpus / "pkg" / "b.py").write_text(
-        "import re\n\ndef helper(x):\n    return re.match(r'.', str(x))\n", encoding="utf-8"
-    )
-    (corpus / "pkg" / "__init__.py").write_text("from .a import go\n", encoding="utf-8")
+    _graph_write_text(corpus / "pkg" / "a.py", "import typing\nfrom pathlib import Path\nfrom .b import helper\n\n"
+        "def go(x: 'typing.Any') -> None:\n    helper(Path(str(x)))\n", encoding="utf-8")
+    _graph_write_text(corpus / "pkg" / "b.py", "import re\n\ndef helper(x):\n    return re.match(r'.', str(x))\n", encoding="utf-8")
+    _graph_write_text(corpus / "pkg" / "__init__.py", "from .a import go\n", encoding="utf-8")
 
     assert _rebuild_code(corpus, no_cluster=True, acquire_lock=False) is True
-    data = json.loads((corpus / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+    data = json.loads(_graph_read_text(corpus / "graphify-out" / "graph.grafeo", encoding="utf-8"))
     declared = {n["id"] for n in data["nodes"]}
     dangling = [
         (e.get("source"), e.get("target"))
         for e in data["links"]
         if e.get("source") not in declared or e.get("target") not in declared
     ]
-    assert not dangling, f"graph.json has undeclared edge endpoints: {dangling}"
+    assert not dangling, f"graph.grafeo has undeclared edge endpoints: {dangling}"
     # networkx must not have to materialise any phantom node
     G = nx.node_link_graph(data, edges="links")
     assert G.number_of_nodes() == len(data["nodes"])
@@ -133,20 +130,14 @@ def test_no_cluster_update_leaves_no_undeclared_endpoint(tmp_path: Path):
 
 
 def _graph(corpus: Path) -> dict:
-    return json.loads((corpus / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+    return json.loads(_graph_read_text(corpus / "graphify-out" / "graph.grafeo", encoding="utf-8"))
 
 
 def _two_file_corpus(tmp_path: Path) -> Path:
     corpus = tmp_path / "corpus"
     corpus.mkdir()
-    (corpus / "a.py").write_text(
-        "import bisect\nimport json\n\n\ndef find(xs, x):\n    return bisect.bisect_left(xs, x)\n",
-        encoding="utf-8",
-    )
-    (corpus / "b.py").write_text(
-        "import json\nfrom a import find\n\n\ndef use():\n    return json.dumps(find([1, 2], 2))\n",
-        encoding="utf-8",
-    )
+    _graph_write_text(corpus / "a.py", "import bisect\nimport json\n\n\ndef find(xs, x):\n    return bisect.bisect_left(xs, x)\n", encoding="utf-8")
+    _graph_write_text(corpus / "b.py", "import json\nfrom a import find\n\n\ndef use():\n    return json.dumps(find([1, 2], 2))\n", encoding="utf-8")
     return corpus
 
 
@@ -155,7 +146,7 @@ def _two_file_corpus(tmp_path: Path) -> Path:
 def test_external_stub_is_dropped_with_its_last_import(tmp_path: Path, no_cluster: bool, incremental: bool):
     """A stub outlived its last import edge: the reload backfill stamped it
     `_origin=semantic`, reconcile keeps semantic nodes, and the node stayed in
-    graph.json forever with no edge — a node a fresh build does not have."""
+    graph.grafeo forever with no edge — a node a fresh build does not have."""
     from graphify.watch import _rebuild_code
 
     corpus = _two_file_corpus(tmp_path)
@@ -163,9 +154,7 @@ def test_external_stub_is_dropped_with_its_last_import(tmp_path: Path, no_cluste
     assert _rebuild_code(corpus, no_cluster=no_cluster, acquire_lock=False) is True
     assert "bisect" in {n["id"] for n in _graph(corpus)["nodes"]}
 
-    (corpus / "a.py").write_text(
-        "import json\n\n\ndef find(xs, x):\n    return xs.index(x)\n", encoding="utf-8"
-    )
+    _graph_write_text(corpus / "a.py", "import json\n\n\ndef find(xs, x):\n    return xs.index(x)\n", encoding="utf-8")
     changed = [corpus / "a.py"] if incremental else None
     assert _rebuild_code(corpus, changed_paths=changed, no_cluster=no_cluster, acquire_lock=False) is True
 
@@ -180,7 +169,7 @@ def test_external_stub_is_dropped_with_its_last_import(tmp_path: Path, no_cluste
 
 def test_rebuild_writes_external_stubs_like_a_fresh_build(tmp_path: Path):
     """Rebuilding an unchanged tree gave external stubs `_origin: semantic`
-    that the first build never wrote, so the same tree had two graph.json files."""
+    that the first build never wrote, so the same tree had two graph.grafeo files."""
     from graphify.watch import _rebuild_code
 
     corpus = _two_file_corpus(tmp_path)
@@ -200,7 +189,7 @@ def test_rebuild_heals_stub_left_by_an_earlier_version(tmp_path: Path):
 
     corpus = _two_file_corpus(tmp_path)
     assert _rebuild_code(corpus, no_cluster=True, acquire_lock=False) is True
-    graph_path = corpus / "graphify-out" / "graph.json"
+    graph_path = corpus / "graphify-out" / "graph.grafeo"
     data = _graph(corpus)
     for node in data["nodes"]:
         if node.get("external"):
@@ -209,7 +198,7 @@ def test_rebuild_heals_stub_left_by_an_earlier_version(tmp_path: Path):
         "id": "requests", "label": "requests", "file_type": "concept", "type": "external",
         "external": True, "source_file": "", "_origin": "semantic",
     })
-    graph_path.write_text(json.dumps(data), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(data), encoding="utf-8")
 
     assert _rebuild_code(corpus, no_cluster=True, acquire_lock=False) is True
     nodes = {n["id"]: n for n in _graph(corpus)["nodes"]}

@@ -66,7 +66,7 @@ graphify install               # detects your assistant and registers the skill
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 گراف ذخیره‌شده شامل `graph.schema_version` است تا یکپارچه‌سازی‌ها بتوانند
@@ -117,7 +117,7 @@ Shortest path (3 hops):
 | **گره‌های خدا** | پرارتباط‌ترین مفاهیم، تا ببینید همه‌چیز از میان چه چیزی جریان می‌یابد |
 | **جامعه‌ها** | گراف تقسیم‌شده به زیرسیستم‌ها (Leiden)، با برچسب‌های بدون مدل زبانی |
 | **پیوندهای میان‌فایلی** | `calls` / `imports` / `inherits` / `mixes_in` برطرف‌شده در حدود 40 زبان از طریق AST tree-sitter |
-| **پرس‌وجو، مسیر، توضیح** | سؤالی بپرسید، مسیر میان دو چیز را ردیابی کنید، یا یک مفهوم را توضیح دهید، همه در برابر `graph.json` |
+| **پرس‌وجو، مسیر، توضیح** | سؤالی بپرسید، مسیر میان دو چیز را ردیابی کنید، یا یک مفهوم را توضیح دهید، همه در برابر `graph.grafeo` |
 | **منطق + ارجاع‌های مستند** | توضیحات `# NOTE:` / `# WHY:` و استنادهای ADR/RFC به گره‌های درجه‌یک پیوندخورده به کد تبدیل می‌شوند |
 | **فراتر از کد** | مستندات، فایل‌های PDF، تصاویر و ویدیو/صوت همگی در همان گراف نگاشت می‌شوند |
 | **محلی‌محور** | کد به‌صورت محلی با tree-sitter تجزیه می‌شود (بدون مدل زبانی، هیچ‌چیز از دستگاه شما خارج نمی‌شود)؛ تنها گذر معنایی روی مستندات/رسانه یک بک‌اند را فرا می‌خواند، و فقط اگر شما یکی را پیکربندی کنید |
@@ -402,7 +402,7 @@ viz_node_limit=0
 
 ## Using the graph directly
 
-فراتر از دستیار هوش مصنوعی خود، `graph.json` را مستقیماً از CLI با `graphify query`، `graphify path` و `graphify explain` پرس‌وجو کنید. نامی که با چند گره مطابقت دارد به‌جای حدس زدن، با فهرست کردن نامزدها رد می‌شود. اسکریپت‌ها می‌توانند نتیجه را از کد خروج بخوانند: `0` یک پاسخ، `3` یک نام مبهم، `4` هیچ گره مطابق. **[Ask better graph questions](https://docs.graphify.com/guides/querying)** و **[query reference](https://docs.graphify.com/reference/query)** را ببینید.
+فراتر از دستیار هوش مصنوعی خود، `graph.grafeo` را مستقیماً از CLI با `graphify query`، `graphify path` و `graphify explain` پرس‌وجو کنید. نامی که با چند گره مطابقت دارد به‌جای حدس زدن، با فهرست کردن نامزدها رد می‌شود. اسکریپت‌ها می‌توانند نتیجه را از کد خروج بخوانند: `0` یک پاسخ، `3` یک نام مبهم، `4` هیچ گره مطابق. **[Ask better graph questions](https://docs.graphify.com/guides/querying)** و **[query reference](https://docs.graphify.com/reference/query)** را ببینید.
 
 ---
 

@@ -13,6 +13,8 @@ cannot show (`mod.Base`, `Generic[T]`), a base outside the corpus, a base the cl
 file neither defines nor imports, and `super(Cls, obj)` with arguments.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import os
@@ -31,7 +33,7 @@ def _write(root: Path, files: dict[str, str]) -> list[Path]:
     for name, body in files.items():
         p = root / name
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(body, encoding="utf-8")
+        _graph_write_text(p, body, encoding="utf-8")
         paths.append(p)
     return paths
 
@@ -120,7 +122,7 @@ def test_a_base_from_outside_or_not_imported_emits_no_edge(tmp_path):
 
 
 def _rebuild_calls(root: Path) -> set[tuple[str, str]]:
-    g = json.loads((root / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+    g = json.loads(_graph_read_text(root / "graphify-out" / "graph.grafeo", encoding="utf-8"))
     return {(e["source"], e["target"]) for e in g.get("links", g.get("edges", [])) if e["relation"] == "calls"}
 
 
@@ -148,7 +150,7 @@ def test_changed_files_rebuild_matches_a_full_build(tmp_path):
     for root in (inc, full):
         for name in _CHANGED:
             p = root / "pkg" / name
-            p.write_text(p.read_text(encoding="utf-8") + "\n# touched\n", encoding="utf-8")
+            _graph_write_text(p, p.read_text(encoding="utf-8") + "\n# touched\n", encoding="utf-8")
     assert _rebuild_code(
         inc, changed_paths=[inc / "pkg" / name for name in _CHANGED],
         no_cluster=True, acquire_lock=False,
@@ -175,7 +177,7 @@ def test_incremental_extract_matches_a_full_extract(tmp_path):
     for root in (inc, full):
         for name in _CHANGED:
             p = root / "pkg" / name
-            p.write_text(p.read_text(encoding="utf-8") + "\n# touched\n", encoding="utf-8")
+            _graph_write_text(p, p.read_text(encoding="utf-8") + "\n# touched\n", encoding="utf-8")
     run(inc)
     run(full)
     assert _rebuild_calls(inc) == _rebuild_calls(full)

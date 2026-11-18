@@ -66,7 +66,7 @@ Det är allt. Du får **tre filer**:
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 Den sparade grafen inkluderar `graph.schema_version` så att integrationer kan upptäcka
@@ -117,7 +117,7 @@ Vad du får direkt ur lådan:
 | **Gudnoder** | De mest sammankopplade begreppen, så att du ser vad allt flödar genom |
 | **Gemenskaper** | Grafen uppdelad i delsystem (Leiden), med LLM-fria etiketter |
 | **Länkar mellan filer** | `calls` / `imports` / `inherits` / `mixes_in` upplösta över ~40 språk via tree-sitter AST |
-| **Query, path, explain** | Ställ en fråga, spåra vägen mellan två saker, eller förklara ett begrepp, allt mot `graph.json` |
+| **Query, path, explain** | Ställ en fråga, spåra vägen mellan två saker, eller förklara ett begrepp, allt mot `graph.grafeo` |
 | **Motivering + dokumentreferenser** | `# NOTE:` / `# WHY:`-kommentarer och ADR/RFC-citeringar blir förstklassiga noder länkade till koden |
 | **Bortom kod** | Dokument, PDF-filer, bilder och video/ljud kartläggs alla in i samma graf |
 | **Lokalt först** | Kod parsas lokalt med tree-sitter (ingen LLM, inget lämnar din maskin); endast den semantiska genomgången av dokument/media anropar en backend, och endast om du konfigurerar en |
@@ -402,7 +402,7 @@ Checka in eller dela grafen så att hela ditt team frågar mot samma kontext, oc
 
 ## Använda grafen direkt
 
-Utöver din AI-assistent kan du fråga `graph.json` direkt från CLI med `graphify query`, `graphify path` och `graphify explain`. Ett namn som matchar flera noder avvisas med kandidaterna listade i stället för att gissas. Skript kan läsa utfallet från slutkoden: `0` ett svar, `3` ett tvetydigt namn, `4` ingen matchande nod. Se **[Ställ bättre graffrågor](https://docs.graphify.com/guides/querying)** och **[frågereferensen](https://docs.graphify.com/reference/query)**.
+Utöver din AI-assistent kan du fråga `graph.grafeo` direkt från CLI med `graphify query`, `graphify path` och `graphify explain`. Ett namn som matchar flera noder avvisas med kandidaterna listade i stället för att gissas. Skript kan läsa utfallet från slutkoden: `0` ett svar, `3` ett tvetydigt namn, `4` ingen matchande nod. Se **[Ställ bättre graffrågor](https://docs.graphify.com/guides/querying)** och **[frågereferensen](https://docs.graphify.com/reference/query)**.
 
 ---
 

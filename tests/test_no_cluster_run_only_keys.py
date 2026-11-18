@@ -1,13 +1,15 @@
-"""A --no-cluster graph.json must not carry extract()'s run-only keys.
+"""A --no-cluster graph.grafeo must not carry extract()'s run-only keys.
 
 extract() returns ``extracted_sources`` (#3411) and ``failed_sources`` (#2543)
 next to nodes/edges. They steer the current run and hold the absolute paths of
-its inputs. The raw --no-cluster writers dumped the extraction as graph.json, so
+its inputs. The raw --no-cluster writers dumped the extraction as graph.grafeo, so
 the first ``graphify update --no-cluster`` and every ``graphify extract
 --no-cluster`` wrote the checkout path and OS username into the graph, and a
 first build differed from a rebuild of the same tree.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import os
@@ -22,8 +24,8 @@ PYTHON = sys.executable
 
 def _corpus(root: Path) -> Path:
     root.mkdir(parents=True)
-    (root / "app.py").write_text("import os\n\n\ndef home():\n    return os.getcwd()\n", encoding="utf-8")
-    (root / "util.py").write_text("from app import home\n\n\ndef where():\n    return home()\n", encoding="utf-8")
+    _graph_write_text(root / "app.py", "import os\n\n\ndef home():\n    return os.getcwd()\n", encoding="utf-8")
+    _graph_write_text(root / "util.py", "from app import home\n\n\ndef where():\n    return home()\n", encoding="utf-8")
     return root
 
 
@@ -31,8 +33,8 @@ def _run(root: Path, *args: str) -> dict:
     env = dict(os.environ, PYTHONHASHSEED="0", PYTHONIOENCODING="utf-8")
     r = subprocess.run([PYTHON, "-m", "graphify", *args], cwd=root, env=env, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr[-2000:]
-    text = (root / "graphify-out" / "graph.json").read_text(encoding="utf-8")
-    assert "alice_home" not in text, "graph.json embeds the checkout path"
+    text = _graph_read_text(root / "graphify-out" / "graph.grafeo", encoding="utf-8")
+    assert "alice_home" not in text, "graph.grafeo embeds the checkout path"
     return json.loads(text)
 
 

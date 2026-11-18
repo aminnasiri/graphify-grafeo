@@ -66,7 +66,7 @@ Dat is alles. Je krijgt **drie bestanden**:
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 De opgeslagen graaf bevat `graph.schema_version` zodat integraties
@@ -117,7 +117,7 @@ Wat je meteen uit de doos krijgt:
 | **God-nodes** | De meest verbonden concepten, zodat je ziet waar alles doorheen stroomt |
 | **Communities** | De graaf opgedeeld in subsystemen (Leiden), met LLM-vrije labels |
 | **Cross-file-verbanden** | `calls` / `imports` / `inherits` / `mixes_in` opgelost over ~40 talen via tree-sitter AST |
-| **Query, path, explain** | Stel een vraag, traceer het pad tussen twee dingen, of laat één concept uitleggen, allemaal tegen `graph.json` |
+| **Query, path, explain** | Stel een vraag, traceer het pad tussen twee dingen, of laat één concept uitleggen, allemaal tegen `graph.grafeo` |
 | **Onderbouwing + docverwijzingen** | `# NOTE:` / `# WHY:`-opmerkingen en ADR/RFC-citaten worden eersterangs nodes die aan de code zijn gekoppeld |
 | **Verder dan code** | Documentatie, PDF's, afbeeldingen en video/audio komen allemaal in dezelfde graaf terecht |
 | **Local-first** | Code wordt lokaal geparset met tree-sitter (geen LLM, niets verlaat je machine); alleen de semantische verwerkingsslag over documentatie/media roept een backend aan, en alleen als je er een configureert |
@@ -402,7 +402,7 @@ Commit of deel de graaf zodat je hele team dezelfde context bevraagt, en beoorde
 
 ## De graaf rechtstreeks gebruiken
 
-Naast je AI-assistent kun je `graph.json` rechtstreeks vanaf de CLI bevragen met `graphify query`, `graphify path` en `graphify explain`. Een naam die op meerdere nodes past wordt geweigerd met de kandidaten erbij vermeld in plaats van geraden. Scripts kunnen de uitkomst uit de exitcode aflezen: `0` een antwoord, `3` een dubbelzinnige naam, `4` geen overeenkomende node. Zie **[Ask better graph questions](https://docs.graphify.com/guides/querying)** en de **[query reference](https://docs.graphify.com/reference/query)**.
+Naast je AI-assistent kun je `graph.grafeo` rechtstreeks vanaf de CLI bevragen met `graphify query`, `graphify path` en `graphify explain`. Een naam die op meerdere nodes past wordt geweigerd met de kandidaten erbij vermeld in plaats van geraden. Scripts kunnen de uitkomst uit de exitcode aflezen: `0` een antwoord, `3` een dubbelzinnige naam, `4` geen overeenkomende node. Zie **[Ask better graph questions](https://docs.graphify.com/guides/querying)** en de **[query reference](https://docs.graphify.com/reference/query)**.
 
 ---
 

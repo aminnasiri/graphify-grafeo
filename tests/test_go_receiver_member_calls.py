@@ -8,6 +8,8 @@ constructor return, a chain that does not start at the method's own receiver, a
 package-qualified type, and an ambiguous type name.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import importlib
 
@@ -27,7 +29,7 @@ def _calls(tmp_path, files: dict[str, str]):
     for name, body in files.items():
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body, encoding="utf-8")
+        _graph_write_text(path, body, encoding="utf-8")
     result = extract([tmp_path / n for n in files],
                      cache_root=tmp_path / "graphify-out", parallel=False)
     label = {n["id"]: n["label"] for n in result["nodes"]}
@@ -236,7 +238,7 @@ def test_a_struct_field_declared_in_a_sibling_file_types_the_receiver(tmp_path):
 
 def test_a_sibling_files_struct_field_survives_a_rebuild_of_the_method_file_only(tmp_path):
     # An update re-extracts only the changed file, and the struct's unchanged file reaches
-    # the resolver only as its graph.json nodes, so the field types must persist there.
+    # the resolver only as its graph.grafeo nodes, so the field types must persist there.
     import json
 
     from graphify.watch import _rebuild_code
@@ -244,13 +246,13 @@ def test_a_sibling_files_struct_field_survives_a_rebuild_of_the_method_file_only
     for name, body in SIBLING_FILES.items():
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body, encoding="utf-8")
+        _graph_write_text(path, body, encoding="utf-8")
     assert _rebuild_code(tmp_path, no_cluster=True, acquire_lock=False, force=True)
     run = tmp_path / "svc" / "run.go"
-    run.write_text(run.read_text(encoding="utf-8") + "// touched\n", encoding="utf-8")
+    _graph_write_text(run, run.read_text(encoding="utf-8") + "// touched\n", encoding="utf-8")
     assert _rebuild_code(tmp_path, changed_paths=[run], no_cluster=True, acquire_lock=False)
 
-    g = json.loads((tmp_path / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+    g = json.loads(_graph_read_text(tmp_path / "graphify-out" / "graph.grafeo", encoding="utf-8"))
     label = {n["id"]: n["label"] for n in g["nodes"]}
     calls = {(label.get(e["source"]), label.get(e["target"]))
              for e in g.get("links", g.get("edges", [])) if e["relation"] == "calls"}
@@ -418,13 +420,13 @@ def test_a_sibling_files_qualified_field_survives_a_rebuild_of_the_method_file_o
     for name, body in XPKG_SIBLING_FILES.items():
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body, encoding="utf-8")
+        _graph_write_text(path, body, encoding="utf-8")
     assert _rebuild_code(tmp_path, no_cluster=True, acquire_lock=False, force=True)
     run = tmp_path / "api" / "run.go"
-    run.write_text(run.read_text(encoding="utf-8") + "// touched\n", encoding="utf-8")
+    _graph_write_text(run, run.read_text(encoding="utf-8") + "// touched\n", encoding="utf-8")
     assert _rebuild_code(tmp_path, changed_paths=[run], no_cluster=True, acquire_lock=False)
 
-    g = json.loads((tmp_path / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+    g = json.loads(_graph_read_text(tmp_path / "graphify-out" / "graph.grafeo", encoding="utf-8"))
     label = {n["id"]: n["label"] for n in g["nodes"]}
     calls = {(label.get(e["source"]), label.get(e["target"]))
              for e in g.get("links", g.get("edges", [])) if e["relation"] == "calls"}

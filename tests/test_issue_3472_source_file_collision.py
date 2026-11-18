@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 """Tests for issue #3472:
 Same file, two path forms: absolute source_file from semantic extraction collides with
 the relative AST id and the semantic node is dropped.
@@ -12,7 +14,7 @@ from graphify.build import build, build_merge
 
 
 def test_semantic_absolute_path_same_file_retains_attributes(tmp_path, capsys):
-    """AST node in graph.json has relative source_file; incoming semantic node has
+    """AST node in graph.grafeo has relative source_file; incoming semantic node has
     absolute source_file. Both encode the same physical file and ID.
     The collision logic must recognize them as the same file:
     - no 'minted by two different files' warning
@@ -21,7 +23,7 @@ def test_semantic_absolute_path_same_file_retains_attributes(tmp_path, capsys):
     - semantic attributes (rationale, summary) are merged onto survivor
     """
     root = tmp_path.resolve()
-    graph_path = root / "graphify-out" / "graph.json"
+    graph_path = root / "graphify-out" / "graph.grafeo"
     graph_path.parent.mkdir(parents=True)
 
     ast_node = {
@@ -33,7 +35,7 @@ def test_semantic_absolute_path_same_file_retains_attributes(tmp_path, capsys):
         "_origin": "ast",
     }
     G0 = build([{"nodes": [ast_node], "edges": []}], dedup=False)
-    graph_path.write_text(json.dumps(nx.node_link_data(G0, edges="edges")), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(nx.node_link_data(G0, edges="edges")), encoding="utf-8")
 
     abs_sf = str((root / "docs" / "ARCHITECTURE.md").resolve())
     sem_node = {
@@ -114,7 +116,7 @@ def test_build_merge_infers_root_for_semantic_absolute_path(tmp_path, capsys):
     so absolute source_file from semantic chunks still collapses with stored relative keys.
     """
     root = tmp_path.resolve()
-    graph_path = root / "graphify-out" / "graph.json"
+    graph_path = root / "graphify-out" / "graph.grafeo"
     graph_path.parent.mkdir(parents=True)
 
     ast_node = {
@@ -126,7 +128,7 @@ def test_build_merge_infers_root_for_semantic_absolute_path(tmp_path, capsys):
         "_origin": "ast",
     }
     G0 = build([{"nodes": [ast_node], "edges": []}], dedup=False)
-    graph_path.write_text(json.dumps(nx.node_link_data(G0, edges="edges")), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(nx.node_link_data(G0, edges="edges")), encoding="utf-8")
 
     abs_sf = str((root / "docs" / "ARCHITECTURE.md").resolve())
     sem_node = {

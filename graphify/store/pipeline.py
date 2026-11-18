@@ -41,8 +41,8 @@ def sync_graph(store: GraphStore, data: dict, *, metadata: dict[str, Any] | None
     """
     nodes: dict[str, NodeRecord] = {}
     for raw in data.get("nodes", []):
-        if not isinstance(raw, dict) or not isinstance(raw.get("id"), str) or not raw["id"]:
-            raise ValueError("graph nodes require nonempty string IDs")
+        if not isinstance(raw, dict) or not isinstance(raw.get("id"), str):
+            raise ValueError("graph nodes require string IDs")
         if raw["id"] in nodes:
             raise ValueError("duplicate node IDs")
         nodes[raw["id"]] = NodeRecord(raw["id"], {k: v for k, v in raw.items() if k != "id"})
@@ -109,6 +109,7 @@ def sync_graph(store: GraphStore, data: dict, *, metadata: dict[str, Any] | None
             if key in graph_attrs:
                 updates[key] = graph_attrs[key]
         if manifest is not None:
+            updates.setdefault("manifest_present", True)
             file_updates = {"file_hash:" + key: value for key, value in manifest.items()}
             store.delete_metadata([key for key in old.metadata
                                    if key.startswith("file_hash:") and key not in file_updates])

@@ -5,6 +5,8 @@ and a name that matches nothing, through the exit code alone.
 ambiguity and miss refusals of `path` shared exit 1 with every other error.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import json
 
@@ -28,8 +30,8 @@ def _write_graph(tmp_path):
         ("src_b_betaclient", "src_b_betaclient_nonce", "method"),
         ("src_a_alphaclient", "src_a_alphaclient_nonce", "method"),
     ]
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps({
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps({
         "directed": False, "multigraph": False, "graph": {},
         "nodes": [
             {"id": i, "label": lbl, "source_file": sf, "source_location": loc}

@@ -68,10 +68,25 @@ That's it. You get **three files**:
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
-The persisted graph includes `graph.schema_version` so integrations can detect
+Graphify requires Python 3.12+ and embeds Grafeo locally. All commands use the
+database, including watch, hooks and MCP. JSON is available for interchange:
+
+```bash
+graphify migrate --to grafeo       # verify and convert an existing graphify-out/graph.json
+graphify update .                 # deterministic AST update, no API cost
+graphify query "authentication"
+graphify export json              # explicit graphify-out/graph.json export
+graphify import json legacy.json  # refuses an occupied store; --replace is explicit
+```
+
+Select another database with `--database path.grafeo`, `GRAPHIFY_DATABASE`, or
+`database_path` in `.graphifyrc`, in that precedence order. See
+[storage and migration](docs/graph-store.md) for concurrency and measured limits.
+
+The explicit JSON export includes `graph.schema_version` so integrations can detect
 incompatible format changes, plus `graph.graphify_version` identifying the
 Graphify release that produced it.
 
@@ -125,7 +140,7 @@ What you get out of the box:
 | **God nodes** | The most-connected concepts, so you see what everything flows through |
 | **Communities** | The graph split into subsystems (Leiden), with LLM-free labels |
 | **Cross-file links** | `calls` / `imports` / `inherits` / `mixes_in` resolved across ~40 languages via tree-sitter AST |
-| **Query, path, explain** | Ask a question, trace the path between two things, or explain one concept, all against `graph.json` |
+| **Query, path, explain** | Ask a question, trace the path between two things, or explain one concept, all against `graph.grafeo` |
 | **Rationale + doc refs** | `# NOTE:` / `# WHY:` comments and ADR/RFC citations become first-class nodes linked to the code |
 | **Beyond code** | Docs, PDFs, images, and video/audio all map into the same graph |
 | **Local-first** | Code is parsed locally with tree-sitter (no LLM, nothing leaves your machine); only the semantic pass over docs/media calls a backend, and only if you configure one |
@@ -445,7 +460,7 @@ Commit or share the graph so your whole team queries the same context, and revie
 
 ## Using the graph directly
 
-Beyond your AI assistant, query `graph.json` straight from the CLI with `graphify query`, `graphify path`, and `graphify explain`. A name that matches several nodes is refused with the candidates listed rather than guessed. Scripts can read the outcome from the exit code: `0` an answer, `3` an ambiguous name, `4` no matching node. See **[Ask better graph questions](https://docs.graphify.com/guides/querying)** and the **[query reference](https://docs.graphify.com/reference/query)**.
+Beyond your AI assistant, query `graph.grafeo` straight from the CLI with `graphify query`, `graphify path`, and `graphify explain`. A name that matches several nodes is refused with the candidates listed rather than guessed. Scripts can read the outcome from the exit code: `0` an answer, `3` an ambiguous name, `4` no matching node. See **[Ask better graph questions](https://docs.graphify.com/guides/querying)** and the **[query reference](https://docs.graphify.com/reference/query)**.
 
 ---
 

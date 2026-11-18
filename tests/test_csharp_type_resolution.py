@@ -1,4 +1,6 @@
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 from pathlib import Path
 
@@ -7,7 +9,7 @@ from graphify.extract import extract
 
 def _write(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    _graph_write_text(path, text, encoding="utf-8")
     return path
 
 
@@ -784,7 +786,7 @@ def _crlf_vs_lf(tmp_path: Path, files: dict[str, str]) -> tuple[dict, dict]:
 def test_csharp_scope_metadata_does_not_depend_on_line_endings(tmp_path: Path):
     """Namespace scope ids were byte offsets, so a CRLF checkout (Windows,
     core.autocrlf) and an LF checkout of the same commit wrote different
-    `scope_chain` / `scope_id` metadata into graph.json. Row:column is the
+    `scope_chain` / `scope_id` metadata into graph.grafeo. Row:column is the
     same for both."""
     files = {
         "core.cs": "// Core types.\nusing System;\n\nnamespace Game.Core\n{\n    public class Damage {}\n}\n",

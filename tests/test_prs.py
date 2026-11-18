@@ -1,5 +1,7 @@
 """Tests for graphify/prs.py."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import json
 import subprocess
@@ -692,8 +694,8 @@ class TestAttachGraphImpact:
         }
 
     def test_attach_graph_impact_skips_wrong_base_by_default(self, tmp_path):
-        graph_file = tmp_path / "graph.json"
-        graph_file.write_text(json.dumps(self._sample_graph_data()), encoding="utf-8")
+        graph_file = tmp_path / "graph.grafeo"
+        _graph_write_text(graph_file, json.dumps(self._sample_graph_data()), encoding="utf-8")
 
         pr_ready = make_pr(number=1, base_branch="v8", expected_base="v8")
         pr_wrong = make_pr(number=2, base_branch="develop", expected_base="v8")
@@ -708,8 +710,8 @@ class TestAttachGraphImpact:
         assert pr_wrong.communities_touched == []
 
     def test_attach_graph_impact_includes_wrong_base_when_requested(self, tmp_path):
-        graph_file = tmp_path / "graph.json"
-        graph_file.write_text(json.dumps(self._sample_graph_data()), encoding="utf-8")
+        graph_file = tmp_path / "graph.grafeo"
+        _graph_write_text(graph_file, json.dumps(self._sample_graph_data()), encoding="utf-8")
 
         pr_wrong = make_pr(number=2, base_branch="develop", expected_base="v8")
         assert pr_wrong.status == "WRONG-BASE"
@@ -728,13 +730,13 @@ class TestAttachGraphImpact:
 
 class TestCmdPrsDetail:
     def test_detail_only_fetches_diff_for_requested_pr(self, tmp_path, capsys):
-        graph_file = tmp_path / "graph.json"
+        graph_file = tmp_path / "graph.grafeo"
         graph_data = {
             "nodes": [
                 {"id": "n1", "source_file": "src/app.py", "community": 0, "label": "app"},
             ]
         }
-        graph_file.write_text(json.dumps(graph_data), encoding="utf-8")
+        _graph_write_text(graph_file, json.dumps(graph_data), encoding="utf-8")
 
         pr1 = make_pr(number=10, base_branch="v8", expected_base="v8")
         pr2 = make_pr(number=20, base_branch="v8", expected_base="v8")
@@ -753,13 +755,13 @@ class TestCmdPrsDetail:
         assert "Graph impact:" in captured.out
 
     def test_detail_calculates_impact_for_wrong_base_pr(self, tmp_path, capsys):
-        graph_file = tmp_path / "graph.json"
+        graph_file = tmp_path / "graph.grafeo"
         graph_data = {
             "nodes": [
                 {"id": "n1", "source_file": "src/app.py", "community": 0, "label": "app"},
             ]
         }
-        graph_file.write_text(json.dumps(graph_data), encoding="utf-8")
+        _graph_write_text(graph_file, json.dumps(graph_data), encoding="utf-8")
 
         pr_wrong = make_pr(number=42, base_branch="feature-x", expected_base="v8")
         assert pr_wrong.status == "WRONG-BASE"
@@ -777,13 +779,13 @@ class TestCmdPrsDetail:
         assert "Graph impact:" in captured.out
 
     def test_detail_falls_back_to_fetch_pr_when_outside_first_50(self, tmp_path, capsys):
-        graph_file = tmp_path / "graph.json"
+        graph_file = tmp_path / "graph.grafeo"
         graph_data = {
             "nodes": [
                 {"id": "n1", "source_file": "src/app.py", "community": 0, "label": "app"},
             ]
         }
-        graph_file.write_text(json.dumps(graph_data), encoding="utf-8")
+        _graph_write_text(graph_file, json.dumps(graph_data), encoding="utf-8")
 
         # 50 PRs that do not include PR 99
         prs_50 = [make_pr(number=i, base_branch="v8") for i in range(1, 51)]

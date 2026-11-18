@@ -9,6 +9,8 @@ a stale graph. Every case here either proves work is skipped or proves it is NOT
 skipped when the baseline is unknown.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, is_file as _graph_is_file, read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import os
@@ -49,10 +51,8 @@ def _corpus(root: Path) -> Path:
     """Four code files, one of which imports across files."""
     (root / "src").mkdir(parents=True, exist_ok=True)
     for name in ("a", "b", "c"):
-        (root / "src" / f"{name}.py").write_text(f"def f{name}():\n    return 1\n")
-    (root / "src" / "uses.py").write_text(
-        "from src.a import fa\n\ndef use():\n    return fa()\n"
-    )
+        _graph_write_text(root / "src" / f"{name}.py", f"def f{name}():\n    return 1\n")
+    _graph_write_text(root / "src" / "uses.py", "from src.a import fa\n\ndef use():\n    return fa()\n")
     return root
 
 
@@ -60,7 +60,7 @@ def _corpus(root: Path) -> Path:
 def built(tmp_path: Path) -> Path:
     root = _corpus(tmp_path / "corpus")
     assert _rebuild_code(root, acquire_lock=False) is True
-    assert (root / "graphify-out" / MANIFEST).exists()
+    assert _graph_exists(root / "graphify-out" / MANIFEST)
     return root
 
 
@@ -80,14 +80,14 @@ def _spy_extract(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
 def _outputs(root: Path) -> dict[str, tuple[bytes, int]]:
     out = root / "graphify-out"
     return {
-        p.name: (p.read_bytes(), p.stat().st_mtime_ns)
+        p.name: (_graph_read_bytes(p), p.stat().st_mtime_ns)
         for p in sorted(out.iterdir())
-        if p.is_file()
+        if _graph_is_file(p)
     }
 
 
 def _sources(graph: Path) -> set[str]:
-    payload = json.loads(graph.read_text(encoding="utf-8"))
+    payload = json.loads(_graph_read_text(graph, encoding="utf-8"))
     return {
         Path(node["source_file"]).name
         for node in payload["nodes"]
@@ -116,10 +116,8 @@ def test_only_changed_files_are_re_extracted(
     built: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls = _spy_extract(monkeypatch)
-    (built / "src" / "a.py").write_text("def fa():\n    return 11\n")
-    (built / "src" / "uses.py").write_text(
-        "from src.a import fa\n\ndef use():\n    return fa() + 1\n"
-    )
+    _graph_write_text(built / "src" / "a.py", "def fa():\n    return 11\n")
+    _graph_write_text(built / "src" / "uses.py", "from src.a import fa\n\ndef use():\n    return fa() + 1\n")
     # Force a different mtime from the manifest's, which is all the comparison
     # needs once the content hash agrees.
     time.sleep(0.01)
@@ -147,11 +145,11 @@ def test_mtime_bump_with_identical_content_is_not_re_extracted(
 def test_added_file_is_re_extracted_and_deleted_file_drops_its_nodes(
     built: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    graph = built / "graphify-out" / "graph.json"
+    graph = built / "graphify-out" / "graph.grafeo"
     assert "c.py" in _sources(graph)
 
-    (built / "src" / "c.py").unlink()
-    (built / "src" / "new.py").write_text("def brand_new():\n    return 5\n")
+    _graph_unlink(built / "src" / "c.py")
+    _graph_write_text(built / "src" / "new.py", "def brand_new():\n    return 5\n")
     time.sleep(0.01)
 
     calls = _spy_extract(monkeypatch)
@@ -176,7 +174,7 @@ def test_default_is_the_full_path(
     # One change first, so the assertion holds whether or not the #4740 no-change
     # gate is present: a correct gate can never skip a tree that changed, so the
     # run reaches the pipeline either way.
-    (built / "src" / "a.py").write_text("def fa():\n    return 99\n")
+    _graph_write_text(built / "src" / "a.py", "def fa():\n    return 99\n")
     time.sleep(0.01)
 
     calls = _spy_extract(monkeypatch)
@@ -212,7 +210,7 @@ def test_missing_manifest_keeps_the_full_path(
 ) -> None:
     # No baseline means "unknown", and unknown must mean "do the work" — an
     # empty change set here would skip the rebuild entirely.
-    (built / "graphify-out" / MANIFEST).unlink()
+    _graph_unlink(built / "graphify-out" / MANIFEST)
 
     calls = _spy_extract(monkeypatch)
     assert _rebuild_code(built, incremental=True, acquire_lock=False) is True
@@ -222,7 +220,7 @@ def test_missing_manifest_keeps_the_full_path(
 def test_unreadable_manifest_keeps_the_full_path(
     built: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (built / "graphify-out" / MANIFEST).write_text("{not json", encoding="utf-8")
+    _graph_write_text(built / "graphify-out" / MANIFEST, "{not json", encoding="utf-8")
 
     calls = _spy_extract(monkeypatch)
     assert _rebuild_code(built, incremental=True, acquire_lock=False) is True
@@ -236,12 +234,9 @@ def test_manifest_anchored_elsewhere_keeps_the_full_path(
     # tree, or a stale absolute-keyed one) cannot classify anything here. Every
     # file then has "no row you can verify", which counts as changed.
     manifest = built / "graphify-out" / MANIFEST
-    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload = json.loads(_graph_read_text(manifest, encoding="utf-8"))
     other = tmp_path / "elsewhere"
-    manifest.write_text(
-        json.dumps({str(other / Path(k).name): v for k, v in payload.items()}),
-        encoding="utf-8",
-    )
+    _graph_write_text(manifest, json.dumps({str(other / Path(k).name): v for k, v in payload.items()}), encoding="utf-8")
 
     calls = _spy_extract(monkeypatch)
     assert _rebuild_code(built, incremental=True, acquire_lock=False) is True
@@ -254,12 +249,10 @@ def test_incremental_second_run_matches_a_full_rebuild(
     # The point of the change set: after it, the graph is the one a full rebuild
     # of the same tree would have produced.
     def edit(root: Path) -> None:
-        (root / "src" / "a.py").write_text("def renamed_fa():\n    return 11\n")
-        (root / "src" / "uses.py").write_text(
-            "from src.a import renamed_fa\n\ndef use():\n    return renamed_fa()\n"
-        )
-        (root / "src" / "c.py").unlink()
-        (root / "src" / "new.py").write_text("def brand_new():\n    return 5\n")
+        _graph_write_text(root / "src" / "a.py", "def renamed_fa():\n    return 11\n")
+        _graph_write_text(root / "src" / "uses.py", "from src.a import renamed_fa\n\ndef use():\n    return renamed_fa()\n")
+        _graph_unlink(root / "src" / "c.py")
+        _graph_write_text(root / "src" / "new.py", "def brand_new():\n    return 5\n")
 
     other = _corpus(tmp_path / "other")
     assert _rebuild_code(other, acquire_lock=False) is True
@@ -282,7 +275,7 @@ def test_incremental_survives_the_lock_path(
     # also looks like — and that reading quietly turned every locked incremental
     # run into a full rebuild.
     calls = _spy_extract(monkeypatch)
-    (built / "src" / "a.py").write_text("def renamed_fa():\n    return 11\n")
+    _graph_write_text(built / "src" / "a.py", "def renamed_fa():\n    return 11\n")
     time.sleep(0.01)
 
     assert _rebuild_code(built, incremental=True, block_on_lock=True) is True
@@ -295,17 +288,17 @@ def test_incremental_does_not_queue_a_full_rebuild(
     # A non-blocking incremental request must not leave a .pending_full marker:
     # the next drain would read it as "re-extract everything", turning someone
     # else's cheap update into a full rebuild.
-    (built / "src" / "a.py").write_text("def renamed_fa():\n    return 11\n")
+    _graph_write_text(built / "src" / "a.py", "def renamed_fa():\n    return 11\n")
     time.sleep(0.01)
 
     calls = _spy_extract(monkeypatch)
     assert _rebuild_code(built, incremental=True) is True
     assert calls == [["a.py"]]
-    assert not (built / "graphify-out" / ".pending_full").exists()
+    assert not _graph_exists(built / "graphify-out" / ".pending_full")
 
 
 def _graph_shape(root: Path):
-    payload = json.loads((root / "graphify-out" / "graph.json").read_text())
+    payload = json.loads(_graph_read_text(root / "graphify-out" / "graph.grafeo"))
     nodes = sorted(
         (n.get("id"), n.get("label"), n.get("source_file")) for n in payload["nodes"]
     )
@@ -318,7 +311,7 @@ def _graph_shape(root: Path):
 
 def _cross_file_calls(root: Path) -> set[str]:
     """``src:label -> dst:label`` for every calls edge that spans two files."""
-    payload = json.loads((root / "graphify-out" / "graph.json").read_text())
+    payload = json.loads(_graph_read_text(root / "graphify-out" / "graph.grafeo"))
     labels = {
         n["id"]: (Path(n.get("source_file") or "?").name, n.get("label"))
         for n in payload["nodes"]
@@ -334,9 +327,7 @@ def _cross_file_calls(root: Path) -> set[str]:
 
 def _add_caller_of_fa(root: Path) -> None:
     """Add a second caller of ``a.py:fa()`` to ``uses.py`` and nothing else."""
-    (root / "src" / "uses.py").write_text(
-        "from src.a import fa\n\ndef use():\n    return fa()\n\ndef added():\n    return fa()\n"
-    )
+    _graph_write_text(root / "src" / "uses.py", "from src.a import fa\n\ndef use():\n    return fa()\n\ndef added():\n    return fa()\n")
 
 
 def test_cross_file_call_edge_survives_an_incremental_update(
@@ -379,14 +370,14 @@ def test_cli_update_re_extracts_only_changed_files(tmp_path: Path) -> None:
     assert first.returncode == 0, first.stderr
     assert "Incremental:" not in first.stdout
 
-    (root / "src" / "a.py").write_text("def renamed_fa():\n    return 11\n")
+    _graph_write_text(root / "src" / "a.py", "def renamed_fa():\n    return 11\n")
     second = _cli(["update", "."], root)
     assert second.returncode == 0, second.stderr
     assert "Incremental: re-extracting 1 of 4 scanned files" in second.stdout
 
     # And the result is the graph a full rebuild of the same tree produces.
     other = _corpus(tmp_path / "other")
-    (other / "src" / "a.py").write_text("def renamed_fa():\n    return 11\n")
+    _graph_write_text(other / "src" / "a.py", "def renamed_fa():\n    return 11\n")
     full = _cli(["update", "."], other)
     assert full.returncode == 0, full.stderr
 

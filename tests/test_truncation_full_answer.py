@@ -2,6 +2,8 @@
 token budget that returns the complete `query` / get_neighbors output.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import json
 import re
@@ -21,8 +23,8 @@ def _write_hub_graph(tmp_path, n_callers=25):
         links.append({"source": f"caller_{i}", "target": "hub", "relation": "calls",
                       "confidence": "EXTRACTED", "source_file": fpath,
                       "source_location": f"L{10 + i}"})
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps({"directed": False, "multigraph": False, "graph": {},
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps({"directed": False, "multigraph": False, "graph": {},
                              "nodes": nodes, "links": links}))
     return p
 

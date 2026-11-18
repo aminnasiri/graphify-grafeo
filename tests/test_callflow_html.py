@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text, write_text as _graph_write_text
 import json
 import subprocess
 import sys
@@ -27,13 +29,9 @@ def _make_graphify_out(tmp_path: Path) -> Path:
         "hyperedges": [],
         "built_at_commit": "abcdef123456",
     }
-    (out / "graph.json").write_text(json.dumps(graph), encoding="utf-8")
-    (out / ".graphify_labels.json").write_text(
-        json.dumps({"0": "Runtime", "1": "Export"}),
-        encoding="utf-8",
-    )
-    (out / "GRAPH_REPORT.md").write_text(
-        "\n".join(
+    _graph_write_text(out / "graph.grafeo", json.dumps(graph), encoding="utf-8")
+    _graph_write_text(out / ".graphify_labels.json", json.dumps({"0": "Runtime", "1": "Export"}), encoding="utf-8")
+    _graph_write_text(out / "GRAPH_REPORT.md", "\n".join(
             [
                 "# Graph Report - sample",
                 "",
@@ -43,9 +41,7 @@ def _make_graphify_out(tmp_path: Path) -> Path:
                 "## God Nodes (most connected - your core abstractions)",
                 "1. `Transformer` - 2 edges",
             ]
-        ),
-        encoding="utf-8",
-    )
+        ), encoding="utf-8")
     return out
 
 
@@ -59,7 +55,7 @@ def test_write_callflow_html_creates_file_and_uses_report(tmp_path):
     )
 
     assert html_path == out / "callflow.html"
-    content = html_path.read_text(encoding="utf-8")
+    content = _graph_read_text(html_path, encoding="utf-8")
     assert "mermaid" in content
     assert "Graph Report Highlights" in content
     assert "Transformer" in content
@@ -90,7 +86,7 @@ def test_export_callflow_html_cli_creates_file(tmp_path):
 
     assert result.returncode == 0, result.stderr
     html_path = tmp_path / "graphify-out" / "from-cli.html"
-    assert html_path.exists()
+    assert _graph_exists(html_path)
     assert "callflow HTML written" in result.stdout
 
 
@@ -111,10 +107,9 @@ def test_export_callflow_html_cli_accepts_positional_graph_path(tmp_path):
         ],
         "hyperedges": [],
     }
-    (external_out / "graph.json").write_text(json.dumps(graph), encoding="utf-8")
-    (external_out / ".graphify_labels.json").write_text(json.dumps({"0": "External Runtime", "1": "External Export"}), encoding="utf-8")
-    (external_out / "GRAPH_REPORT.md").write_text(
-        "\n".join(
+    _graph_write_text(external_out / "graph.grafeo", json.dumps(graph), encoding="utf-8")
+    _graph_write_text(external_out / ".graphify_labels.json", json.dumps({"0": "External Runtime", "1": "External Export"}), encoding="utf-8")
+    _graph_write_text(external_out / "GRAPH_REPORT.md", "\n".join(
             [
                 "# Graph Report - external",
                 "",
@@ -124,9 +119,7 @@ def test_export_callflow_html_cli_accepts_positional_graph_path(tmp_path):
                 "## God Nodes (most connected - your core abstractions)",
                 "1. `ExternalGod` - 1 edges",
             ]
-        ),
-        encoding="utf-8",
-    )
+        ), encoding="utf-8")
 
     result = subprocess.run(
         [
@@ -135,7 +128,7 @@ def test_export_callflow_html_cli_accepts_positional_graph_path(tmp_path):
             "graphify",
             "export",
             "callflow-html",
-            str(external_out / "graph.json"),
+            str(external_out / "graph.grafeo"),
             "--output",
             "positional.html",
             "--max-sections",
@@ -147,7 +140,7 @@ def test_export_callflow_html_cli_accepts_positional_graph_path(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr
-    html = (tmp_path / "positional.html").read_text(encoding="utf-8")
+    html = _graph_read_text(tmp_path / "positional.html", encoding="utf-8")
     assert "ExternalOnly" in html
     assert "ExternalGod" in html
     assert "ApiClient" not in html
@@ -177,10 +170,7 @@ def test_load_graph_rejects_oversized_file(monkeypatch, tmp_path):
     from graphify.callflow_html import load_graph
 
     graph_path = tmp_path / "graph.json"
-    graph_path.write_text(
-        json.dumps({"nodes": [], "links": []}),
-        encoding="utf-8",
-    )
+    _graph_write_text(graph_path, json.dumps({"nodes": [], "links": []}), encoding="utf-8")
     monkeypatch.setattr("graphify.security._MAX_GRAPH_FILE_BYTES", 8)
     with pytest.raises(SystemExit) as excinfo:
         load_graph(graph_path)
@@ -188,9 +178,8 @@ def test_load_graph_rejects_oversized_file(monkeypatch, tmp_path):
 
 
 def _write_graph(tmp_path: Path, nodes: list, links: list) -> Path:
-    graph_path = tmp_path / "graph.json"
-    graph_path.write_text(
-        json.dumps(
+    graph_path = tmp_path / "graph.grafeo"
+    _graph_write_text(graph_path, json.dumps(
             {
                 "directed": False,
                 "multigraph": False,
@@ -199,14 +188,12 @@ def _write_graph(tmp_path: Path, nodes: list, links: list) -> Path:
                 "links": links,
                 "hyperedges": [],
             }
-        ),
-        encoding="utf-8",
-    )
+        ), encoding="utf-8")
     return graph_path
 
 
 def test_load_graph_preserves_edge_direction(tmp_path):
-    """#1174/#2487: graph.json is written with "directed": false, so the
+    """#1174/#2487: graph.grafeo is written with "directed": false, so the
     node-link parser must be told otherwise or networkx returns an undirected
     Graph and caller->callee orientation becomes arbitrary."""
     from graphify.callflow_html import generate_call_table_rows, load_graph
@@ -238,7 +225,7 @@ def test_load_graph_preserves_edge_direction(tmp_path):
 
 
 def test_load_graph_legacy_markers_override_arc_order(tmp_path):
-    """Legacy graph.json files carry _src/_tgt markers on each link; they must
+    """Legacy graph.grafeo files carry _src/_tgt markers on each link; they must
     override the stored arc even under the forced-directed load."""
     from graphify.callflow_html import generate_call_table_rows, load_graph
 
@@ -316,7 +303,7 @@ def test_call_table_caller_column_sees_other_sections(tmp_path):
     from graphify.callflow_html import generate_call_table_rows, load_graph
 
     out = _make_graphify_out(tmp_path)
-    nodes, edges, _hyper, _meta = load_graph(out / "graph.json")
+    nodes, edges, _hyper, _meta = load_graph(out / "graph.grafeo")
     export_node = [n for n in nodes if n["id"] == "export"]
 
     rows = generate_call_table_rows(export_node, [], "en", edges, nodes)
@@ -330,7 +317,7 @@ def test_call_table_rows_without_whole_graph_params_unchanged(tmp_path):
     from graphify.callflow_html import generate_call_table_rows, load_graph
 
     out = _make_graphify_out(tmp_path)
-    nodes, edges, _hyper, _meta = load_graph(out / "graph.json")
+    nodes, edges, _hyper, _meta = load_graph(out / "graph.grafeo")
     section_nodes = [n for n in nodes if n["community"] == 0]
     section_ids = {n["id"] for n in section_nodes}
     section_edges = [e for e in edges if e["source"] in section_ids and e["target"] in section_ids]

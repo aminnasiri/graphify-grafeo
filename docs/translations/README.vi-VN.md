@@ -66,7 +66,7 @@ Vậy là xong. Bạn nhận được **ba tệp**:
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 Đồ thị được lưu bao gồm `graph.schema_version` để các tích hợp có thể phát hiện các thay đổi định dạng không tương thích, cùng với `graph.graphify_version` xác định bản phát hành Graphify đã tạo ra nó.
@@ -115,7 +115,7 @@ Những gì bạn nhận được ngay từ đầu:
 | **God nodes** | Các khái niệm được kết nối nhiều nhất, để bạn thấy mọi thứ chảy qua đâu |
 | **Communities** | Đồ thị được chia thành các hệ thống con (Leiden), với nhãn không cần LLM |
 | **Cross-file links** | `calls` / `imports` / `inherits` / `mixes_in` được giải quyết xuyên qua ~40 languages thông qua tree-sitter AST |
-| **Query, path, explain** | Hỏi một câu hỏi, lần theo đường đi giữa hai thứ, hoặc giải thích một khái niệm, tất cả đều dựa trên `graph.json` |
+| **Query, path, explain** | Hỏi một câu hỏi, lần theo đường đi giữa hai thứ, hoặc giải thích một khái niệm, tất cả đều dựa trên `graph.grafeo` |
 | **Rationale + doc refs** | Các chú thích `# NOTE:` / `# WHY:` và trích dẫn ADR/RFC trở thành các nút hạng nhất được liên kết với code |
 | **Beyond code** | Tài liệu, PDF, hình ảnh, và video/âm thanh đều ánh xạ vào cùng một đồ thị |
 | **Local-first** | Code được phân tích cục bộ bằng tree-sitter (không LLM, không gì rời khỏi máy của bạn); chỉ lượt xử lý ngữ nghĩa trên tài liệu/media mới gọi tới backend, và chỉ khi bạn cấu hình một backend |
@@ -394,7 +394,7 @@ Commit hoặc chia sẻ đồ thị để cả nhóm của bạn truy vấn cùn
 
 ## Dùng đồ thị trực tiếp
 
-Ngoài trợ lý AI của bạn, hãy truy vấn `graph.json` trực tiếp từ CLI với `graphify query`, `graphify path`, và `graphify explain`. Một tên khớp với nhiều nút sẽ bị từ chối với các ứng viên được liệt kê thay vì đoán. Các script có thể đọc kết quả từ mã thoát: `0` một câu trả lời, `3` một tên mơ hồ, `4` không có nút khớp. Xem **[Ask better graph questions](https://docs.graphify.com/guides/querying)** và **[query reference](https://docs.graphify.com/reference/query)**.
+Ngoài trợ lý AI của bạn, hãy truy vấn `graph.grafeo` trực tiếp từ CLI với `graphify query`, `graphify path`, và `graphify explain`. Một tên khớp với nhiều nút sẽ bị từ chối với các ứng viên được liệt kê thay vì đoán. Các script có thể đọc kết quả từ mã thoát: `0` một câu trả lời, `3` một tên mơ hồ, `4` không có nút khớp. Xem **[Ask better graph questions](https://docs.graphify.com/guides/querying)** và **[query reference](https://docs.graphify.com/reference/query)**.
 
 ---
 

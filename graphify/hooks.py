@@ -251,7 +251,7 @@ try:
         _md = (_root / _out) / 'memory'
         if _md.is_dir() and any(_md.glob('*.md')):
             from graphify.reflect import reflect as _reflect
-            _gj = (_root / _out) / 'graph.json'
+            _gj = (_root / _out) / 'graph.grafeo'
             _reflect(memory_dir=_md, out_path=(_root / _out) / 'reflections' / 'LESSONS.md',
                      graph_path=_gj if _gj.exists() else None)
     except Exception:
@@ -326,7 +326,7 @@ try:
         _md = (_root / _out) / 'memory'
         if _md.is_dir() and any(_md.glob('*.md')):
             from graphify.reflect import reflect as _reflect
-            _gj = (_root / _out) / 'graph.json'
+            _gj = (_root / _out) / 'graph.grafeo'
             _reflect(memory_dir=_md, out_path=(_root / _out) / 'reflections' / 'LESSONS.md',
                      graph_path=_gj if _gj.exists() else None)
     except Exception:
@@ -476,7 +476,7 @@ GIT_DIR=${GIT_DIR:-$(git rev-parse --git-dir 2>/dev/null)}
 # CHERRY_PICK_HEAD can't be the skip signal: git leaves it on disk while post-commit
 # runs, so every pick was silenced (#4490, same trap as MERGE_HEAD in #4463). For a
 # range pick or revert, skip every step but the last and rebuild once from
-# sequencer/head, so a tracked graph.json isn't rewritten between steps. sequencer/ is
+# sequencer/head, so a tracked graph.grafeo isn't rewritten between steps. sequencer/ is
 # trusted only when its first todo line is the commit just made; a stale one left by
 # `git reset --hard` would otherwise silence every later commit.
 _GFY_SEQ_BASE=""
@@ -519,7 +519,7 @@ fi
 # Skip when only output-dir artifacts changed (avoids rebuild loop when graph
 # outputs are tracked in git). The dir is whatever GRAPHIFY_OUT names, the same
 # source the rebuild body reads (#1423): a literal graphify-out/ here let a
-# commit touching only a renamed output dir's graph.json trigger a full rebuild.
+# commit touching only a renamed output dir's graph.grafeo trigger a full rebuild.
 _GFY_OUT="${GRAPHIFY_OUT:-graphify-out}"
 _GFY_OUT="${_GFY_OUT%/}"
 # The leading ( on each pattern is POSIX and keeps bash 3.2 (macOS /bin/sh)
@@ -615,7 +615,7 @@ echo "[graphify] Branch switched - launching background rebuild (log: $_GRAPHIFY
 _MERGE_SCRIPT = """\
 # graphify-merge-hook-start
 # Auto-rebuilds the knowledge graph (code only) after a merge, unscoped.
-# The git merge driver graphify registers for graph.json does a pure union
+# The git merge driver graphify registers for graph.grafeo does a pure union
 # of both sides, which can resurrect a symbol that was deleted on one side
 # (#2418). Nothing else ever re-extracts that symbol's file unless it is
 # touched again, so the phantom node would otherwise persist indefinitely;
@@ -974,7 +974,7 @@ def _is_rotating_prefix(path: str) -> bool:
 
 
 def _merge_attr_line() -> str:
-    """The .gitattributes line assigning the graphify merge driver to graph.json.
+    """The .gitattributes line assigning the graphify merge driver to graph.grafeo.
 
     The graph lives under the configured output directory (graphify.paths,
     GRAPHIFY_OUT env override). gitattributes patterns are repo-relative, so an
@@ -985,23 +985,23 @@ def _merge_attr_line() -> str:
     out = GRAPHIFY_OUT
     if not out or Path(out).is_absolute() or "\\" in out:
         out = "graphify-out"
-    return f"{out.rstrip('/')}/graph.json merge=graphify"
+    return f"{out.rstrip('/')}/graph.grafeo merge=graphify"
 
 
 def _has_merge_attr(content: str) -> bool:
-    """True if a (non-comment) `<...>graph.json ... merge=graphify` line exists."""
+    """True if a (non-comment) `<...>graph.grafeo ... merge=graphify` line exists."""
     for raw in content.splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
         fields = line.split()
-        if fields and fields[0].endswith("graph.json") and "merge=graphify" in fields[1:]:
+        if fields and fields[0].endswith("graph.grafeo") and "merge=graphify" in fields[1:]:
             return True
     return False
 
 
 def _register_merge_driver(root: Path) -> str:
-    """Register the graph.json union merge driver in git config + .gitattributes (#1902).
+    """Register the graph.grafeo union merge driver in git config + .gitattributes (#1902).
 
     README and CHANGELOG 0.7.0 document `graphify merge-driver` as being set up
     by `hook install`, but install never actually registered it. Writes go
@@ -1023,7 +1023,7 @@ def _register_merge_driver(root: Path) -> str:
         driver = "graphify merge-driver %O %A %B"
     try:
         for key, value in (
-            ("merge.graphify.name", "graphify graph.json union merge"),
+            ("merge.graphify.name", "graphify graph.grafeo union merge"),
             ("merge.graphify.driver", driver),
         ):
             _sp.run(

@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 import json
 
 import pytest
@@ -40,8 +42,8 @@ def test_distinct_same_file_locations_preserve_ids_and_edges(reverse):
 
 def test_empty_no_dedup_merge_keeps_located_graph(tmp_path):
     nodes = _located_nodes()
-    graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps({"nodes": nodes, "edges": [], "hyperedges": []}), encoding="utf-8")
+    graph_path = tmp_path / "graph.grafeo"
+    _graph_write_text(graph_path, json.dumps({"nodes": nodes, "edges": [], "hyperedges": []}), encoding="utf-8")
     graph = build_merge([{"nodes": [], "edges": [], "hyperedges": []}], graph_path, dedup=False)
     assert set(graph.nodes) == {node["id"] for node in nodes}
 
@@ -81,8 +83,8 @@ def test_full_build_honors_disabled_semantic_dedup():
 
 
 def test_fresh_merge_honors_disabled_semantic_dedup(tmp_path):
-    graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps({"nodes": [], "edges": [], "hyperedges": []}), encoding="utf-8")
+    graph_path = tmp_path / "graph.grafeo"
+    _graph_write_text(graph_path, json.dumps({"nodes": [], "edges": [], "hyperedges": []}), encoding="utf-8")
     nodes = _located_nodes()
     graph = build_merge([{"nodes": nodes, "edges": [], "hyperedges": []}], graph_path, dedup=False)
     assert set(graph.nodes) == {node["id"] for node in nodes}

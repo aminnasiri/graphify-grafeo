@@ -1,6 +1,6 @@
-"""Reloading graph.json must keep each edge's stored direction (#4066).
+"""Reloading graph.grafeo must keep each edge's stored direction (#4066).
 
-graph.json is written ``directed: false`` and carries true direction in each
+graph.grafeo is written ``directed: false`` and carries true direction in each
 link's arc order (#563), or in ``_src``/``_tgt`` markers on legacy
 canonicalized files (#2309). A plain undirected ``node_link_graph`` load
 re-orders each edge's endpoints by node-list position, so a link whose target
@@ -9,10 +9,12 @@ node precedes its source node comes back reversed.
 query/path/explain (#2309, #2487), affected (#1174), merge-graphs (#2261) and
 the MCP server already restore direction. These tests cover the remaining
 reloaders: the export subcommands, the watch/update HTML re-render, the git
-merge driver, which writes the committed graph.json, and `global add`, which
-writes ~/.graphify/global-graph.json.
+merge driver, which writes the committed graph.grafeo, and `global add`, which
+writes ~/.graphify/global-graph.grafeo.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import os
@@ -57,9 +59,9 @@ def _graph_json(tmp_path: Path) -> Path:
              "relation": "calls", "confidence": "EXTRACTED"},
         ],
     }
-    p = out / "graph.json"
-    p.write_text(json.dumps(data))
-    (out / ".graphify_analysis.json").write_text(json.dumps(
+    p = out / "graph.grafeo"
+    _graph_write_text(p, json.dumps(data))
+    _graph_write_text(out / ".graphify_analysis.json", json.dumps(
         {"communities": {"0": ["callee", "caller", "helper", "util", "legacy_a", "legacy_b"]}}))
     return p
 
@@ -74,7 +76,7 @@ def _run(args: list[str], cwd: Path, env: dict[str, str] | None = None) -> subpr
 
 
 def _html_arcs(html_path: Path) -> set[tuple[str, str]]:
-    html = html_path.read_text(encoding="utf-8")
+    html = _graph_read_text(html_path, encoding="utf-8")
     return set(re.findall(r'"from": "([^"]+)", "to": "([^"]+)"', html))
 
 
@@ -97,7 +99,7 @@ def test_export_cypher_merges_edges_in_stored_direction(tmp_path):
     _graph_json(tmp_path)
     r = _run(["export", "neo4j"], tmp_path)
     assert r.returncode == 0, r.stderr
-    cypher = (tmp_path / "graphify-out" / "cypher.txt").read_text(encoding="utf-8")
+    cypher = _graph_read_text(tmp_path / "graphify-out" / "cypher.txt", encoding="utf-8")
     arcs = set(re.findall(r"MATCH \(a \{id: '([^']+)'\}\), \(b \{id: '([^']+)'\}\)", cypher))
     assert arcs == TRUE_ARCS
 
@@ -137,15 +139,14 @@ class FalkorDB:
 def _push_arcs(tmp_path: Path, backend: str) -> set[tuple[str, str]]:
     fakes = tmp_path / "fakes"
     (fakes / backend).mkdir(parents=True)
-    (fakes / backend / "__init__.py").write_text(
-        _FAKE_NEO4J if backend == "neo4j" else _FAKE_FALKORDB)
+    _graph_write_text(fakes / backend / "__init__.py", _FAKE_NEO4J if backend == "neo4j" else _FAKE_FALKORDB)
     log = tmp_path / "arcs.log"
     env = {k: v for k, v in os.environ.items() if k not in ("NEO4J_PASSWORD", "FALKORDB_PASSWORD")}
     env["PYTHONPATH"] = os.pathsep.join([str(fakes), env.get("PYTHONPATH", "")])
     env["FAKE_ARC_LOG"] = str(log)
     r = _run(["export", backend, "--push", "bolt://localhost:7687", "--password", "x"], tmp_path, env)
     assert r.returncode == 0, r.stderr
-    return {tuple(json.loads(line)) for line in log.read_text().splitlines()}
+    return {tuple(json.loads(line)) for line in _graph_read_text(log).splitlines()}
 
 
 def test_export_neo4j_push_sends_stored_direction(tmp_path):
@@ -163,7 +164,7 @@ def test_export_obsidian_canvas_edges_in_stored_direction(tmp_path):
     _graph_json(tmp_path)
     r = _run(["export", "obsidian"], tmp_path)
     assert r.returncode == 0, r.stderr
-    canvas = json.loads((tmp_path / "graphify-out" / "obsidian" / "graph.canvas").read_text())
+    canvas = json.loads(_graph_read_text(tmp_path / "graphify-out" / "obsidian" / "graph.canvas"))
     arcs = {(e["fromNode"][2:], e["toNode"][2:]) for e in canvas["edges"]}
     assert arcs == TRUE_ARCS
 
@@ -175,35 +176,35 @@ def test_watch_html_reconcile_draws_stored_direction(tmp_path, monkeypatch):
     for key, value in _VIZ_ENV.items():
         monkeypatch.setenv(key, value)
     gp = _graph_json(tmp_path)
-    assert _reconcile_graph_html(gp.parent, json.loads(gp.read_text())) == "rendered"
+    assert _reconcile_graph_html(gp.parent, json.loads(_graph_read_text(gp))) == "rendered"
     assert _html_arcs(gp.parent / "graph.html") == TRUE_ARCS
 
 
 def test_merge_driver_keeps_stored_direction_in_arc_order(tmp_path):
-    """Even a merge of three identical copies used to rewrite graph.json reversed."""
+    """Even a merge of three identical copies used to rewrite graph.grafeo reversed."""
     gp = _graph_json(tmp_path)
     base, cur, oth = (tmp_path / n for n in ("base.json", "cur.json", "oth.json"))
     for p in (base, cur, oth):
-        p.write_text(gp.read_text())
+        _graph_write_text(p, _graph_read_text(gp))
     r = _run(["merge-driver", str(base), str(cur), str(oth)], tmp_path)
     assert r.returncode == 0, r.stderr
-    merged = json.loads(cur.read_text())
+    merged = json.loads(_graph_read_text(cur))
     # Arc order is the direction (what to_json writes); no markers left behind.
     assert {(l["source"], l["target"]) for l in merged["links"]} == TRUE_ARCS
     assert not any("_src" in l or "_tgt" in l for l in merged["links"])
 
 
 def _global_add(tmp_path: Path, *repos: tuple[Path, str]) -> dict:
-    """Run `global add` for each (graph.json, tag) and return the saved global graph."""
+    """Run `global add` for each (graph.grafeo, tag) and return the saved global graph."""
     from graphify.global_graph import global_add
 
     gdir = tmp_path / ".graphify"
     with patch("graphify.global_graph._GLOBAL_DIR", gdir), \
-         patch("graphify.global_graph._GLOBAL_GRAPH", gdir / "global-graph.json"), \
+         patch("graphify.global_graph._GLOBAL_GRAPH", gdir / "global-graph.grafeo"), \
          patch("graphify.global_graph._GLOBAL_MANIFEST", gdir / "global-manifest.json"):
         for graph_path, tag in repos:
             global_add(graph_path, tag)
-    return json.loads((gdir / "global-graph.json").read_text())
+    return json.loads(_graph_read_text(gdir / "global-graph.grafeo"))
 
 
 def _marker_arcs(data: dict) -> set[tuple[str, str]]:
@@ -225,9 +226,9 @@ def test_global_add_dedup_remaps_direction_markers(tmp_path):
                 "nodes": [{"id": "requests", "label": "requests"},
                           {"id": fn, "label": f"{fn}()", "source_file": f"{name}/x.py"}],
                 "links": [{"source": fn, "target": "requests", "relation": "calls"}]}
-        p = tmp_path / name / "graph.json"
+        p = tmp_path / name / "graph.grafeo"
         p.parent.mkdir()
-        p.write_text(json.dumps(data))
+        _graph_write_text(p, json.dumps(data))
         return p
 
     saved = _global_add(tmp_path, (repo("A", "fa"), "A"), (repo("B", "fb"), "B"))

@@ -1,5 +1,8 @@
 # monitor a folder and auto-trigger --update when files change
 from __future__ import annotations
+from graphify.paths import database_path as _database_path
+from graphify.store.io import remove_state as _remove_state, state_exists as _state_exists
+from graphify.store.io import read_json as _read_graph_data
 import contextlib
 import errno
 import inspect
@@ -158,7 +161,7 @@ def _write_build_config(
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / _BUILD_CONFIG_FILENAME
         try:
-            config = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+            config = _read_graph_data(path) if path.is_file() else {}
         except (OSError, json.JSONDecodeError):
             config = {}
         if not isinstance(config, dict):
@@ -179,7 +182,7 @@ def _read_build_excludes(out_dir: Path) -> list[str]:
     try:
         path = out_dir / _BUILD_CONFIG_FILENAME
         if path.is_file():
-            cfg = json.loads(path.read_text(encoding="utf-8"))
+            cfg = _read_graph_data(path)
             ex = cfg.get("excludes") if isinstance(cfg, dict) else None
             if isinstance(ex, list):
                 return [str(x) for x in ex if isinstance(x, str) and x]
@@ -193,7 +196,7 @@ def _read_build_gitignore(out_dir: Path) -> bool:
     try:
         path = out_dir / _BUILD_CONFIG_FILENAME
         if path.is_file():
-            cfg = json.loads(path.read_text(encoding="utf-8"))
+            cfg = _read_graph_data(path)
             if isinstance(cfg, dict) and isinstance(cfg.get("gitignore"), bool):
                 return cfg["gitignore"]
     except (OSError, json.JSONDecodeError):
@@ -210,7 +213,7 @@ def _read_build_code_only(out_dir: Path) -> bool:
     try:
         path = out_dir / _BUILD_CONFIG_FILENAME
         if path.is_file():
-            cfg = json.loads(path.read_text(encoding="utf-8"))
+            cfg = _read_graph_data(path)
             if isinstance(cfg, dict) and cfg.get("code_only") is True:
                 return True
     except (OSError, json.JSONDecodeError):
@@ -464,7 +467,7 @@ def _git_head(cwd: Path | str | None = None) -> str | None:
 
     ``cwd`` selects the repository to ask (#2316). Without it the command
     inherits the caller's working directory, so `graphify update <target>`
-    stamped the *invoking* repo's commit into the target's graph.json — the
+    stamped the *invoking* repo's commit into the target's graph.grafeo — the
     same CWD-anchoring mistake as the manifest path, but writing wrong
     provenance rather than a misplaced file.
     """
@@ -1063,7 +1066,7 @@ def _referenced_unscanned_identities(
     from graphify.build import _is_ast_tier
 
     try:
-        scanned = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        scanned = _read_graph_data(out / "manifest.json")
     except (OSError, ValueError):
         return set()
     if not isinstance(scanned, dict):
@@ -1150,7 +1153,7 @@ def _reconcile_existing_graph(
     # topology compare) the (nodes, edges, hyperedges) tuple does not carry.
     # A failure here (e.g. a race rewriting the file) still propagates,
     # staying fail-closed.
-    existing = json.loads(existing_graph.read_text(encoding="utf-8"))
+    existing = _read_graph_data(existing_graph)
     existing_graph_data = existing
 
     # Backfill tier provenance on legacy items (#2334), mirroring
@@ -1608,10 +1611,15 @@ def _node_community_map(graph_data: dict) -> dict[str, int]:
 def _canonical_graph_for_compare(graph_data: dict) -> dict:
     canonical = dict(graph_data)
     canonical.pop("built_at_commit", None)
+    if isinstance(canonical.get("graph"), dict):
+        canonical["graph"] = {k: v for k, v in canonical["graph"].items()
+                              if k not in {"_store_revision", "schema_version", "graphify_version"}}
+        if not canonical["graph"]:
+            canonical.pop("graph", None)
     # A missing "directed" key means the same thing as "directed": false
     # everywhere else in the codebase (#2342's --no-cluster path only started
     # writing the key once it began inheriting it from the existing graph).
-    # Normalise so an old graph.json without the key doesn't register as
+    # Normalise so an old graph.grafeo without the key doesn't register as
     # "changed" against a freshly-written candidate that now carries
     # "directed": false explicitly.
     canonical["directed"] = bool(canonical.get("directed", False))
@@ -1627,8 +1635,13 @@ def _canonical_graph_for_compare(graph_data: dict) -> dict:
 def _canonical_topology_for_compare(graph_data: dict) -> dict:
     canonical = dict(graph_data)
     canonical.pop("built_at_commit", None)
+    if isinstance(canonical.get("graph"), dict):
+        canonical["graph"] = {k: v for k, v in canonical["graph"].items()
+                              if k not in {"_store_revision", "schema_version", "graphify_version"}}
+        if not canonical["graph"]:
+            canonical.pop("graph", None)
 
-    # The on-disk graph.json carries format/version provenance under "graph"
+    # The on-disk graph.grafeo carries format/version provenance under "graph"
     # (schema_version, graphify_version — #4167) that the candidate topology,
     # built fresh from node_link_data(G), never has. These are metadata, not
     # topology, so drop them before comparing or every incremental update would
@@ -1769,7 +1782,7 @@ def _check_shrink(
         if len(new_nodes) < len(existing_nodes):
             print(
                 f"[graphify] WARNING: new graph has {len(new_nodes)} nodes but existing "
-                f"graph.json has {len(existing_nodes)}. Refusing to overwrite — you may be "
+                f"graph.grafeo has {len(existing_nodes)}. Refusing to overwrite — you may be "
                 f"missing chunk files from a previous session. "
                 f"Pass --force to override.",
                 file=sys.stderr,
@@ -1831,7 +1844,7 @@ def _check_shrink(
         tmp.unlink(missing_ok=True)
     print(
         f"[graphify] WARNING: new graph has {len(new_nodes)} nodes but existing "
-        f"graph.json has {len(existing_nodes)}. Refusing to overwrite — you may be "
+        f"graph.grafeo has {len(existing_nodes)}. Refusing to overwrite — you may be "
         f"missing chunk files from a previous session. "
         f"Pass --force to override.",
         file=sys.stderr,
@@ -1844,7 +1857,9 @@ def _report_for_compare(report_text: str) -> str:
 
 
 def _is_single_line(path: Path) -> bool:
-    """True when ``path`` holds one line (the compact graph.json layout, #3413)."""
+    """True when ``path`` holds one line (the compact graph.grafeo layout, #3413)."""
+    if path.suffix == ".grafeo":
+        return True
     with path.open("rb") as f:
         f.readline()
         return not f.readline()
@@ -2037,7 +2052,7 @@ def _current_build_state(
 def _graph_json_is_complete(path: Path) -> bool:
     """Cheap structural check that ``path`` holds a whole JSON object (#4748).
 
-    Deliberately not a full ``json.load``. graph.json is capped at 512 MiB by
+    Deliberately not a full ``json.load``. graph.grafeo is capped at 512 MiB by
     default (``GRAPHIFY_MAX_GRAPH_BYTES``), and the rebuild that just wrote it is
     still holding its own copy of the graph, so parsing it again can add a
     gigabyte of peak RSS to answer one question: did the bytes land whole.
@@ -2048,6 +2063,12 @@ def _graph_json_is_complete(path: Path) -> bool:
     Says nothing about corruption in the middle of the file. That would change
     mtime, which the caller's own stat comparison catches.
     """
+    if path.suffix == ".grafeo":
+        try:
+            _read_graph_data(path)
+            return True
+        except Exception:
+            return False
     try:
         size = path.stat().st_size
         if size < 2:
@@ -2069,14 +2090,14 @@ def _write_build_state(out: Path, state: dict, *, full_clean: bool) -> None:
 
     Refuses to stamp unless the outputs it is about to describe are on disk and
     whole. A stamp is a promise that the next run may skip, so writing one over a
-    graph.json that a failed or partial publish left behind turns that promise
+    graph.grafeo that a failed or partial publish left behind turns that promise
     into a stale graph nothing ever repairs (#4748). Any doubt means no stamp,
     which costs the next run a full rebuild and nothing else.
     """
-    graph = out / "graph.json"
     try:
+        graph = _database_path(out)
         st = graph.stat()
-    except OSError:
+    except (OSError, ValueError):
         return
     if not _graph_json_is_complete(graph):
         return
@@ -2105,12 +2126,12 @@ def _build_state_matches(out: Path, state: dict) -> bool:
     """True when ``out`` still holds exactly what the last stamped rebuild wrote.
 
     Fails closed on anything it cannot prove: a missing or unreadable stamp, a
-    graph.json another writer replaced or partly wrote, a pending HTML re-render,
+    graph.grafeo another writer replaced or partly wrote, a pending HTML re-render,
     or a last rebuild that was itself incremental (which is never a sound base
     for skipping a full one).
     """
     try:
-        prev = json.loads((out / _BUILD_STATE_NAME).read_text(encoding="utf-8"))
+        prev = _read_graph_data(out / _BUILD_STATE_NAME)
     except (OSError, ValueError):
         return False
     if not isinstance(prev, dict):
@@ -2122,7 +2143,7 @@ def _build_state_matches(out: Path, state: dict) -> bool:
     if prev.get("full_clean") is not True:
         return False
     try:
-        st = (out / "graph.json").stat()
+        st = (_database_path(out)).stat()
     except OSError:
         return False
     if prev.get("graph_size") != st.st_size or prev.get("graph_mtime_ns") != st.st_mtime_ns:
@@ -2138,7 +2159,7 @@ def _reconcile_graph_html(out: Path, graph_data: dict) -> str | None:
 
     The unchanged-topology update path deliberately avoids clustering and
     rewriting core artifacts. HTML is independently derivable, so rebuild it
-    from the communities and names already stored in graph.json when absent or
+    from the communities and names already stored in graph.grafeo when absent or
     marked stale by a prior failed render.
 
     Returns ``"rendered"`` or ``"removed"`` when it changed the HTML state,
@@ -2215,6 +2236,19 @@ def _reconcile_graph_html(out: Path, graph_data: dict) -> str | None:
     return "rendered"
 
 
+def _label_store_metadata(root, curated, pending, signatures, labels):
+    def strings(values):
+        return {str(k): v for k, v in values.items()}
+    return {
+        "scan_root": str(root),
+        "state:.graphify_labels.json": strings(curated),
+        "state:.graphify_labels.pending.json": strings(pending),
+        "state:.graphify_labels.json.sig": strings(signatures),
+        "community_labels": strings(labels),
+        "label_signature": strings(signatures),
+    }
+
+
 def _rebuild_code(
     watch_path: Path,
     *,
@@ -2229,7 +2263,7 @@ def _rebuild_code(
     """Re-run AST extraction + build + optional cluster + report for code files. No LLM needed.
 
     When ``force`` is True the node-count safety check in ``to_json`` is bypassed
-    so the rebuilt graph overwrites graph.json even if it has fewer nodes.
+    so the rebuilt graph overwrites graph.grafeo even if it has fewer nodes.
     Use this after refactors that legitimately delete code.
 
     When ``changed_paths`` is provided, only those files are re-extracted; nodes
@@ -2252,7 +2286,7 @@ def _rebuild_code(
     ``graphify update`` CLI).
 
     ``no_cluster`` skips community detection and writes raw merged extraction
-    JSON to graphify-out/graph.json (mirrors ``extract --no-cluster``).
+    JSON to graphify-out/graph.grafeo (mirrors ``extract --no-cluster``).
 
     Returns True on success, False on error or skipped-due-to-lock.
     """
@@ -2377,7 +2411,7 @@ def _rebuild_code(
         from graphify.cluster import cluster, remap_communities_to_previous, score_all
         from graphify.analyze import god_nodes, surprising_connections, suggest_questions
         from graphify.report import generate
-        from graphify.export import to_json
+        from graphify.export import to_json, to_data
         from graphify.security import check_graph_file_size_cap
 
         # Re-apply the excludes the initial extract recorded, so an update/watch/
@@ -2458,7 +2492,7 @@ def _rebuild_code(
         # None — the full path. "No rows" means the baseline is unknown, and the
         # only safe reading of unknown is "do the work"; `detect_incremental`
         # makes the same call for `graphify extract` (#1925).
-        if incremental and changed_paths is None and not force and (out / "graph.json").is_file():
+        if incremental and changed_paths is None and not force and (_database_path(out)).is_file():
             manifest = load_manifest(str(out / "manifest.json"), root=watch_root)
             if manifest:
                 resolution_inputs = detected.get("resolution_inputs") or []
@@ -2537,7 +2571,10 @@ def _rebuild_code(
                 code_files.append(p)
                 ast_doc_files.append(p)
 
-        existing_graph = out / "graph.json"
+        existing_graph = _database_path(out, root=watch_path)
+        if not existing_graph.exists() and (out / "graph.json").exists():
+            print("error: legacy graph.json found; run `graphify migrate --to grafeo` first", file=sys.stderr)
+            return False
         if not code_files and not existing_graph.exists():
             print("[graphify watch] No code files found - nothing to rebuild.")
             return False
@@ -2560,7 +2597,7 @@ def _rebuild_code(
         if ast_doc_files and existing_graph.exists():
             try:
                 check_graph_file_size_cap(existing_graph)
-                prior = json.loads(existing_graph.read_text(encoding="utf-8"))
+                prior = _read_graph_data(existing_graph)
                 prior_paths = _StoredSourcePaths(
                     prior,
                     out=out,
@@ -2704,7 +2741,7 @@ def _rebuild_code(
         if changed_paths is not None and existing_graph.exists():
             try:
                 check_graph_file_size_cap(existing_graph)
-                ctx_graph = json.loads(existing_graph.read_text(encoding="utf-8"))
+                ctx_graph = _read_graph_data(existing_graph)
                 ctx_paths = _StoredSourcePaths(
                     ctx_graph,
                     out=out,
@@ -2965,7 +3002,7 @@ def _rebuild_code(
             return False
 
         # The equality skips below compare parsed data, not layout; an existing
-        # multi-line graph.json must still be rewritten compact (#3413).
+        # multi-line graph.grafeo must still be rewritten compact (#3413).
         legacy_layout = existing_graph.exists() and not _is_single_line(existing_graph)
 
         _relativize_source_files(result, project_root, scope=watch_root)
@@ -2987,6 +3024,13 @@ def _rebuild_code(
         }
         out.mkdir(exist_ok=True)
 
+        from graphify.detect import save_manifest as _prepare_manifest
+        from graphify.store.io import write_graph as _write_graph
+        _prepared_manifest = _prepare_manifest(
+            _ast_manifest_files(), manifest_path=str(out / "manifest.json"), kind="ast",
+            root=watch_root, scan_corpus={f for fl in detected["files"].values() for f in fl},
+            clear_ast=_failed_ast_sources or None, dry_run=True)
+        _baseline_revision = (existing_graph_data or {}).get("graph", {}).get("_store_revision", 0)
         if no_cluster:
             # Normalise to "links" key so schema is consistent with the full clustered path.
             # Dedupe parallel edges (the clustered path's DiGraph collapses them implicitly);
@@ -3026,16 +3070,15 @@ def _rebuild_code(
             # This path writes the raw merged extraction, not a build_from_json
             # graph, so mint the same external stubs the builder does — otherwise
             # an import to stdlib / a third-party module leaves an undeclared
-            # endpoint in graph.json that every loader materialises as an
+            # endpoint in graph.grafeo that every loader materialises as an
             # attribute-less phantom (#2873). Any other edge without two declared
             # endpoints is dropped, as build_from_json drops it.
             _finalize_raw_graph_endpoints(candidate_graph_data)
-            candidate_graph_text = _json_text(candidate_graph_data)
             same_graph = False
             if existing_graph.exists():
                 try:
                     check_graph_file_size_cap(existing_graph)
-                    existing_payload = json.loads(existing_graph.read_text(encoding="utf-8"))
+                    existing_payload = _read_graph_data(existing_graph)
                 except Exception as exc:
                     # A load failure is NOT "graph changed" (#2251): refuse to
                     # overwrite a graph we merely failed to read. Normally
@@ -3067,16 +3110,8 @@ def _rebuild_code(
                     return False
                 from graphify.export import backup_if_protected as _backup
                 _backup(out)
-                # Atomic replace via tmp file, matching the clustered path: a
-                # crash mid-write must not leave a truncated graph.json.
-                # os_replace_with_fallback, not a plain Path.replace (#2689):
-                # this function just read existing_graph a few lines up, and
-                # on a VMware HGFS shared folder a replace over a destination
-                # read earlier in the same process raises PermissionError
-                # even on the same drive.
-                graph_tmp = out / ".graph.tmp.json"
-                graph_tmp.write_text(candidate_graph_text, encoding="utf-8")
-                os_replace_with_fallback(graph_tmp, existing_graph)
+            _write_graph(existing_graph, candidate_graph_data, manifest=_prepared_manifest,
+                         expected_revision=_baseline_revision, metadata={"scan_root": str(watch_root)})
 
             # Write the scan root only after the candidate graph is accepted,
             # so a refused shrink cannot mismatch graph and marker. See
@@ -3094,8 +3129,9 @@ def _rebuild_code(
                 # instead of surviving as phantom "deleted" entries (#1908).
                 # Failed AST sources are dropped from the stamped set and
                 # their prior hashes blanked (#2543).
-                save_manifest(
-                    _ast_manifest_files(), manifest_path=str(out / "manifest.json"),
+                if existing_graph.suffix != ".grafeo":
+                    save_manifest(
+                        _ast_manifest_files(), manifest_path=str(out / "manifest.json"),
                     kind="ast", root=watch_root,
                     scan_corpus={f for _fl in detected["files"].values() for f in _fl},
                     clear_ast=_failed_ast_sources or None,
@@ -3112,7 +3148,7 @@ def _rebuild_code(
                     f"{len(candidate_graph_data.get('nodes', []))} nodes, "
                     f"{len(candidate_graph_data.get('links', []))} edges"
                 )
-                print(f"[graphify watch] graph.json updated in {out}")
+                print(f"[graphify watch] graph.grafeo updated in {out}")
             return True
 
         detection = {
@@ -3177,7 +3213,7 @@ def _rebuild_code(
         labels_file = out / ".graphify_labels.json"
         sig_file = out / (".graphify_labels.json" + ".sig")
         # #3334: a community without a curated name gets a deterministic hub
-        # fallback below so reports and graph.json always show something
+        # fallback below so reports and graph.grafeo always show something
         # readable -- but that fallback used to be written straight into the
         # same tracked file as genuinely-curated (manual or LLM) names, so a
         # from-empty rebuild (a fresh clone, a new worktree, any CI run) kept
@@ -3190,7 +3226,7 @@ def _rebuild_code(
         # step below can route each cid back to the file it belongs in.
         pending_labels_file = out / ".graphify_labels.pending.json"
         try:
-            raw = json.loads(labels_file.read_text(encoding="utf-8")) if labels_file.exists() else {}
+            raw = _read_graph_data(labels_file) if _state_exists(labels_file) else {}
             # Skip persisted "Community N" placeholders so the hub-fill below
             # replaces them instead of perpetuating them on every rebuild (#2073).
             labels = {
@@ -3203,8 +3239,8 @@ def _rebuild_code(
         pending_cids: set[int] = set()
         try:
             pending_raw = (
-                json.loads(pending_labels_file.read_text(encoding="utf-8"))
-                if pending_labels_file.exists() else {}
+                _read_graph_data(pending_labels_file)
+                if _state_exists(pending_labels_file) else {}
             )
             for k, v in pending_raw.items():
                 cid = int(k)
@@ -3225,11 +3261,11 @@ def _rebuild_code(
         from graphify.cluster import community_member_sigs, label_still_applies
         cur_sigs = community_member_sigs(communities)
         saved_sigs: dict[int, str] = {}
-        if sig_file.exists():
+        if _state_exists(sig_file):
             try:
                 saved_sigs = {
                     int(k): v for k, v in
-                    json.loads(sig_file.read_text(encoding="utf-8")).items()
+                    _read_graph_data(sig_file).items()
                     if isinstance(v, str)
                 }
             except Exception:
@@ -3288,33 +3324,29 @@ def _rebuild_code(
         from graphify.report import load_report_token_cost as _lrtc
         report = generate(G, communities, cohesion, labels, gods, surprises, detection,
                           _lrtc(out), report_root, suggested_questions=questions,
-                          built_at_commit=commit, learning=_llfr(out / "graph.json"))
+                          built_at_commit=commit, learning=_llfr(_database_path(out)))
         report_path = out / "GRAPH_REPORT.md"
         # Split back into the tracked (curated) file and the pending
-        # (hub-fallback) sidecar (#3334) -- report/graph.json generation above
+        # (hub-fallback) sidecar (#3334) -- report/graph.grafeo generation above
         # already used the full, merged `labels` so a fallback-named community
         # still reads correctly there; only the on-disk split changes.
         curated_labels = {cid: v for cid, v in labels.items() if cid not in pending_cids}
         pending_labels = {cid: v for cid, v in labels.items() if cid in pending_cids}
         labels_json = json.dumps({str(k): v for k, v in sorted(curated_labels.items())}, ensure_ascii=False, indent=2) + "\n"
         pending_labels_json = json.dumps({str(k): v for k, v in sorted(pending_labels.items())}, ensure_ascii=False, indent=2) + "\n"
-        graph_tmp = out / ".graph.tmp.json"
-        json_written = to_json(G, communities, str(graph_tmp), force=True, built_at_commit=commit, community_labels=labels)
-        if not json_written:
-            return False
-        candidate_graph_data = json.loads(graph_tmp.read_text(encoding="utf-8"))
+        candidate_graph_data = to_data(G, communities, output_path=existing_graph,
+                                       built_at_commit=commit, community_labels=labels)
         same_graph = False
         same_report = False
         if existing_graph.exists():
             try:
                 check_graph_file_size_cap(existing_graph)
-                existing_payload = json.loads(existing_graph.read_text(encoding="utf-8"))
+                existing_payload = _read_graph_data(existing_graph)
             except Exception as exc:
                 # A load failure is NOT "graph changed" (#2251): refuse to
                 # overwrite a graph we merely failed to read. Normally
                 # unreachable — the reconcile load above already failed
                 # closed — but a race rewriting the file can land here.
-                graph_tmp.unlink(missing_ok=True)
                 print(
                     f"error: Cannot read {existing_graph}: {exc}. "
                     "Refusing to overwrite; delete the file and run a "
@@ -3335,12 +3367,12 @@ def _rebuild_code(
             same_report = _report_for_compare(old_report) == _report_for_compare(report)
         no_change = same_graph and same_report
         if no_change:
-            graph_tmp.unlink(missing_ok=True)
-            print("[graphify watch] No code-graph changes detected; graph.json/GRAPH_REPORT.md left untouched.")
+            _write_graph(existing_graph, candidate_graph_data, manifest=_prepared_manifest,
+                         expected_revision=_baseline_revision, metadata={"scan_root": str(watch_root)})
+            print("[graphify watch] No code-graph changes detected; graph.grafeo/GRAPH_REPORT.md left untouched.")
         else:
             if not _check_shrink(
                 force, existing_graph_data, candidate_graph_data,
-                tmp=graph_tmp,
                 had_explicit_deletions=bool(deleted_paths),
                 rebuilt_sources=rebuilt_sources,
                 failed_sources=failed_sources,
@@ -3348,7 +3380,7 @@ def _rebuild_code(
             ):
                 return False
             from graphify.exporters.html import _HTML_STALE_MARKER
-            # Mark before graph.json advances so an interruption cannot leave a
+            # Mark before graph.grafeo advances so an interruption cannot leave a
             # previous visualization looking current to the fast path.
             (out / _HTML_STALE_MARKER).touch()
             from graphify.export import backup_if_protected as _backup
@@ -3358,7 +3390,9 @@ def _rebuild_code(
             # comparison, and on a VMware HGFS shared folder a replace over a
             # destination read earlier in the same process raises
             # PermissionError even on the same drive.
-            os_replace_with_fallback(graph_tmp, existing_graph)
+            _write_graph(existing_graph, candidate_graph_data, manifest=_prepared_manifest,
+                         expected_revision=_baseline_revision, metadata=_label_store_metadata(
+                             watch_root, curated_labels, pending_labels, cur_sigs, labels))
             write_text_atomic(report_path, report)
             # Keep the membership signatures in step with the labels we just wrote.
             # Skipping this was the other half of the stale-label bug: labels.json
@@ -3387,7 +3421,7 @@ def _rebuild_code(
                 # none pending this run) -- a leftover empty/stale sidecar would
                 # otherwise sit there forever once its last entry is promoted to
                 # a real label.
-                pending_labels_file.unlink(missing_ok=True)
+                _remove_state(pending_labels_file)
             write_text_atomic(
                 sig_file, json.dumps({str(k): v for k, v in cur_sigs.items()}))
 
@@ -3401,8 +3435,9 @@ def _rebuild_code(
             from graphify.detect import save_manifest
             # Full-scan save: prune excluded-but-alive rows (#1908);
             # leave failed AST sources unstamped (#2543).
-            save_manifest(
-                _ast_manifest_files(), manifest_path=str(out / "manifest.json"),
+            if existing_graph.suffix != ".grafeo":
+                save_manifest(
+                    _ast_manifest_files(), manifest_path=str(out / "manifest.json"),
                 kind="ast", root=watch_root,
                 scan_corpus={f for _fl in detected["files"].values() for f in _fl},
                 clear_ast=_failed_ast_sources or None,
@@ -3411,7 +3446,7 @@ def _rebuild_code(
             pass
 
         # Reconcile from the persisted graph. The stale marker was written
-        # before graph.json advanced, so a failed or interrupted atomic render
+        # before graph.grafeo advanced, so a failed or interrupted atomic render
         # remains retryable from the unchanged-topology fast path.
         html_written = False
         if not no_change:
@@ -3426,7 +3461,7 @@ def _rebuild_code(
                 from graphify.callflow_html import write_callflow_html
                 for cf in callflow_files:
                     write_callflow_html(
-                        graph=out / "graph.json",
+                        graph=_database_path(out),
                         report=out / "GRAPH_REPORT.md",
                         labels=out / ".graphify_labels.json",
                         output=cf,
@@ -3438,7 +3473,7 @@ def _rebuild_code(
         if not no_change:
             print(f"[graphify watch] Rebuilt: {G.number_of_nodes()} nodes, "
                   f"{G.number_of_edges()} edges, {len(communities)} communities")
-            products = "graph.json" + (", graph.html" if html_written else "") + " and GRAPH_REPORT.md"
+            products = "graph.grafeo" + (", graph.html" if html_written else "") + " and GRAPH_REPORT.md"
             if callflow_files:
                 products += f", {len(callflow_files)} callflow HTML"
             print(f"[graphify watch] {products} updated in {out}")

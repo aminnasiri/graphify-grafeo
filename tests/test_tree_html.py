@@ -7,6 +7,8 @@ repo-relative, so an absolute --root never matched. A zero-match explicit root
 now raises/exits 1; the default computed root and partial matches stay exit 0.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import subprocess
@@ -44,7 +46,7 @@ def _graph(files: dict[str, str]) -> dict:
 def _write_graph(tmp_path: Path, graph: dict) -> Path:
     out = tmp_path / "graphify-out"
     out.mkdir()
-    (out / "graph.json").write_text(json.dumps(graph), encoding="utf-8")
+    _graph_write_text(out / "graph.grafeo", json.dumps(graph), encoding="utf-8")
     return out
 
 
@@ -197,9 +199,9 @@ def test_tree_cli_merged_graph_renders_repo_roots(tmp_path):
         "repo-a": {"src/engine.py": "EngineA"},
         "repo-b": {"src/engine.py": "EngineB"},
     }))
-    r = _run(["tree", "--graph", str(out / "graph.json")], tmp_path)
+    r = _run(["tree", "--graph", str(out / "graph.grafeo")], tmp_path)
     assert r.returncode == 0, r.stderr
-    html = (out / "GRAPH_TREE.html").read_text(encoding="utf-8")
+    html = _graph_read_text(out / "GRAPH_TREE.html", encoding="utf-8")
     assert "repo-a" in html and "repo-b" in html
 
 
@@ -215,7 +217,7 @@ def test_tree_cli_absolute_root_mismatch_exits_1(tmp_path):
     assert "error:" in r.stderr, r.stderr
     assert "Traceback" not in r.stderr, r.stderr
     assert "wrote" not in r.stdout, r.stdout
-    assert not (tmp_path / "graphify-out" / "GRAPH_TREE.html").exists()
+    assert not _graph_exists(tmp_path / "graphify-out" / "GRAPH_TREE.html")
 
 
 def test_tree_cli_default_root_succeeds(tmp_path):
@@ -223,7 +225,7 @@ def test_tree_cli_default_root_succeeds(tmp_path):
     r = _run(["tree"], tmp_path)
     assert r.returncode == 0, r.stderr
     assert "wrote" in r.stdout, r.stdout
-    html = (tmp_path / "graphify-out" / "GRAPH_TREE.html").read_text(encoding="utf-8")
+    html = _graph_read_text(tmp_path / "graphify-out" / "GRAPH_TREE.html", encoding="utf-8")
     # the hierarchy survives: pkg is the root, sub is an interior node
     assert '"name":"pkg"' in html
     assert '"name":"sub"' in html
@@ -233,7 +235,7 @@ def test_tree_cli_partial_match_root_succeeds(tmp_path):
     _write_graph(tmp_path, _graph({"pkg/a.py": "func_a", "other/c.py": "func_c"}))
     r = _run(["tree", "--root", "pkg"], tmp_path)
     assert r.returncode == 0, r.stderr
-    assert (tmp_path / "graphify-out" / "GRAPH_TREE.html").exists()
+    assert _graph_exists(tmp_path / "graphify-out" / "GRAPH_TREE.html")
 
 
 # Directory breadth is independent of the existing symbol limit beneath files.
@@ -326,7 +328,7 @@ def test_tree_cli_directory_cap_serializes_existing_schema(tmp_path):
     out = _write_graph(tmp_path, _graph({"pkg/a.py": "A", "pkg/b.py": "B", "pkg/c.py": "C"}))
     result = _run(["tree", "--root", "pkg", "--max-children", "1"], tmp_path)
     assert result.returncode == 0, result.stderr
-    page = (out / "GRAPH_TREE.html").read_text(encoding="utf-8")
+    page = _graph_read_text(out / "GRAPH_TREE.html", encoding="utf-8")
     match = re.search(r"const initialJsonData = (.*);", page)
     assert match is not None
     tree = json.loads(match.group(1))
@@ -350,4 +352,4 @@ def test_tree_cli_negative_cap_does_not_write_html(tmp_path):
     assert "error:" in result.stderr
     assert "--max-children must be nonnegative" in result.stderr
     assert "Traceback" not in result.stderr and "wrote" not in result.stdout
-    assert not (out / "GRAPH_TREE.html").exists()
+    assert not _graph_exists(out / "GRAPH_TREE.html")

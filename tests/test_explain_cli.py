@@ -1,5 +1,7 @@
 """Regression tests for `graphify explain` arrow direction (#853)."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 import json
 import graphify.__main__ as mainmod
 from graphify.cli import EXIT_AMBIGUOUS
@@ -27,8 +29,8 @@ def _write_graph(tmp_path):
              "relation": "calls", "confidence": "EXTRACTED"},
         ],
     }
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps(graph_data))
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps(graph_data))
     return p
 
 
@@ -71,8 +73,8 @@ def test_explain_lists_parallel_relations(monkeypatch, tmp_path, capsys):
             {"source": "owner", "target": "child", "relation": "calls", "confidence": "EXTRACTED"},
         ],
     }
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps(graph_data))
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps(graph_data))
 
     out = _run(monkeypatch, p, "Owner", capsys)
 
@@ -95,8 +97,8 @@ def test_explain_source_file_path_prefers_file_level_node(monkeypatch, tmp_path,
              "relation": "contains", "confidence": "EXTRACTED"},
         ],
     }
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps(graph_data))
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps(graph_data))
 
     out = _run(monkeypatch, p, source_file, capsys)
 
@@ -109,11 +111,8 @@ def test_explain_source_file_path_prefers_file_level_node(monkeypatch, tmp_path,
 # --- work-memory overlay Lesson line ------------------------------------------
 
 def _write_sidecar(tmp_path, nodes):
-    (tmp_path / ".graphify_learning.json").write_text(
-        json.dumps({"version": 1, "generated_at": "2026-06-01T00:00:00+00:00",
-                    "nodes": nodes}),
-        encoding="utf-8",
-    )
+    _graph_write_text(tmp_path / ".graphify_learning.json", json.dumps({"version": 1, "generated_at": "2026-06-01T00:00:00+00:00",
+                    "nodes": nodes}), encoding="utf-8")
 
 
 def test_explain_shows_preferred_lesson_line(monkeypatch, tmp_path, capsys):
@@ -165,8 +164,8 @@ def test_explain_connection_shows_call_site_line(monkeypatch, tmp_path, capsys):
              "confidence": "EXTRACTED", "source_file": "apollo.py", "source_location": "L158"},
         ],
     }
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps(graph_data))
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps(graph_data))
     out = _run(monkeypatch, p, "transition_state", capsys)
     # The inbound caller line must cite the call site apollo.py:L158.
     caller_line = next(l for l in out.splitlines() if "<-- load_state()" in l)
@@ -196,8 +195,8 @@ def _write_high_degree_graph(tmp_path, n_callers=30, files=None):
                        "source_location": f"L{10 + i}"})
     graph_data = {"directed": False, "multigraph": False, "graph": {},
                   "nodes": nodes, "links": links}
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps(graph_data))
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps(graph_data))
     return p
 
 
@@ -284,8 +283,8 @@ def _write_ambiguous_graph(tmp_path, *, reverse: bool = False):
         "nodes": list(reversed(nodes)) if reverse else nodes,
         "links": [],
     }
-    p = tmp_path / ("graph_rev.json" if reverse else "graph.json")
-    p.write_text(json.dumps(graph_data))
+    p = tmp_path / ("graph_rev.json" if reverse else "graph.grafeo")
+    _graph_write_text(p, json.dumps(graph_data))
     return p
 
 
@@ -339,8 +338,8 @@ def test_explain_matches_within_one_file_are_not_ambiguous(monkeypatch, tmp_path
         "links": [{"source": "file_node", "target": "member",
                    "relation": "contains", "confidence": "EXTRACTED"}],
     }
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps(graph_data))
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps(graph_data))
     out = _run(monkeypatch, p, "MetricsPort", capsys)
     assert "Ambiguous" not in out
     assert "Node: MetricsPort" in out
@@ -396,8 +395,8 @@ def test_explain_double_colon_label_without_path_match_still_resolves(monkeypatc
         ],
         "links": [],
     }
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps(graph_data))
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps(graph_data))
     out = _run(monkeypatch, p, "Foo::Bar", capsys)
     assert "Ambiguous" not in out
     assert "ID:        mymod_foo_bar" in out
@@ -418,8 +417,8 @@ def test_explain_double_colon_label_not_hijacked_by_a_coincidental_path_match(mo
         ],
         "links": [],
     }
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps(graph_data))
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps(graph_data))
     out = _run(monkeypatch, p, "mylib::Bar", capsys)
     assert "Ambiguous" not in out
     assert "ID:        mylib_bar" in out

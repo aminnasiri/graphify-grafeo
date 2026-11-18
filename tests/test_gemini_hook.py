@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 """The Gemini CLI BeforeTool guard nudges toward the graph, shell-agnostically.
 
 Since #522 it runs as `graphify hook-guard gemini` (not a `python -c` one-liner
@@ -22,7 +24,7 @@ def _env():
 def _run(cwd, *, graph: bool):
     if graph:
         (cwd / "graphify-out").mkdir(parents=True, exist_ok=True)
-        (cwd / "graphify-out" / "graph.json").write_text("{}", encoding="utf-8")
+        _graph_write_text(cwd / "graphify-out" / "graph.grafeo", "{}", encoding="utf-8")
     return subprocess.run(
         [sys.executable, "-m", "graphify", "hook-guard", "gemini"],
         input="", capture_output=True, text=True, cwd=cwd, env=_env(),
@@ -62,7 +64,7 @@ def test_never_blocks(tmp_path):
 def test_honors_graphify_out_override(tmp_path):
     custom = tmp_path / "custom-out"
     custom.mkdir()
-    (custom / "graph.json").write_text("{}", encoding="utf-8")
+    _graph_write_text(custom / "graph.grafeo", "{}", encoding="utf-8")
     env = dict(os.environ, GRAPHIFY_OUT=str(custom))
     r = subprocess.run(
         [sys.executable, "-m", "graphify", "hook-guard", "gemini"],

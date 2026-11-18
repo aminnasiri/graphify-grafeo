@@ -4,6 +4,8 @@ The cross-file case was already refused; within one file, `_find_node`'s winning
 tier was split by graph iteration order and one node presented as the answer.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import json
 
@@ -51,8 +53,8 @@ def _graph_data(reverse: bool = False) -> dict:
 
 
 def _write(tmp_path, reverse: bool = False):
-    p = tmp_path / ("graph_rev.json" if reverse else "graph.json")
-    p.write_text(json.dumps(_graph_data(reverse)))
+    p = tmp_path / ("graph_rev.json" if reverse else "graph.grafeo")
+    _graph_write_text(p, json.dumps(_graph_data(reverse)))
     return p
 
 

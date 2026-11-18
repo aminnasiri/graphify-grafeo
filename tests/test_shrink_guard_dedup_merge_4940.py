@@ -1,10 +1,12 @@
 """#4940: the #479 write guard must tell a node that entity dedup folded into a
 twin from a node that was lost.
 
-The tests assert on what reaches graph.json and on whether ``to_json`` wrote,
+The tests assert on what reaches graph.grafeo and on whether ``to_json`` wrote,
 never on how the guard is wired, so they hold for any fix of the same bug.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text
 
 import json
 
@@ -36,17 +38,17 @@ def _seed(path, nodes, edges=()):
 
 
 def _merge_and_write(tmp_path, saved, fresh, saved_edges=(), tamper=None):
-    """Seed graph.json, merge ``fresh`` into it the way ``--update`` does, then
+    """Seed graph.grafeo, merge ``fresh`` into it the way ``--update`` does, then
     write with the default (guarded) ``to_json``. ``tamper`` edits the merged
     graph to stand in for a loss that happens after dedup."""
-    graph_path = tmp_path / "graph.json"
+    graph_path = tmp_path / "graph.grafeo"
     _seed(graph_path, saved, saved_edges)
     G = build_merge([{"nodes": fresh, "edges": [], "hyperedges": []}],
                     graph_path=graph_path, root=str(tmp_path))
     if tamper is not None:
         tamper(G)
     written = to_json(G, cluster(G), str(graph_path))
-    return written, json.loads(graph_path.read_text())
+    return written, json.loads(_graph_read_text(graph_path))
 
 
 ALPHA = _node("claude_a", "Alpha concept", "CLAUDE.md")
@@ -132,9 +134,9 @@ def test_the_dedup_map_is_never_written_into_graph_json(tmp_path):
                           _node("glossary_the_nudge_2", "The nudge", "GLOSSARY.md")],
                 "edges": [], "hyperedges": []}])
     assert G.graph.get("_dedup_remap")
-    out = tmp_path / "graph.json"
+    out = tmp_path / "graph.grafeo"
     assert to_json(G, cluster(G), str(out)) is True
-    assert "_dedup_remap" not in json.dumps(json.loads(out.read_text()))
+    assert "_dedup_remap" not in json.dumps(json.loads(_graph_read_text(out)))
 
 
 # The bug: a merge dedup performed read as a loss.
@@ -197,7 +199,7 @@ def test_the_updated_graph_has_one_node_per_concept(tmp_path):
 def test_full_rebuild_that_merges_the_same_twins_writes(tmp_path):
     from graphify.build import build
 
-    graph_path = tmp_path / "graph.json"
+    graph_path = tmp_path / "graph.grafeo"
     _seed(graph_path, TWINS)
     G = build([{"nodes": [dict(n) for n in TWINS], "edges": [], "hyperedges": []}],
               root=str(tmp_path))

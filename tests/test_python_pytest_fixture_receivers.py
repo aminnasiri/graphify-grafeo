@@ -6,6 +6,8 @@ now typed from the fixture pytest would pick: the test's own module first, then 
 its directory and of each directory above it.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 from pathlib import Path
@@ -21,7 +23,7 @@ def _calls(tmp_path: Path, files: dict[str, str]):
     for name, body in files.items():
         p = tmp_path / name
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(body, encoding="utf-8")
+        _graph_write_text(p, body, encoding="utf-8")
         paths.append(p)
     r = extract(paths, root=tmp_path, cache_root=tmp_path / "graphify-out", parallel=False)
     nodes = {n["id"]: n for n in r["nodes"]}
@@ -119,18 +121,18 @@ def test_changed_test_file_rebuild_keeps_the_fixture_edge(tmp_path: Path):
         root = tmp_path / name
         for fname, body in files.items():
             (root / fname).parent.mkdir(parents=True, exist_ok=True)
-            (root / fname).write_text(body, encoding="utf-8")
+            _graph_write_text(root / fname, body, encoding="utf-8")
         roots.append(root)
     inc, full = roots
     assert _rebuild_code(inc, no_cluster=True, acquire_lock=False, force=True)
     for root in roots:
         p = root / "tests" / "test_cli.py"
-        p.write_text(p.read_text(encoding="utf-8") + "# touched\n", encoding="utf-8")
+        _graph_write_text(p, p.read_text(encoding="utf-8") + "# touched\n", encoding="utf-8")
     assert _rebuild_code(inc, changed_paths=[inc / "tests" / "test_cli.py"], no_cluster=True, acquire_lock=False)
     assert _rebuild_code(full, no_cluster=True, acquire_lock=False, force=True)
 
     def calls_of(root):
-        g = json.loads((root / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+        g = json.loads(_graph_read_text(root / "graphify-out" / "graph.grafeo", encoding="utf-8"))
         return {(e["source"], e["target"]) for e in g.get("links", g.get("edges", [])) if e["relation"] == "calls"}
 
     assert calls_of(inc) == calls_of(full)
@@ -152,7 +154,7 @@ def test_schema_bump_retires_entries_cached_without_fixture_markers(tmp_path: Pa
     for name, body in files.items():
         p = tmp_path / name
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(body, encoding="utf-8")
+        _graph_write_text(p, body, encoding="utf-8")
         paths.append(p)
     current = cache_mod._AST_CACHE_SCHEMA
     monkeypatch.setattr(cache_mod, "_EXTRACTOR_VERSION", "same-version")
@@ -193,19 +195,19 @@ def test_rebuild_after_the_imported_class_moves_matches_a_full_build(tmp_path: P
         root = tmp_path / name
         for fname, body in files.items():
             (root / fname).parent.mkdir(parents=True, exist_ok=True)
-            (root / fname).write_text(body, encoding="utf-8")
+            _graph_write_text(root / fname, body, encoding="utf-8")
         roots.append(root)
     inc, full = roots
     assert _rebuild_code(inc, no_cluster=True, acquire_lock=False, force=True)
     for root in roots:
-        (root / "app" / "testing.py").write_text("def helper():\n    return 1\n", encoding="utf-8")
-        (root / "app" / "moved.py").write_text(_RUNNER, encoding="utf-8")
+        _graph_write_text(root / "app" / "testing.py", "def helper():\n    return 1\n", encoding="utf-8")
+        _graph_write_text(root / "app" / "moved.py", _RUNNER, encoding="utf-8")
     assert _rebuild_code(inc, changed_paths=[inc / "app" / "testing.py", inc / "app" / "moved.py"],
                          no_cluster=True, acquire_lock=False)
     assert _rebuild_code(full, no_cluster=True, acquire_lock=False, force=True)
 
     def fixture_calls(root):
-        g = json.loads((root / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+        g = json.loads(_graph_read_text(root / "graphify-out" / "graph.grafeo", encoding="utf-8"))
         return {(e["source"], e["target"]) for e in g.get("links", g.get("edges", []))
                 if e["relation"] == "calls" and e["source"].endswith("test_run")}
 

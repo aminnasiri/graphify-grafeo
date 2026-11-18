@@ -1,11 +1,13 @@
-"""Corrupt graph.json produces an actionable error, not a raw traceback (#1536/#1537).
+"""Corrupt graph.grafeo produces an actionable error, not a raw traceback (#1536/#1537).
 
-Three load paths call json.loads on graph.json — build_merge (`--update`),
+Three load paths call json.loads on graph.grafeo — build_merge (`--update`),
 affected.load_graph (`graphify prs`), and diagnostics._read_json_file
 (`graphify diagnose`). A truncated / invalid file (incomplete write, power loss,
 manual edit) must raise a clear RuntimeError with recovery guidance at each.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import pytest
 
@@ -17,8 +19,8 @@ _CORRUPT = '{"nodes": [{"id": "a", "labe'   # truncated mid-object
 
 
 def _corrupt(tmp_path):
-    p = tmp_path / "graph.json"
-    p.write_text(_CORRUPT, encoding="utf-8")
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, _CORRUPT, encoding="utf-8")
     return p
 
 
@@ -41,12 +43,9 @@ def test_diagnostics_read_corrupt_raises_runtimeerror(tmp_path):
 
 
 def test_valid_graph_still_loads(tmp_path):
-    """Happy path unchanged: a well-formed graph.json loads without raising."""
-    p = tmp_path / "graph.json"
-    p.write_text(
-        '{"nodes": [{"id": "a", "label": "a", "file_type": "code"}], "edges": []}',
-        encoding="utf-8",
-    )
+    """Happy path unchanged: a well-formed graph.grafeo loads without raising."""
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, '{"nodes": [{"id": "a", "label": "a", "file_type": "code"}], "edges": []}', encoding="utf-8")
     # none of these should raise
     load_graph(p)
     _read_json_file(p)

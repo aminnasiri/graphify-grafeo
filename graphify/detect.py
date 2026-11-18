@@ -1,5 +1,7 @@
 # file discovery, type classification, and corpus health checks
 from __future__ import annotations
+from graphify.store.io import state_is_file as _state_is_file
+from graphify.store.io import read_json as _read_graph_data
 import fnmatch
 import json
 import ntpath
@@ -2684,7 +2686,7 @@ def load_manifest(
     form still matches a scan that yields the other (#2221).
     """
     try:
-        raw = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+        raw = _read_graph_data(Path(manifest_path))
     except Exception:
         return {}
     if not isinstance(raw, dict):
@@ -2764,7 +2766,8 @@ def save_manifest(
     clear_semantic: set[str] | list[str] | None = None,
     clear_ast: set[str] | list[str] | None = None,
     ast_empty: set[str] | list[str] | None = None,
-) -> None:
+    dry_run: bool = False,
+) -> dict | None:
     """Save current file mtimes + content hashes for change detection.
 
     kind="ast"      — written by `graphify update` (AST-only rebuild). Stamps
@@ -3020,11 +3023,13 @@ def save_manifest(
     else:
         manifest = _collapse_manifest_duplicates(manifest.items(), _nfc)
 
+    if dry_run:
+        return manifest
     # Avoid rewriting manifest.json when the serialized payload is identical (#2838).
     manifest_p = Path(manifest_path)
-    if manifest_p.is_file():
+    if _state_is_file(manifest_p):
         try:
-            disk_raw = json.loads(manifest_p.read_text(encoding="utf-8"))
+            disk_raw = _read_graph_data(manifest_p)
             if isinstance(disk_raw, dict) and disk_raw == manifest:
                 return
         except Exception:
@@ -3034,6 +3039,7 @@ def save_manifest(
     # Atomic write: a crash mid-write must not leave a truncated manifest that
     # detect_incremental then fails to parse.
     write_json_atomic(manifest_path, manifest, indent=2)
+    return manifest
 
 
 def _mtime_may_hide_a_rewrite(current_mtime: float, stored: dict) -> bool:

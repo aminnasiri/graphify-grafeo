@@ -10,6 +10,9 @@ required) and the end-to-end CLI, including the "second session benefits from th
 first" worked example from the issue.
 """
 from __future__ import annotations
+from tests.graph_io import utime as _graph_utime
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import subprocess
@@ -58,7 +61,7 @@ def test_parse_round_trips_a_saved_doc(tmp_path):
         query_type="explain", source_nodes=["AttentionLayer", "SoftmaxFunc"],
         outcome="useful",
     )
-    parsed = parse_memory_doc(out.read_text(encoding="utf-8"))
+    parsed = parse_memory_doc(_graph_read_text(out, encoding="utf-8"))
     assert parsed is not None
     assert parsed["type"] == "explain"
     assert parsed["question"] == 'what is "attention"?'
@@ -80,7 +83,7 @@ def test_round_trip_survives_backslash_newline_and_quoted_node(tmp_path):
         source_nodes=[r'Node"With\Quote'],
         outcome="corrected", correction="line1\nline2",
     )
-    parsed = parse_memory_doc(out.read_text(encoding="utf-8"))
+    parsed = parse_memory_doc(_graph_read_text(out, encoding="utf-8"))
     assert parsed is not None
     assert parsed["question"] == r'path is C:\Users and a "quote"'
     assert parsed["correction"] == "line1\nline2"
@@ -98,7 +101,7 @@ def test_parse_handles_crlf():
 def test_load_memory_docs_skips_foreign_and_sorts(tmp_path):
     mem = tmp_path / "memory"
     mem.mkdir()
-    (mem / "foreign.md").write_text("# not a memory doc\n", encoding="utf-8")
+    _graph_write_text(mem / "foreign.md", "# not a memory doc\n", encoding="utf-8")
     save_query_result("first", "a", mem, outcome="useful")
     save_query_result("second", "b", mem, outcome="dead_end")
     docs = load_memory_docs(mem)
@@ -121,7 +124,7 @@ def _write_raw_doc(mem: Path, filename: str, date: str, *, outcome="dead_end",
     if nodes:
         lines.append("source_nodes: [" + ", ".join(f'"{n}"' for n in nodes) + "]")
     lines += ["---", "", f"# Q: {question}", ""]
-    (mem / filename).write_text("\n".join(lines), encoding="utf-8")
+    _graph_write_text(mem / filename, "\n".join(lines), encoding="utf-8")
 
 
 def test_load_memory_docs_orders_by_date_then_filename(tmp_path):
@@ -406,7 +409,7 @@ def test_lessons_artifact_cannot_be_globbed_back_into_memory(tmp_path):
     assert parse_memory_doc(md) is None
     mem = tmp_path / "memory"
     mem.mkdir()
-    (mem / "LESSONS.md").write_text(md, encoding="utf-8")
+    _graph_write_text(mem / "LESSONS.md", md, encoding="utf-8")
     save_query_result("real", "a", mem, outcome="useful")
     docs = load_memory_docs(mem)
     assert len(docs) == 1 and docs[0]["question"] == "real"
@@ -425,9 +428,9 @@ def test_reflect_writes_lessons_file(tmp_path):
     mem = tmp_path / "memory"
     save_query_result("q1", "a1", mem, source_nodes=["A"], outcome="useful")
     out_path, agg = reflect(mem, tmp_path / "reflections" / "LESSONS.md")
-    assert out_path.exists()
+    assert _graph_exists(out_path)
     assert agg["total"] == 1
-    assert "`A`" in out_path.read_text(encoding="utf-8")
+    assert "`A`" in _graph_read_text(out_path, encoding="utf-8")
 
 
 def test_second_session_benefits_from_the_first(tmp_path):
@@ -451,7 +454,7 @@ def test_second_session_benefits_from_the_first(tmp_path):
     reflect(mem, lessons)
 
     # Session 2 loads the lessons doc.
-    body = lessons.read_text(encoding="utf-8")
+    body = _graph_read_text(lessons, encoding="utf-8")
     assert "`AuthMiddleware`" in body          # start here next time
     assert "where is the cache?" in body       # don't re-derive this dead end
 
@@ -466,8 +469,8 @@ def test_cli_reflect_end_to_end(tmp_path):
     assert r2.returncode == 0, r2.stderr
     assert "Reflected 1 memories" in r2.stdout
     lessons = cwd / "graphify-out" / "reflections" / "LESSONS.md"
-    assert lessons.exists()
-    assert "`AuthMiddleware`" in lessons.read_text(encoding="utf-8")
+    assert _graph_exists(lessons)
+    assert "`AuthMiddleware`" in _graph_read_text(lessons, encoding="utf-8")
 
 
 def test_cli_save_result_rejects_bad_outcome(tmp_path):
@@ -482,13 +485,13 @@ def test_cli_save_result_reads_answer_from_file(tmp_path):
     """--answer-file lets callers pass a long/multiline answer via a file instead
     of a fragile inline arg (Windows/PowerShell quoting), #1502."""
     ans = tmp_path / "answer.txt"
-    ans.write_text("line one\nline two with a \"quote\"\n", encoding="utf-8")
+    _graph_write_text(ans, "line one\nline two with a \"quote\"\n", encoding="utf-8")
     r = _run(["save-result", "--question", "how does auth work?",
               "--answer-file", str(ans), "--outcome", "useful"], tmp_path)
     assert r.returncode == 0, r.stderr
     docs = list((tmp_path / "graphify-out" / "memory").glob("*.md"))
     assert docs, "save-result wrote no memory doc"
-    body = docs[0].read_text(encoding="utf-8")
+    body = _graph_read_text(docs[0], encoding="utf-8")
     assert "line one" in body and "line two" in body
 
 
@@ -505,8 +508,8 @@ def test_cli_reflect_cold_start_writes_empty_lessons(tmp_path):
     assert r.returncode == 0, r.stderr
     assert "Reflected 0 memories" in r.stdout
     lessons = tmp_path / "graphify-out" / "reflections" / "LESSONS.md"
-    assert lessons.exists()
-    assert "from 0 session memories" in lessons.read_text(encoding="utf-8")
+    assert _graph_exists(lessons)
+    assert "from 0 session memories" in _graph_read_text(lessons, encoding="utf-8")
 
 
 def test_cli_reflect_respects_out_flag(tmp_path):
@@ -516,56 +519,56 @@ def test_cli_reflect_respects_out_flag(tmp_path):
     dest = cwd / "custom" / "lessons.md"
     r = _run(["reflect", "--out", str(dest)], cwd)
     assert r.returncode == 0, r.stderr
-    assert dest.exists()
+    assert _graph_exists(dest)
 
 
 def test_cli_reflect_groups_by_community_when_graph_present(tmp_path):
-    """With a real graph.json present, reflect auto-detects it and groups lessons
+    """With a real graph.grafeo present, reflect auto-detects it and groups lessons
     under the community of the cited node — including when the node is cited by its
     LABEL (what save-result records), not its id (regression guard: keying community
     lookup on ids alone collapsed every lesson into Uncategorized)."""
     out = _make_graph(tmp_path)
-    graph = json.loads((out / "graph.json").read_text())
+    graph = json.loads(_graph_read_text(out / "graph.grafeo"))
     node_label = graph["nodes"][0]["label"]
 
     _run(["save-result", "--question", "q", "--answer", "a",
           "--nodes", node_label, "--outcome", "useful"], tmp_path)
     r = _run(["reflect"], tmp_path)
     assert r.returncode == 0, r.stderr
-    body = (out / "reflections" / "LESSONS.md").read_text(encoding="utf-8")
+    body = _graph_read_text(out / "reflections" / "LESSONS.md", encoding="utf-8")
     assert "## By topic" in body
     # The label-cited node must land in a real community, not Uncategorized.
     assert "### Uncategorized" not in body
 
 
 def test_cli_node_existence_gate_drops_stale_node_end_to_end(tmp_path):
-    """Through reflect()/CLI with a real graph.json: a cited node that isn't in the
+    """Through reflect()/CLI with a real graph.grafeo: a cited node that isn't in the
     graph is dropped from LESSONS.md; a real one stays. Exercises _load_known_nodes
     + the wiring, not just the known_nodes param."""
     out = _make_graph(tmp_path)
     # Cite the node by its LABEL — what an agent/`save-result` actually records —
     # not its id. The gate must match labels too, else every real citation is
     # silently dropped whenever a graph is present (regression guard).
-    real = json.loads((out / "graph.json").read_text())["nodes"][0]["label"]
+    real = json.loads(_graph_read_text(out / "graph.grafeo"))["nodes"][0]["label"]
 
     _run(["save-result", "--question", "q", "--answer", "a",
           "--nodes", real, "GhostNode", "--outcome", "useful"], tmp_path)
     r = _run(["reflect"], tmp_path)
     assert r.returncode == 0, r.stderr
-    body = (out / "reflections" / "LESSONS.md").read_text(encoding="utf-8")
+    body = _graph_read_text(out / "reflections" / "LESSONS.md", encoding="utf-8")
     assert "GhostNode" not in body
     assert f"`{real}`" in body
 
 
 def _make_graph(tmp_path: Path) -> Path:
-    """Build a minimal graph.json + analysis/labels in tmp_path/graphify-out/.
+    """Build a minimal graph.grafeo + analysis/labels in tmp_path/graphify-out/.
 
     Mirrors tests/test_cli_export.py::_make_graph so reflect can be exercised with a
     real community structure.
     """
     out = tmp_path / "graphify-out"
     out.mkdir()
-    extraction = json.loads((FIXTURES / "extraction.json").read_text())
+    extraction = json.loads(_graph_read_text(FIXTURES / "extraction.json"))
     from graphify.build import build_from_json
     from graphify.cluster import cluster, score_all
     from graphify.analyze import god_nodes, surprising_connections
@@ -576,15 +579,13 @@ def _make_graph(tmp_path: Path) -> Path:
     cohesion = score_all(G, communities)
     gods = god_nodes(G)
     surprises = surprising_connections(G, communities)
-    to_json(G, communities, str(out / "graph.json"))
-    (out / ".graphify_analysis.json").write_text(json.dumps({
+    to_json(G, communities, str(out / "graph.grafeo"))
+    _graph_write_text(out / ".graphify_analysis.json", json.dumps({
         "communities": {str(k): v for k, v in communities.items()},
         "cohesion": {str(k): v for k, v in cohesion.items()},
         "gods": gods, "surprises": surprises,
     }))
-    (out / ".graphify_labels.json").write_text(
-        json.dumps({str(cid): f"Community {cid}" for cid in communities})
-    )
+    _graph_write_text(out / ".graphify_labels.json", json.dumps({str(cid): f"Community {cid}" for cid in communities}))
     return out
 
 
@@ -592,39 +593,39 @@ def _make_graph(tmp_path: Path) -> Path:
 
 def test_lessons_fresh_missing_output_is_not_fresh(tmp_path):
     mem = tmp_path / "memory"; mem.mkdir()
-    (mem / "q.md").write_text("x", encoding="utf-8")
+    _graph_write_text(mem / "q.md", "x", encoding="utf-8")
     assert lessons_fresh(tmp_path / "LESSONS.md", mem) is False  # must build
 
 
 def test_lessons_fresh_true_when_output_newer_than_inputs(tmp_path):
     import os
     mem = tmp_path / "memory"; mem.mkdir()
-    doc = mem / "q.md"; doc.write_text("x", encoding="utf-8")
-    out = tmp_path / "LESSONS.md"; out.write_text("y", encoding="utf-8")
-    os.utime(doc, (1000, 1000))
-    os.utime(out, (2000, 2000))
+    doc = mem / "q.md"; _graph_write_text(doc, "x", encoding="utf-8")
+    out = tmp_path / "LESSONS.md"; _graph_write_text(out, "y", encoding="utf-8")
+    _graph_utime(doc, (1000, 1000))
+    _graph_utime(out, (2000, 2000))
     assert lessons_fresh(out, mem) is True
 
 
 def test_lessons_fresh_false_when_memory_newer(tmp_path):
     import os
     mem = tmp_path / "memory"; mem.mkdir()
-    doc = mem / "q.md"; doc.write_text("x", encoding="utf-8")
-    out = tmp_path / "LESSONS.md"; out.write_text("y", encoding="utf-8")
-    os.utime(out, (1000, 1000))
-    os.utime(doc, (2000, 2000))  # a new outcome was saved after the last reflect
+    doc = mem / "q.md"; _graph_write_text(doc, "x", encoding="utf-8")
+    out = tmp_path / "LESSONS.md"; _graph_write_text(out, "y", encoding="utf-8")
+    _graph_utime(out, (1000, 1000))
+    _graph_utime(doc, (2000, 2000))  # a new outcome was saved after the last reflect
     assert lessons_fresh(out, mem) is False
 
 
 def test_lessons_fresh_false_when_graph_newer(tmp_path):
     import os
     mem = tmp_path / "memory"; mem.mkdir()
-    (mem / "q.md").write_text("x", encoding="utf-8")
-    out = tmp_path / "LESSONS.md"; out.write_text("y", encoding="utf-8")
-    graph = tmp_path / "graph.json"; graph.write_text("{}", encoding="utf-8")
-    os.utime(mem / "q.md", (1000, 1000))
-    os.utime(out, (1500, 1500))
-    os.utime(graph, (2000, 2000))  # graph rebuilt since last reflect -> stale
+    _graph_write_text(mem / "q.md", "x", encoding="utf-8")
+    out = tmp_path / "LESSONS.md"; _graph_write_text(out, "y", encoding="utf-8")
+    graph = tmp_path / "graph.grafeo"; _graph_write_text(graph, "{}", encoding="utf-8")
+    _graph_utime(mem / "q.md", (1000, 1000))
+    _graph_utime(out, (1500, 1500))
+    _graph_utime(graph, (2000, 2000))  # graph rebuilt since last reflect -> stale
     assert lessons_fresh(out, mem, graph) is False
 
 
@@ -632,15 +633,15 @@ def test_lessons_fresh_false_when_graph_newer(tmp_path):
 def test_lessons_fresh_false_when_graph_sidecar_newer(tmp_path, sidecar_name):
     import os
     mem = tmp_path / "memory"; mem.mkdir()
-    (mem / "q.md").write_text("x", encoding="utf-8")
-    out = tmp_path / "LESSONS.md"; out.write_text("y", encoding="utf-8")
-    graph = tmp_path / "graph.json"; graph.write_text("{}", encoding="utf-8")
-    analysis = tmp_path / ".graphify_analysis.json"; analysis.write_text("{}", encoding="utf-8")
-    labels = tmp_path / ".graphify_labels.json"; labels.write_text("{}", encoding="utf-8")
+    _graph_write_text(mem / "q.md", "x", encoding="utf-8")
+    out = tmp_path / "LESSONS.md"; _graph_write_text(out, "y", encoding="utf-8")
+    graph = tmp_path / "graph.grafeo"; _graph_write_text(graph, "{}", encoding="utf-8")
+    analysis = tmp_path / ".graphify_analysis.json"; _graph_write_text(analysis, "{}", encoding="utf-8")
+    labels = tmp_path / ".graphify_labels.json"; _graph_write_text(labels, "{}", encoding="utf-8")
     for p in [mem / "q.md", graph, analysis, labels]:
-        os.utime(p, (1000, 1000))
-    os.utime(out, (1500, 1500))
-    os.utime(tmp_path / sidecar_name, (2000, 2000))
+        _graph_utime(p, (1000, 1000))
+    _graph_utime(out, (1500, 1500))
+    _graph_utime(tmp_path / sidecar_name, (2000, 2000))
     assert lessons_fresh(out, mem, graph, analysis, labels) is False
 
 
@@ -648,19 +649,19 @@ def test_cli_reflect_if_stale_skips_when_fresh(tmp_path):
     """`reflect --if-stale` skips the rebuild when LESSONS.md is already current,
     and still runs when a new outcome arrives."""
     out = _make_graph(tmp_path)
-    real = json.loads((out / "graph.json").read_text())["nodes"][0]["label"]
+    real = json.loads(_graph_read_text(out / "graph.grafeo"))["nodes"][0]["label"]
     _run(["save-result", "--question", "q", "--answer", "a",
           "--nodes", real, "--outcome", "useful"], tmp_path)
     first = _run(["reflect"], tmp_path)
     assert first.returncode == 0
     lessons = out / "reflections" / "LESSONS.md"
-    body_before = lessons.read_text(encoding="utf-8")
+    body_before = _graph_read_text(lessons, encoding="utf-8")
 
     # Second call with --if-stale: nothing changed -> skipped, file untouched.
     skipped = _run(["reflect", "--if-stale"], tmp_path)
     assert skipped.returncode == 0
     assert "up to date" in (skipped.stdout + skipped.stderr).lower()
-    assert lessons.read_text(encoding="utf-8") == body_before
+    assert _graph_read_text(lessons, encoding="utf-8") == body_before
 
     # A new outcome makes it stale -> --if-stale runs again.
     _run(["save-result", "--question", "q2", "--answer", "a",
@@ -673,7 +674,7 @@ def test_cli_reflect_if_stale_skips_when_fresh(tmp_path):
 def test_cli_reflect_if_stale_reruns_when_labels_newer(tmp_path):
     """A label refresh changes LESSONS.md topic headings, so --if-stale must rebuild."""
     out = _make_graph(tmp_path)
-    graph_data = json.loads((out / "graph.json").read_text())
+    graph_data = json.loads(_graph_read_text(out / "graph.grafeo"))
     node = graph_data["nodes"][0]
     real = node["label"]
     community = str(node["community"])
@@ -684,17 +685,17 @@ def test_cli_reflect_if_stale_reruns_when_labels_newer(tmp_path):
 
     lessons = out / "reflections" / "LESSONS.md"
     labels_path = out / ".graphify_labels.json"
-    labels = json.loads(labels_path.read_text(encoding="utf-8"))
+    labels = json.loads(_graph_read_text(labels_path, encoding="utf-8"))
     labels[community] = "Renamed Topic"
-    labels_path.write_text(json.dumps(labels), encoding="utf-8")
+    _graph_write_text(labels_path, json.dumps(labels), encoding="utf-8")
 
     import os
-    os.utime(lessons, (1500, 1500))
-    os.utime(labels_path, (2000, 2000))
+    _graph_utime(lessons, (1500, 1500))
+    _graph_utime(labels_path, (2000, 2000))
     ran = _run(["reflect", "--if-stale"], tmp_path)
     assert ran.returncode == 0, ran.stderr
     assert "up to date" not in (ran.stdout + ran.stderr).lower()
-    assert "### Renamed Topic" in lessons.read_text(encoding="utf-8")
+    assert "### Renamed Topic" in _graph_read_text(lessons, encoding="utf-8")
 
 
 def test_dead_ends_and_corrections_dedupe_by_question():
@@ -714,8 +715,8 @@ def test_dead_ends_and_corrections_dedupe_by_question():
 
 # --- work-memory overlay sidecar (.graphify_learning.json) --------------------
 #
-# The sidecar is a DERIVED experiential layer written next to graph.json; the
-# durable structural truth in graph.json is never stamped with learning_* fields.
+# The sidecar is a DERIVED experiential layer written next to graph.grafeo; the
+# durable structural truth in graph.grafeo is never stamped with learning_* fields.
 # It projects the reflect aggregate (preferred/tentative/contested) into a
 # per-node-id map with a code fingerprint for staleness and a provenance trail.
 
@@ -728,11 +729,11 @@ from graphify.reflect import (  # noqa: E402
 
 
 def _overlay_graph(out: Path, nodes: list[dict]) -> None:
-    """Write a minimal graph.json under ``out`` with the given node dicts."""
+    """Write a minimal graph.grafeo under ``out`` with the given node dicts."""
     out.mkdir(parents=True, exist_ok=True)
     graph = {"directed": True, "multigraph": False, "graph": {},
              "nodes": nodes, "links": []}
-    (out / "graph.json").write_text(json.dumps(graph), encoding="utf-8")
+    _graph_write_text(out / "graph.grafeo", json.dumps(graph), encoding="utf-8")
 
 
 def _overlay_corpus(mem: Path) -> None:
@@ -753,12 +754,12 @@ def _overlay_corpus(mem: Path) -> None:
 
 
 def test_sidecar_write_classifies_and_keys_by_canonical_id(tmp_path):
-    """reflect with a graph writes .graphify_learning.json next to graph.json with
+    """reflect with a graph writes .graphify_learning.json next to graph.grafeo with
     the preferred/tentative/contested nodes keyed by canonical node id; the
     dead-end-only node is NOT present; score/uses/provenance are carried."""
     out = tmp_path / "graphify-out"
     src = tmp_path / "auth.py"
-    src.write_text("def login(): pass\n", encoding="utf-8")
+    _graph_write_text(src, "def login(): pass\n", encoding="utf-8")
     _overlay_graph(out, [
         {"id": "auth_login", "label": "login()", "source_file": str(src), "community": 0},
         {"id": "redis_client", "label": "RedisClient", "source_file": "", "community": 0},
@@ -769,8 +770,8 @@ def test_sidecar_write_classifies_and_keys_by_canonical_id(tmp_path):
     _overlay_corpus(mem)
 
     reflect(mem, out / "reflections" / "LESSONS.md",
-            graph_path=out / "graph.json", now=_NOW)
-    sidecar = json.loads((out / LEARNING_SIDECAR_NAME).read_text(encoding="utf-8"))
+            graph_path=out / "graph.grafeo", now=_NOW)
+    sidecar = json.loads(_graph_read_text(out / LEARNING_SIDECAR_NAME, encoding="utf-8"))
 
     assert sidecar["version"] == 1
     assert sidecar["generated_at"] == _NOW.isoformat()
@@ -786,8 +787,8 @@ def test_sidecar_write_classifies_and_keys_by_canonical_id(tmp_path):
     assert nodes["contested_node"]["verdict"] in ("useful", "dead end", "even")
     # Dead-end-only node stays query-scoped — never in the overlay.
     assert "deadend_node" not in nodes
-    # And learning_* is NOT stamped into graph.json (durable truth untouched).
-    graph = json.loads((out / "graph.json").read_text(encoding="utf-8"))
+    # And learning_* is NOT stamped into graph.grafeo (durable truth untouched).
+    graph = json.loads(_graph_read_text(out / "graph.grafeo", encoding="utf-8"))
     for n in graph["nodes"]:
         assert not any(k.startswith("learning") for k in n)
 
@@ -797,7 +798,7 @@ def test_sidecar_is_byte_identical_across_runs(tmp_path):
     sidecar (sorted keys, stable indent)."""
     out = tmp_path / "graphify-out"
     src = tmp_path / "auth.py"
-    src.write_text("def login(): pass\n", encoding="utf-8")
+    _graph_write_text(src, "def login(): pass\n", encoding="utf-8")
     _overlay_graph(out, [
         {"id": "auth_login", "label": "login()", "source_file": str(src), "community": 0},
     ])
@@ -806,11 +807,11 @@ def test_sidecar_is_byte_identical_across_runs(tmp_path):
     _write_raw_doc(mem, "b.md", "2026-05-10", outcome="useful", nodes=["login()"])
 
     reflect(mem, out / "reflections" / "LESSONS.md",
-            graph_path=out / "graph.json", now=_NOW)
-    first = (out / LEARNING_SIDECAR_NAME).read_bytes()
+            graph_path=out / "graph.grafeo", now=_NOW)
+    first = _graph_read_bytes(out / LEARNING_SIDECAR_NAME)
     reflect(mem, out / "reflections" / "LESSONS.md",
-            graph_path=out / "graph.json", now=_NOW)
-    second = (out / LEARNING_SIDECAR_NAME).read_bytes()
+            graph_path=out / "graph.grafeo", now=_NOW)
+    second = _graph_read_bytes(out / LEARNING_SIDECAR_NAME)
     assert first == second
 
 
@@ -819,7 +820,7 @@ def test_loader_marks_entry_stale_when_source_file_changes(tmp_path):
     stale=False; an edit to that source => stale=True."""
     out = tmp_path / "graphify-out"
     src = tmp_path / "auth.py"
-    src.write_text("def login(): pass\n", encoding="utf-8")
+    _graph_write_text(src, "def login(): pass\n", encoding="utf-8")
     _overlay_graph(out, [
         {"id": "auth_login", "label": "login()", "source_file": str(src), "community": 0},
     ])
@@ -827,24 +828,24 @@ def test_loader_marks_entry_stale_when_source_file_changes(tmp_path):
     _write_raw_doc(mem, "a.md", "2026-05-01", outcome="useful", nodes=["login()"])
     _write_raw_doc(mem, "b.md", "2026-05-10", outcome="useful", nodes=["login()"])
     reflect(mem, out / "reflections" / "LESSONS.md",
-            graph_path=out / "graph.json", now=_NOW)
+            graph_path=out / "graph.grafeo", now=_NOW)
 
-    fresh = load_learning_overlay(out / "graph.json")
+    fresh = load_learning_overlay(out / "graph.grafeo")
     assert fresh["auth_login"]["stale"] is False
 
-    src.write_text("def login(): return 1  # changed\n", encoding="utf-8")
-    after = load_learning_overlay(out / "graph.json")
+    _graph_write_text(src, "def login(): return 1  # changed\n", encoding="utf-8")
+    after = load_learning_overlay(out / "graph.grafeo")
     assert after["auth_login"]["stale"] is True
 
 
 def test_relative_source_file_not_spuriously_stale_in_graphify_out_layout(tmp_path):
-    """Regression: with a RELATIVE source_file and graph.json under graphify-out/,
+    """Regression: with a RELATIVE source_file and graph.grafeo under graphify-out/,
     a freshly-written verdict must NOT be flagged stale. The fingerprint resolves
-    the file relative to the PROJECT root (tmp_path), not graph.json's own dir
+    the file relative to the PROJECT root (tmp_path), not graph.grafeo's own dir
     (graphify-out/) — otherwise every node looked unfindable and was marked stale.
     The edit case must still flip stale=True."""
-    out = tmp_path / "graphify-out"          # graph.json lives here
-    (tmp_path / "auth.py").write_text("def login(): pass\n", encoding="utf-8")
+    out = tmp_path / "graphify-out"          # graph.grafeo lives here
+    _graph_write_text(tmp_path / "auth.py", "def login(): pass\n", encoding="utf-8")
     _overlay_graph(out, [
         # source_file is RELATIVE to the project root (tmp_path), as `extract` writes it
         {"id": "auth_login", "label": "login()", "source_file": "auth.py", "community": 0},
@@ -853,47 +854,47 @@ def test_relative_source_file_not_spuriously_stale_in_graphify_out_layout(tmp_pa
     _write_raw_doc(mem, "a.md", "2026-05-01", outcome="useful", nodes=["login()"])
     _write_raw_doc(mem, "b.md", "2026-05-10", outcome="useful", nodes=["login()"])
     reflect(mem, out / "reflections" / "LESSONS.md",
-            graph_path=out / "graph.json", now=_NOW)
+            graph_path=out / "graph.grafeo", now=_NOW)
 
-    fresh = load_learning_overlay(out / "graph.json")
+    fresh = load_learning_overlay(out / "graph.grafeo")
     assert fresh["auth_login"]["status"] == "preferred"
     assert fresh["auth_login"]["stale"] is False  # the bug: was spuriously True
 
-    (tmp_path / "auth.py").write_text("def login(): return 1  # changed\n", encoding="utf-8")
-    assert load_learning_overlay(out / "graph.json")["auth_login"]["stale"] is True
+    _graph_write_text(tmp_path / "auth.py", "def login(): return 1  # changed\n", encoding="utf-8")
+    assert load_learning_overlay(out / "graph.grafeo")["auth_login"]["stale"] is True
 
 
 def test_relative_source_file_resolved_via_graphify_root_marker(tmp_path):
     """When a committed .graphify_root marker records the project root (e.g. a
     GRAPHIFY_OUT override pointing the output dir elsewhere), the fingerprint
-    resolves source_file against that root, not graph.json's own dir."""
+    resolves source_file against that root, not graph.grafeo's own dir."""
     proj = tmp_path / "project"
     proj.mkdir()
-    (proj / "auth.py").write_text("def login(): pass\n", encoding="utf-8")
+    _graph_write_text(proj / "auth.py", "def login(): pass\n", encoding="utf-8")
     out = tmp_path / "elsewhere-out"          # output dir NOT under the project
     _overlay_graph(out, [
         {"id": "auth_login", "label": "login()", "source_file": "auth.py", "community": 0},
     ])
-    (out / ".graphify_root").write_text(str(proj), encoding="utf-8")  # the marker
+    _graph_write_text(out / ".graphify_root", str(proj), encoding="utf-8")  # the marker
     mem = out / "memory"
     _write_raw_doc(mem, "a.md", "2026-05-01", outcome="useful", nodes=["login()"])
     _write_raw_doc(mem, "b.md", "2026-05-10", outcome="useful", nodes=["login()"])
     reflect(mem, out / "reflections" / "LESSONS.md",
-            graph_path=out / "graph.json", now=_NOW)
-    assert load_learning_overlay(out / "graph.json")["auth_login"]["stale"] is False
+            graph_path=out / "graph.grafeo", now=_NOW)
+    assert load_learning_overlay(out / "graph.grafeo")["auth_login"]["stale"] is False
 
 
 def test_flat_layout_does_not_match_same_named_file_one_dir_up(tmp_path):
-    """In a flat layout (graph.json at the project root), the resolver must use the
+    """In a flat layout (graph.grafeo at the project root), the resolver must use the
     graph's own dir, not its parent — otherwise a same-named file one level up
     would be fingerprinted instead, producing a wrong staleness verdict."""
     proj = tmp_path / "proj"
     proj.mkdir()
-    (proj / "util.py").write_text("REAL = 1\n", encoding="utf-8")
+    _graph_write_text(proj / "util.py", "REAL = 1\n", encoding="utf-8")
     # A decoy same-named file in the parent dir (tmp_path / util.py).
-    (tmp_path / "util.py").write_text("DECOY = 2\n", encoding="utf-8")
-    # Flat layout: graph.json sits directly in proj/ (not a graphify-out subdir).
-    proj.joinpath("graph.json").write_text(json.dumps({
+    _graph_write_text(tmp_path / "util.py", "DECOY = 2\n", encoding="utf-8")
+    # Flat layout: graph.grafeo sits directly in proj/ (not a graphify-out subdir).
+    _graph_write_text(proj.joinpath("graph.grafeo"), json.dumps({
         "nodes": [{"id": "util", "label": "util.py", "source_file": "util.py",
                    "source_location": "L1", "community": 0}],
         "links": [],
@@ -902,15 +903,15 @@ def test_flat_layout_does_not_match_same_named_file_one_dir_up(tmp_path):
     _write_raw_doc(mem, "a.md", "2026-05-01", outcome="useful", nodes=["util.py"])
     _write_raw_doc(mem, "b.md", "2026-05-10", outcome="useful", nodes=["util.py"])
     reflect(mem, proj / "reflections" / "LESSONS.md",
-            graph_path=proj / "graph.json", now=_NOW)
+            graph_path=proj / "graph.grafeo", now=_NOW)
     # Not stale on a clean build...
-    assert load_learning_overlay(proj / "graph.json")["util"]["stale"] is False
+    assert load_learning_overlay(proj / "graph.grafeo")["util"]["stale"] is False
     # ...and editing the REAL file (proj/util.py) flips it, while editing the
     # decoy (parent) does not — proving the resolver bound to the right file.
-    (tmp_path / "util.py").write_text("DECOY = 999\n", encoding="utf-8")
-    assert load_learning_overlay(proj / "graph.json")["util"]["stale"] is False
-    (proj / "util.py").write_text("REAL = 999\n", encoding="utf-8")
-    assert load_learning_overlay(proj / "graph.json")["util"]["stale"] is True
+    _graph_write_text(tmp_path / "util.py", "DECOY = 999\n", encoding="utf-8")
+    assert load_learning_overlay(proj / "graph.grafeo")["util"]["stale"] is False
+    _graph_write_text(proj / "util.py", "REAL = 999\n", encoding="utf-8")
+    assert load_learning_overlay(proj / "graph.grafeo")["util"]["stale"] is True
 
 
 def test_provenance_capped_to_five_most_recent(tmp_path):
@@ -918,7 +919,7 @@ def test_provenance_capped_to_five_most_recent(tmp_path):
     provenance (recent-first)."""
     out = tmp_path / "graphify-out"
     src = tmp_path / "auth.py"
-    src.write_text("x\n", encoding="utf-8")
+    _graph_write_text(src, "x\n", encoding="utf-8")
     _overlay_graph(out, [
         {"id": "auth_login", "label": "login()", "source_file": str(src), "community": 0},
     ])
@@ -927,8 +928,8 @@ def test_provenance_capped_to_five_most_recent(tmp_path):
         _write_raw_doc(mem, f"u{i}.md", f"2026-05-{10 + i:02d}",
                        outcome="useful", question=f"q{i}", nodes=["login()"])
     reflect(mem, out / "reflections" / "LESSONS.md",
-            graph_path=out / "graph.json", now=_NOW)
-    sidecar = json.loads((out / LEARNING_SIDECAR_NAME).read_text(encoding="utf-8"))
+            graph_path=out / "graph.grafeo", now=_NOW)
+    sidecar = json.loads(_graph_read_text(out / LEARNING_SIDECAR_NAME, encoding="utf-8"))
     prov = sidecar["nodes"]["auth_login"]["provenance"]
     assert len(prov) == 5
     # Most-recent first.
@@ -951,8 +952,8 @@ def test_ambiguous_or_unresolved_citation_is_skipped(tmp_path):
     _write_raw_doc(mem, "c.md", "2026-05-03", outcome="useful", nodes=["Solo"])
     _write_raw_doc(mem, "d.md", "2026-05-04", outcome="useful", nodes=["Solo"])
     reflect(mem, out / "reflections" / "LESSONS.md",
-            graph_path=out / "graph.json", now=_NOW)
-    nodes = json.loads((out / LEARNING_SIDECAR_NAME).read_text(encoding="utf-8"))["nodes"]
+            graph_path=out / "graph.grafeo", now=_NOW)
+    nodes = json.loads(_graph_read_text(out / LEARNING_SIDECAR_NAME, encoding="utf-8"))["nodes"]
     # Ambiguous "Dup" skipped; only the unambiguous "Solo" survives.
     assert "dup_a" not in nodes and "dup_b" not in nodes
     assert "solo" in nodes
@@ -972,12 +973,12 @@ from graphify.reflect import _code_fingerprint, _is_stale  # noqa: E402
 
 
 def _overlay_graph_json(tmp_path: Path) -> Path:
-    """A minimal graph.json path for resolution. The entries below use absolute
+    """A minimal graph.grafeo path for resolution. The entries below use absolute
     source paths, so the graph's own layout does not affect resolution here."""
     out = tmp_path / "graphify-out"
     out.mkdir(parents=True, exist_ok=True)
-    gp = out / "graph.json"
-    gp.write_text(json.dumps({"nodes": [], "links": []}), encoding="utf-8")
+    gp = out / "graph.grafeo"
+    _graph_write_text(gp, json.dumps({"nodes": [], "links": []}), encoding="utf-8")
     return gp
 
 
@@ -986,7 +987,7 @@ def test_is_stale_false_when_source_unchanged(tmp_path):
     content is reported fresh (stale=False)."""
     gp = _overlay_graph_json(tmp_path)
     src = tmp_path / "auth.py"
-    src.write_text("def login(): pass\n", encoding="utf-8")
+    _graph_write_text(src, "def login(): pass\n", encoding="utf-8")
     node = {"source_file": str(src)}
     entry = {"source_file": str(src),
              "code_fingerprint": _code_fingerprint(node, gp)}
@@ -998,13 +999,13 @@ def test_is_stale_true_when_source_content_changes(tmp_path):
     matches the stored fingerprint and the entry is reported stale (stale=True)."""
     gp = _overlay_graph_json(tmp_path)
     src = tmp_path / "auth.py"
-    src.write_text("def login(): pass\n", encoding="utf-8")
+    _graph_write_text(src, "def login(): pass\n", encoding="utf-8")
     node = {"source_file": str(src)}
     entry = {"source_file": str(src),
              "code_fingerprint": _code_fingerprint(node, gp)}
     assert _is_stale(entry, gp) is False  # baseline: matches before the edit
 
-    src.write_text("def login(): return 1  # changed\n", encoding="utf-8")
+    _graph_write_text(src, "def login(): return 1  # changed\n", encoding="utf-8")
     assert _is_stale(entry, gp) is True
 
 
@@ -1014,11 +1015,11 @@ def test_is_stale_true_when_source_file_vanishes(tmp_path):
     direction, so a re-verify hint is never silently dropped."""
     gp = _overlay_graph_json(tmp_path)
     src = tmp_path / "auth.py"
-    src.write_text("def login(): pass\n", encoding="utf-8")
+    _graph_write_text(src, "def login(): pass\n", encoding="utf-8")
     node = {"source_file": str(src)}
     entry = {"source_file": str(src),
              "code_fingerprint": _code_fingerprint(node, gp)}
     assert _is_stale(entry, gp) is False  # baseline while the file is present
 
-    src.unlink()  # the tracked source disappears
+    _graph_unlink(src)  # the tracked source disappears
     assert _is_stale(entry, gp) is True

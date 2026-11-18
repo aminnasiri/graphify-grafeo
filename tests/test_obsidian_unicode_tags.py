@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text
 """Regression tests for issue #2862: community tags must survive non-ASCII labels,
 and the graph-view colour groups must query the tag the notes actually carry."""
 import json
@@ -24,7 +26,7 @@ def _graph(labels: list[str]) -> tuple[nx.Graph, dict[int, list[str]], dict[int,
 def _tags(out_dir) -> set[str]:
     found = set()
     for md in out_dir.glob("*.md"):
-        for line in md.read_text(encoding="utf-8").splitlines():
+        for line in _graph_read_text(md, encoding="utf-8").splitlines():
             line = line.strip()
             if line.startswith("- community/"):
                 found.add(line[len("- "):])
@@ -60,12 +62,12 @@ def test_distinct_non_latin_communities_get_distinct_tags(tmp_path):
 
 
 def test_graph_view_colour_group_matches_the_note_tag(tmp_path):
-    """`.obsidian/graph.json` colour groups were built from the raw label, so on a
+    """`.obsidian/graph.grafeo` colour groups were built from the raw label, so on a
     non-ASCII label they queried a tag no note carries."""
     G, comms, names = _graph(["참여기업 로고 자산", "발주처 체계"])
     to_obsidian(G, comms, str(tmp_path), community_labels=names)
 
-    config = json.loads((tmp_path / ".obsidian" / "graph.json").read_text(encoding="utf-8"))
+    config = json.loads(_graph_read_text(tmp_path / ".obsidian" / "graph.json", encoding="utf-8"))
     queried = {
         group["query"].split("tag:#", 1)[1]
         for group in config.get("colorGroups", [])

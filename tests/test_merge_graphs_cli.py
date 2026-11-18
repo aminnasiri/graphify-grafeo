@@ -1,11 +1,13 @@
 """`graphify merge-graphs` tolerates inputs that disagree on graph type (#1606).
 
-Per-repo graph.json files written by different extract paths at different times
+Per-repo graph.grafeo files written by different extract paths at different times
 don't always agree on the `directed` / `multigraph` flags. compose requires one
 uniform type, so a mixed set used to crash with an unhandled NetworkXError. The
 handler now normalizes every input to a plain undirected Graph before composing.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import subprocess
@@ -22,16 +24,16 @@ def _run(args, cwd):
 
 def _write(p: Path, directed: bool, multigraph: bool, node_id: str):
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({
+    _graph_write_text(p, json.dumps({
         "directed": directed, "multigraph": multigraph, "graph": {},
         "nodes": [{"id": node_id}], "links": [],
     }))
 
 
 def test_merge_graphs_mixed_directed_and_multigraph(tmp_path):
-    a = tmp_path / "r1" / "graphify-out" / "graph.json"
-    b = tmp_path / "r2" / "graphify-out" / "graph.json"
-    c = tmp_path / "r3" / "graphify-out" / "graph.json"
+    a = tmp_path / "r1" / "graphify-out" / "graph.grafeo"
+    b = tmp_path / "r2" / "graphify-out" / "graph.grafeo"
+    c = tmp_path / "r3" / "graphify-out" / "graph.grafeo"
     _write(a, directed=True, multigraph=False, node_id="x")    # DiGraph
     _write(b, directed=False, multigraph=False, node_id="y")   # Graph
     _write(c, directed=False, multigraph=True, node_id="z")    # MultiGraph
@@ -39,8 +41,8 @@ def test_merge_graphs_mixed_directed_and_multigraph(tmp_path):
 
     r = _run(["merge-graphs", str(a), str(b), str(c), "--out", str(out)], tmp_path)
     assert r.returncode == 0, f"merge crashed: {r.stderr}"
-    assert out.exists()
-    data = json.loads(out.read_text())
+    assert _graph_exists(out)
+    data = json.loads(_graph_read_text(out))
     ids = {n["id"] for n in data["nodes"]}
     # every input's node survives, normalized into one undirected simple graph
     assert {"r1::x", "r2::y", "r3::z"} <= ids or len(ids) == 3
@@ -53,19 +55,19 @@ def test_merge_graphs_same_named_repo_dirs_do_not_collapse(tmp_path):
     # frontend/src/graphify-out both → tag "src") share the `src::` prefix, so a
     # bare `app` node from each collapsed into one — silently merging unrelated
     # entities and inventing cross-runtime edges. Distinct tags must keep them apart.
-    a = tmp_path / "src" / "graphify-out" / "graph.json"
-    b = tmp_path / "frontend" / "src" / "graphify-out" / "graph.json"
+    a = tmp_path / "src" / "graphify-out" / "graph.grafeo"
+    b = tmp_path / "frontend" / "src" / "graphify-out" / "graph.grafeo"
     a.parent.mkdir(parents=True, exist_ok=True)
     b.parent.mkdir(parents=True, exist_ok=True)
-    a.write_text(json.dumps({"directed": False, "multigraph": False, "nodes": [
+    _graph_write_text(a, json.dumps({"directed": False, "multigraph": False, "nodes": [
         {"id": "app", "label": "app.js", "source_file": "app.js"}], "links": []}))
-    b.write_text(json.dumps({"directed": False, "multigraph": False, "nodes": [
+    _graph_write_text(b, json.dumps({"directed": False, "multigraph": False, "nodes": [
         {"id": "app", "label": "App.jsx", "source_file": "App.jsx"}], "links": []}))
     out = tmp_path / "merged.json"
 
     r = _run(["merge-graphs", str(a), str(b), "--out", str(out)], tmp_path)
     assert r.returncode == 0, r.stderr
-    data = json.loads(out.read_text())
+    data = json.loads(_graph_read_text(out))
     app_nodes = [n for n in data["nodes"] if n["id"].endswith("::app")]
     assert len(app_nodes) == 2, f"both app nodes must survive; got {[n['id'] for n in app_nodes]}"
     labels = {n.get("label") for n in app_nodes}
@@ -76,36 +78,36 @@ def test_distinct_repo_tags_unit(tmp_path):
     from graphify.build import distinct_repo_tags
     # distinct repo dirs pass through unchanged
     assert distinct_repo_tags([
-        Path("backend/graphify-out/graph.json"),
-        Path("web/graphify-out/graph.json"),
+        Path("backend/graphify-out/graph.grafeo"),
+        Path("web/graphify-out/graph.grafeo"),
     ]) == ["backend", "web"]
     # same-named repo dirs are widened to stay distinct
     tags = distinct_repo_tags([
-        Path("proj/src/graphify-out/graph.json"),
-        Path("proj/frontend/src/graphify-out/graph.json"),
+        Path("proj/src/graphify-out/graph.grafeo"),
+        Path("proj/frontend/src/graphify-out/graph.grafeo"),
     ])
     assert len(set(tags)) == 2, tags
     # a repeated dir name triple still yields all-distinct tags (index fallback)
     tags3 = distinct_repo_tags([
-        Path("a/src/graphify-out/graph.json"),
-        Path("b/src/graphify-out/graph.json"),
-        Path("c/src/graphify-out/graph.json"),
+        Path("a/src/graphify-out/graph.grafeo"),
+        Path("b/src/graphify-out/graph.grafeo"),
+        Path("c/src/graphify-out/graph.grafeo"),
     ])
     assert len(set(tags3)) == 3, tags3
 
 
 def test_merge_graphs_preserves_import_edge_direction(tmp_path):
-    # #2261: merge-graphs loaded graph.json into an undirected nx.Graph without
+    # #2261: merge-graphs loaded graph.grafeo into an undirected nx.Graph without
     # stashing _src/_tgt directional markers, causing node_link_data to re-serialize
     # edges based on arbitrary node ordering and reversing import edge direction whenever
     # target node index < source node index (turning imports into self-imports/reversed links).
-    a = tmp_path / "repo1" / "graphify-out" / "graph.json"
-    b = tmp_path / "repo2" / "graphify-out" / "graph.json"
+    a = tmp_path / "repo1" / "graphify-out" / "graph.grafeo"
+    b = tmp_path / "repo2" / "graphify-out" / "graph.grafeo"
     a.parent.mkdir(parents=True, exist_ok=True)
     b.parent.mkdir(parents=True, exist_ok=True)
 
     # Note: collections comes BEFORE rota in nodes list, so collections has a smaller index
-    a.write_text(json.dumps({
+    _graph_write_text(a, json.dumps({
         "directed": False,
         "multigraph": False,
         "nodes": [
@@ -121,7 +123,7 @@ def test_merge_graphs_preserves_import_edge_direction(tmp_path):
         ],
     }))
 
-    b.write_text(json.dumps({
+    _graph_write_text(b, json.dumps({
         "directed": False,
         "multigraph": False,
         "nodes": [
@@ -137,7 +139,7 @@ def test_merge_graphs_preserves_import_edge_direction(tmp_path):
     r = _run(["merge-graphs", str(a), str(b), "--out", str(out)], tmp_path)
     assert r.returncode == 0, f"merge failed: {r.stderr}"
 
-    data = json.loads(out.read_text(encoding="utf-8"))
+    data = json.loads(_graph_read_text(out, encoding="utf-8"))
 
     # 1. Node count & edge count correct
     assert len(data["nodes"]) == 6
@@ -180,7 +182,7 @@ def _write_with_hyperedges(p: Path, node_ids: list[str], hyperedges: list[dict],
         "nodes": [{"id": n} for n in node_ids], "links": [],
         "hyperedges": hyperedges,
     }
-    p.write_text(json.dumps(data))
+    _graph_write_text(p, json.dumps(data))
 
 
 def test_merge_graphs_carries_hyperedges_from_all_inputs(tmp_path):
@@ -189,15 +191,15 @@ def test_merge_graphs_carries_hyperedges_from_all_inputs(tmp_path):
     # list, so at best the LAST graph's hyperedges survived — with stale,
     # unprefixed member ids. Both inputs' hyperedges must reach the output,
     # relabeled to the prefixed node ids, in BOTH persistence slots.
-    a = tmp_path / "alpha" / "graphify-out" / "graph.json"
-    b = tmp_path / "beta" / "graphify-out" / "graph.json"
+    a = tmp_path / "alpha" / "graphify-out" / "graph.grafeo"
+    b = tmp_path / "beta" / "graphify-out" / "graph.grafeo"
     _write_with_hyperedges(a, ["x", "y"], [{"id": "h_alpha", "nodes": ["x", "y"]}])
     _write_with_hyperedges(b, ["p", "q"], [{"id": "h_beta", "nodes": ["p", "q"]}])
     out = tmp_path / "merged.json"
 
     r = _run(["merge-graphs", str(a), str(b), "--out", str(out)], tmp_path)
     assert r.returncode == 0, r.stderr
-    data = json.loads(out.read_text())
+    data = json.loads(_graph_read_text(out))
 
     hyperedges = data.get("hyperedges")
     assert isinstance(hyperedges, list), "top-level hyperedges slot must be written"
@@ -216,8 +218,8 @@ def test_merge_graphs_carries_hyperedges_from_all_inputs(tmp_path):
 def test_merge_graphs_hyperedges_dedup_on_shared_prefixed_id(tmp_path):
     # Idempotence: a duplicated hyperedge id within an input must not produce
     # duplicate entries in the merged output (attach_hyperedges dedups by id).
-    a = tmp_path / "alpha" / "graphify-out" / "graph.json"
-    b = tmp_path / "beta" / "graphify-out" / "graph.json"
+    a = tmp_path / "alpha" / "graphify-out" / "graph.grafeo"
+    b = tmp_path / "beta" / "graphify-out" / "graph.grafeo"
     he = {"id": "h_alpha", "nodes": ["x"]}
     _write_with_hyperedges(a, ["x"], [he, dict(he)])
     _write_with_hyperedges(b, ["p"], [{"id": "h_beta", "nodes": ["p"]}])
@@ -225,7 +227,7 @@ def test_merge_graphs_hyperedges_dedup_on_shared_prefixed_id(tmp_path):
 
     r = _run(["merge-graphs", str(a), str(b), "--out", str(out)], tmp_path)
     assert r.returncode == 0, r.stderr
-    data = json.loads(out.read_text())
+    data = json.loads(_graph_read_text(out))
     ids = [h["id"] for h in data["hyperedges"]]
     assert sorted(ids) == ["alpha::h_alpha", "beta::h_beta"], f"dup survived: {ids}"
 
@@ -234,8 +236,8 @@ def test_merge_graphs_reads_top_level_only_hyperedges(tmp_path):
     # #2485 skew on the input side: node_link_graph restores only the nested
     # graph-attrs slot, so an input whose hyperedges live only at the top
     # level used to lose them entirely.
-    a = tmp_path / "alpha" / "graphify-out" / "graph.json"
-    b = tmp_path / "beta" / "graphify-out" / "graph.json"
+    a = tmp_path / "alpha" / "graphify-out" / "graph.grafeo"
+    b = tmp_path / "beta" / "graphify-out" / "graph.grafeo"
     _write_with_hyperedges(a, ["x"], [{"id": "h_top", "nodes": ["x"]}],
                            top_level_only=True)
     _write_with_hyperedges(b, ["p"], [])
@@ -243,7 +245,7 @@ def test_merge_graphs_reads_top_level_only_hyperedges(tmp_path):
 
     r = _run(["merge-graphs", str(a), str(b), "--out", str(out)], tmp_path)
     assert r.returncode == 0, r.stderr
-    data = json.loads(out.read_text())
+    data = json.loads(_graph_read_text(out))
     assert [h["id"] for h in data["hyperedges"]] == ["alpha::h_top"]
     assert data["hyperedges"][0]["nodes"] == ["alpha::x"]
 
@@ -251,7 +253,7 @@ def test_merge_graphs_reads_top_level_only_hyperedges(tmp_path):
 
 def _write_with_communities(p: Path, nodes):
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({
+    _graph_write_text(p, json.dumps({
         "directed": False, "multigraph": False, "graph": {},
         "nodes": [{"id": nid, "community": cid} for nid, cid in nodes],
         "links": [],
@@ -265,15 +267,15 @@ def test_merge_graphs_offsets_communities_so_repos_do_not_fuse(tmp_path):
     # view then fused unrelated communities into one meta-node. Each input's
     # ids must be offset into a shared id space, with the per-repo partition
     # kept in local_community.
-    a = tmp_path / "alpha" / "graphify-out" / "graph.json"
-    b = tmp_path / "beta" / "graphify-out" / "graph.json"
+    a = tmp_path / "alpha" / "graphify-out" / "graph.grafeo"
+    b = tmp_path / "beta" / "graphify-out" / "graph.grafeo"
     _write_with_communities(a, [("a0", 0), ("a1", 0), ("a2", 1)])
     _write_with_communities(b, [("b0", 0), ("b1", 1), ("b2", 1), ("b3", 2)])
     out = tmp_path / "merged.json"
 
     r = _run(["merge-graphs", str(a), str(b), "--out", str(out)], tmp_path)
     assert r.returncode == 0, r.stderr
-    data = json.loads(out.read_text())
+    data = json.loads(_graph_read_text(out))
     a_nodes = [n for n in data["nodes"] if n["id"].startswith("alpha::")]
     b_nodes = [n for n in data["nodes"] if n["id"].startswith("beta::")]
     # the first input keeps its original ids (offset 0)
@@ -294,8 +296,8 @@ def test_merge_graphs_community_offset_is_byte_reproducible(tmp_path):
     merging the same inputs twice produces byte-identical output. (Offsets are
     position-dependent by design — reordering inputs may renumber — so this pins
     only same-order reproducibility, which is what consumers rely on. #3014.)"""
-    a = tmp_path / "alpha" / "graphify-out" / "graph.json"
-    b = tmp_path / "beta" / "graphify-out" / "graph.json"
+    a = tmp_path / "alpha" / "graphify-out" / "graph.grafeo"
+    b = tmp_path / "beta" / "graphify-out" / "graph.grafeo"
     _write_with_communities(a, [("a0", 0), ("a1", 0), ("a2", 1)])
     _write_with_communities(b, [("b0", 0), ("b1", 1), ("b2", 2)])
 
@@ -303,7 +305,7 @@ def test_merge_graphs_community_offset_is_byte_reproducible(tmp_path):
     out2 = tmp_path / "m2.json"
     assert _run(["merge-graphs", str(a), str(b), "--out", str(out1)], tmp_path).returncode == 0
     assert _run(["merge-graphs", str(a), str(b), "--out", str(out2)], tmp_path).returncode == 0
-    assert out1.read_bytes() == out2.read_bytes(), "same-order merge is not byte-reproducible"
+    assert _graph_read_bytes(out1) == _graph_read_bytes(out2), "same-order merge is not byte-reproducible"
 
 
 def test_merge_graphs_previous_restores_the_real_merged_community(tmp_path):
@@ -312,8 +314,8 @@ def test_merge_graphs_previous_restores_the_real_merged_community(tmp_path):
     MERGED clustering a labels sidecar was built against. --previous restores
     the real previous merged community (by node id), not the per-source one,
     so a later cluster-only run's label-reuse remap aligns correctly."""
-    a = tmp_path / "alpha" / "graphify-out" / "graph.json"
-    b = tmp_path / "beta" / "graphify-out" / "graph.json"
+    a = tmp_path / "alpha" / "graphify-out" / "graph.grafeo"
+    b = tmp_path / "beta" / "graphify-out" / "graph.grafeo"
     _write_with_communities(a, [("a0", 0), ("a1", 1)])
     _write_with_communities(b, [("b0", 0), ("b1", 1)])
 
@@ -330,7 +332,7 @@ def test_merge_graphs_previous_restores_the_real_merged_community(tmp_path):
         tmp_path,
     )
     assert r.returncode == 0, r.stderr
-    data = json.loads(out.read_text())
+    data = json.loads(_graph_read_text(out))
     by_id = {n["id"]: n for n in data["nodes"]}
     # The real previous merged community wins, not the fresh per-source offset.
     assert by_id["alpha::a0"]["community"] == 7
@@ -347,8 +349,8 @@ def test_merge_graphs_previous_drops_community_for_a_new_node(tmp_path):
     community to restore, and must not keep the fresh per-source offset
     either — a stale/invented community id is worse than none (cluster-only
     already handles a node with no community)."""
-    a = tmp_path / "alpha" / "graphify-out" / "graph.json"
-    b = tmp_path / "beta" / "graphify-out" / "graph.json"
+    a = tmp_path / "alpha" / "graphify-out" / "graph.grafeo"
+    b = tmp_path / "beta" / "graphify-out" / "graph.grafeo"
     _write_with_communities(a, [("a0", 0), ("a1", 1)])
     _write_with_communities(b, [("b0", 0)])
 
@@ -361,7 +363,7 @@ def test_merge_graphs_previous_drops_community_for_a_new_node(tmp_path):
         tmp_path,
     )
     assert r.returncode == 0, r.stderr
-    data = json.loads(out.read_text())
+    data = json.loads(_graph_read_text(out))
     by_id = {n["id"]: n for n in data["nodes"]}
     assert by_id["alpha::a0"]["community"] == 7
     assert "community" not in by_id["beta::b0"]
@@ -369,8 +371,8 @@ def test_merge_graphs_previous_drops_community_for_a_new_node(tmp_path):
 
 def test_merge_graphs_previous_does_not_resurrect_removed_node(tmp_path):
     """#4078: --previous restores metadata only for nodes still present."""
-    a = tmp_path / "alpha" / "graphify-out" / "graph.json"
-    b = tmp_path / "beta" / "graphify-out" / "graph.json"
+    a = tmp_path / "alpha" / "graphify-out" / "graph.grafeo"
+    b = tmp_path / "beta" / "graphify-out" / "graph.grafeo"
     _write_with_communities(a, [("a0", 0)])
     _write_with_communities(b, [("b0", 0)])
 
@@ -387,7 +389,7 @@ def test_merge_graphs_previous_does_not_resurrect_removed_node(tmp_path):
         tmp_path,
     )
     assert r.returncode == 0, r.stderr
-    data = json.loads(out.read_text())
+    data = json.loads(_graph_read_text(out))
     by_id = {n["id"]: n for n in data["nodes"]}
 
     assert "beta::removed" not in by_id
@@ -398,13 +400,13 @@ def test_merge_graphs_previous_does_not_resurrect_removed_node(tmp_path):
 def test_merge_graphs_previous_malformed_json_errors_gracefully(tmp_path):
     """A malformed --previous file must fail with a clear message and exit 1,
     not crash with an uncaught JSONDecodeError traceback."""
-    a = tmp_path / "r1" / "graphify-out" / "graph.json"
-    b = tmp_path / "r2" / "graphify-out" / "graph.json"
+    a = tmp_path / "r1" / "graphify-out" / "graph.grafeo"
+    b = tmp_path / "r2" / "graphify-out" / "graph.grafeo"
     _write(a, directed=False, multigraph=False, node_id="x")
     _write(b, directed=False, multigraph=False, node_id="y")
     out = tmp_path / "merged.json"
     previous = tmp_path / "previous.json"
-    previous.write_text("{ not valid json ,,, ")
+    _graph_write_text(previous, "{ not valid json ,,, ")
 
     r = _run(
         ["merge-graphs", str(a), str(b), "--out", str(out), "--previous", str(previous)],
@@ -417,7 +419,7 @@ def test_merge_graphs_previous_malformed_json_errors_gracefully(tmp_path):
 
 def _write_nodes(p: Path, nodes: list[dict]):
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({
+    _graph_write_text(p, json.dumps({
         "directed": False, "multigraph": False, "graph": {},
         "nodes": nodes, "links": [],
     }))
@@ -426,8 +428,8 @@ def _write_nodes(p: Path, nodes: list[dict]):
 def test_merge_graphs_reports_unified_external_nodes(tmp_path):
     """The merged total is lower than the sum of inputs only because external stubs
     share global bare ids (#2873). The CLI must say so instead of dropping the count silently."""
-    a = tmp_path / "r1" / "graphify-out" / "graph.json"
-    b = tmp_path / "r2" / "graphify-out" / "graph.json"
+    a = tmp_path / "r1" / "graphify-out" / "graph.grafeo"
+    b = tmp_path / "r2" / "graphify-out" / "graph.grafeo"
     _write_nodes(a, [{"id": "A"}, {"id": "arraylist", "external": True}])
     _write_nodes(b, [{"id": "B"}, {"id": "arraylist", "external": True}])
     out = tmp_path / "merged.json"
@@ -440,8 +442,8 @@ def test_merge_graphs_reports_unified_external_nodes(tmp_path):
 
 
 def test_merge_graphs_reports_nothing_when_no_external_collision(tmp_path):
-    a = tmp_path / "r1" / "graphify-out" / "graph.json"
-    b = tmp_path / "r2" / "graphify-out" / "graph.json"
+    a = tmp_path / "r1" / "graphify-out" / "graph.grafeo"
+    b = tmp_path / "r2" / "graphify-out" / "graph.grafeo"
     _write_nodes(a, [{"id": "A"}, {"id": "typing", "external": True}])
     _write_nodes(b, [{"id": "B"}, {"id": "pathlib", "external": True}])
     out = tmp_path / "merged.json"

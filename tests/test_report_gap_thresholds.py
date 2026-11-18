@@ -5,7 +5,7 @@ caller's --min-community-size, while the Knowledge Gaps section counted
 against a hardcoded 3 - beside label text that already printed
 min_community_size. And the "isolated node(s)" figure excludes file,
 concept and rationale nodes without saying so, so a plain degree<=1 recount
-from graph.json never matched it. Also the #2129 residual: "shown" was
+from graph.grafeo never matched it. Also the #2129 residual: "shown" was
 total-minus-thin, which counted zero-real-node communities the render loop
 skips.
 
@@ -18,6 +18,7 @@ community ("onlyfile") as thin at every positive min_community_size, since
 0 is always less than it.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
 
 import re
 

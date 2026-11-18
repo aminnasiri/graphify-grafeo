@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text, write_text as _graph_write_text
 """Tests for LLM-backed community labeling (issue #1097).
 
 Backend calls are mocked - no network. Covers the happy path, partial replies,
@@ -79,7 +81,7 @@ def test_label_cli_passes_model_override(tmp_path, monkeypatch):
         ],
         "links": [],
     }
-    (out / "graph.json").write_text(json.dumps(graph), encoding="utf-8")
+    _graph_write_text(out / "graph.grafeo", json.dumps(graph), encoding="utf-8")
 
     captured = {}
 
@@ -136,11 +138,8 @@ def test_label_cli_missing_only_preserves_existing_labels(tmp_path, monkeypatch)
         ],
         "links": [],
     }
-    (out / "graph.json").write_text(json.dumps(graph), encoding="utf-8")
-    (out / ".graphify_labels.json").write_text(
-        json.dumps({"0": "Order Management", "1": "Community 1"}),
-        encoding="utf-8",
-    )
+    _graph_write_text(out / "graph.grafeo", json.dumps(graph), encoding="utf-8")
+    _graph_write_text(out / ".graphify_labels.json", json.dumps({"0": "Order Management", "1": "Community 1"}), encoding="utf-8")
 
     captured = {}
 
@@ -160,7 +159,7 @@ def test_label_cli_missing_only_preserves_existing_labels(tmp_path, monkeypatch)
     cli.main()
 
     assert set(captured["communities"]) == {1}
-    labels = json.loads((out / ".graphify_labels.json").read_text(encoding="utf-8"))
+    labels = json.loads(_graph_read_text(out / ".graphify_labels.json", encoding="utf-8"))
     assert labels == {"0": "Order Management", "1": "Payment Flow"}
 
 
@@ -545,7 +544,7 @@ def _two_community_graph(out):
             {"source": "payments", "target": "pay_db", "relation": "calls"},
         ],
     }
-    (out / "graph.json").write_text(json.dumps(graph), encoding="utf-8")
+    _graph_write_text(out / "graph.grafeo", json.dumps(graph), encoding="utf-8")
 
 
 @pytest.mark.parametrize("command", ["cluster-only", "label"])
@@ -559,7 +558,7 @@ def test_cluster_commands_render_aggregated_html_above_viz_limit(
     out.mkdir()
     _two_community_graph(out)
     html = out / "graph.html"
-    html.write_text("stale visualization", encoding="utf-8")
+    _graph_write_text(html, "stale visualization", encoding="utf-8")
 
     monkeypatch.setenv("GRAPHIFY_VIZ_NODE_LIMIT", "3")
     monkeypatch.setattr(cli, "_check_skill_version", lambda _: None)
@@ -579,9 +578,9 @@ def test_cluster_commands_render_aggregated_html_above_viz_limit(
     cli.main()
 
     output = capsys.readouterr().out
-    assert html.exists()
-    assert not (out / ".graph.html.stale").exists()
-    rendered = html.read_text(encoding="utf-8")
+    assert _graph_exists(html)
+    assert not _graph_exists(out / ".graph.html.stale")
+    rendered = _graph_read_text(html, encoding="utf-8")
     assert "stale visualization" not in rendered
     if command == "label":
         assert "Fresh community" in rendered
@@ -600,7 +599,7 @@ def test_cluster_only_preserves_but_does_not_claim_unusable_aggregate(
     out.mkdir()
     _two_community_graph(out)
     html = out / "graph.html"
-    html.write_text("stale visualization", encoding="utf-8")
+    _graph_write_text(html, "stale visualization", encoding="utf-8")
 
     monkeypatch.setenv("GRAPHIFY_VIZ_NODE_LIMIT", "3")
     monkeypatch.setattr(cli, "_check_skill_version", lambda _: None)
@@ -618,8 +617,8 @@ def test_cluster_only_preserves_but_does_not_claim_unusable_aggregate(
     cli.main()
 
     output = capsys.readouterr().out
-    assert html.read_text(encoding="utf-8") == "stale visualization"
-    assert (out / ".graph.html.stale").exists()
+    assert _graph_read_text(html, encoding="utf-8") == "stale visualization"
+    assert _graph_exists(out / ".graph.html.stale")
     assert "Skipped graph.html" in output
     assert "existing graph.html left unchanged" in output
     assert "graph.html updated" not in output
@@ -636,7 +635,7 @@ def test_cluster_only_restores_html_after_unexpected_render_failure(
     out.mkdir()
     _two_community_graph(out)
     html = out / "graph.html"
-    html.write_text("previous visualization", encoding="utf-8")
+    _graph_write_text(html, "previous visualization", encoding="utf-8")
 
     def fail_render(*args, **kwargs):
         raise OSError("simulated render failure")
@@ -657,15 +656,15 @@ def test_cluster_only_restores_html_after_unexpected_render_failure(
     with pytest.raises(OSError, match="simulated render failure"):
         cli.main()
 
-    assert html.read_text(encoding="utf-8") == "previous visualization"
-    assert (out / ".graph.html.stale").exists()
+    assert _graph_read_text(html, encoding="utf-8") == "previous visualization"
+    assert _graph_exists(out / ".graph.html.stale")
     assert not list(out.glob(".graph.html.*.previous"))
 
 
 def test_cluster_only_marks_html_stale_before_report_generation(
     tmp_path, monkeypatch,
 ):
-    """An interruption after graph.json advances must remain repairable."""
+    """An interruption after graph.grafeo advances must remain repairable."""
     import graphify.__main__ as cli
     from graphify.watch import _reconcile_graph_html
 
@@ -673,7 +672,7 @@ def test_cluster_only_marks_html_stale_before_report_generation(
     out.mkdir()
     _two_community_graph(out)
     html = out / "graph.html"
-    html.write_text("previous visualization", encoding="utf-8")
+    _graph_write_text(html, "previous visualization", encoding="utf-8")
 
     def interrupt_report(*args, **kwargs):
         raise KeyboardInterrupt
@@ -691,13 +690,13 @@ def test_cluster_only_marks_html_stale_before_report_generation(
         cli.main()
 
     marker = out / ".graph.html.stale"
-    assert html.read_text(encoding="utf-8") == "previous visualization"
-    assert marker.exists()
+    assert _graph_read_text(html, encoding="utf-8") == "previous visualization"
+    assert _graph_exists(marker)
 
-    persisted = json.loads((out / "graph.json").read_text(encoding="utf-8"))
+    persisted = json.loads(_graph_read_text(out / "graph.grafeo", encoding="utf-8"))
     assert _reconcile_graph_html(out, persisted) == "rendered"
-    assert html.read_text(encoding="utf-8") != "previous visualization"
-    assert not marker.exists()
+    assert _graph_read_text(html, encoding="utf-8") != "previous visualization"
+    assert not _graph_exists(marker)
 
 
 def test_cluster_only_refused_graph_write_preserves_existing_stale_marker(
@@ -710,7 +709,7 @@ def test_cluster_only_refused_graph_write_preserves_existing_stale_marker(
     out.mkdir()
     _two_community_graph(out)
     html = out / "graph.html"
-    html.write_text("known stale visualization", encoding="utf-8")
+    _graph_write_text(html, "known stale visualization", encoding="utf-8")
     marker = out / ".graph.html.stale"
     marker.touch()
 
@@ -726,8 +725,8 @@ def test_cluster_only_refused_graph_write_preserves_existing_stale_marker(
         cli.main()
 
     assert stopped.value.code == 1
-    assert html.read_text(encoding="utf-8") == "known stale visualization"
-    assert marker.exists()
+    assert _graph_read_text(html, encoding="utf-8") == "known stale visualization"
+    assert _graph_exists(marker)
 
 
 def test_cluster_only_succeeds_when_stale_marker_cleanup_fails(
@@ -740,7 +739,7 @@ def test_cluster_only_succeeds_when_stale_marker_cleanup_fails(
     out.mkdir()
     _two_community_graph(out)
     html = out / "graph.html"
-    html.write_text("stale visualization", encoding="utf-8")
+    _graph_write_text(html, "stale visualization", encoding="utf-8")
     marker = out / ".graph.html.stale"
     marker.touch()
     original_unlink = Path.unlink
@@ -762,8 +761,8 @@ def test_cluster_only_succeeds_when_stale_marker_cleanup_fails(
     cli.main()
 
     captured = capsys.readouterr()
-    assert html.read_text(encoding="utf-8") != "stale visualization"
-    assert marker.exists()
+    assert _graph_read_text(html, encoding="utf-8") != "stale visualization"
+    assert _graph_exists(marker)
     assert "graph.html updated" in captured.out
     assert "stale marker could not be cleared" in captured.err
 
@@ -779,10 +778,10 @@ def test_cluster_only_does_not_erase_concurrent_html_after_failure(
     out.mkdir()
     _two_community_graph(out)
     html = out / "graph.html"
-    html.write_text("previous visualization", encoding="utf-8")
+    _graph_write_text(html, "previous visualization", encoding="utf-8")
 
     def concurrent_then_fail(*args, **kwargs):
-        html.write_text("newer concurrent visualization", encoding="utf-8")
+        _graph_write_text(html, "newer concurrent visualization", encoding="utf-8")
         raise OSError("simulated render failure")
 
     monkeypatch.setenv("GRAPHIFY_VIZ_NODE_LIMIT", "3")
@@ -801,7 +800,7 @@ def test_cluster_only_does_not_erase_concurrent_html_after_failure(
     with pytest.raises(OSError, match="simulated render failure"):
         cli.main()
 
-    assert html.read_text(encoding="utf-8") == "newer concurrent visualization"
+    assert _graph_read_text(html, encoding="utf-8") == "newer concurrent visualization"
 
 
 def test_cluster_only_no_label_does_not_persist_placeholders(tmp_path, monkeypatch):
@@ -822,14 +821,14 @@ def test_cluster_only_no_label_does_not_persist_placeholders(tmp_path, monkeypat
 
     monkeypatch.setattr(sys, "argv", ["graphify", "cluster-only", str(tmp_path), "--no-label", "--no-viz"])
     cli.main()
-    assert not labels_path.exists(), "--no-label persisted a placeholder labels file (#2073)"
-    assert not (out / ".graphify_labels.json.sig").exists()
+    assert not _graph_exists(labels_path), "--no-label persisted a placeholder labels file (#2073)"
+    assert not _graph_exists(out / ".graphify_labels.json.sig")
 
     # A later normal run generates real labels (no sticky placeholders blocking it).
     monkeypatch.setattr(sys, "argv", ["graphify", "cluster-only", str(tmp_path), "--no-viz"])
     cli.main()
-    assert labels_path.exists()
-    saved = json.loads(labels_path.read_text(encoding="utf-8"))
+    assert _graph_exists(labels_path)
+    saved = json.loads(_graph_read_text(labels_path, encoding="utf-8"))
     assert saved, "no labels written on the normal run"
     assert not any(v == f"Community {k}" for k, v in saved.items()), (
         f"real labels expected, got placeholders: {saved} (#2073)"
@@ -846,7 +845,7 @@ def test_cluster_only_heals_persisted_placeholder_but_reuses_genuine(tmp_path, m
     _two_community_graph(out)
     labels_path = out / ".graphify_labels.json"
     # Polluted state: community 0 is a stuck placeholder, community 1 is genuine.
-    labels_path.write_text(json.dumps({"0": "Community 0", "1": "Payment Flow"}), encoding="utf-8")
+    _graph_write_text(labels_path, json.dumps({"0": "Community 0", "1": "Payment Flow"}), encoding="utf-8")
 
     monkeypatch.setattr(cli, "_check_skill_version", lambda _: None)
     monkeypatch.setattr("graphify.export.to_html", lambda *a, **k: None)
@@ -856,7 +855,7 @@ def test_cluster_only_heals_persisted_placeholder_but_reuses_genuine(tmp_path, m
 
     monkeypatch.setattr(sys, "argv", ["graphify", "cluster-only", str(tmp_path), "--no-viz"])
     cli.main()
-    saved = json.loads(labels_path.read_text(encoding="utf-8"))
+    saved = json.loads(_graph_read_text(labels_path, encoding="utf-8"))
     assert saved["0"] != "Community 0", "stuck placeholder was not healed (#2073)"
     assert saved["1"] == "Payment Flow", "genuine label was not reused"
 
@@ -886,7 +885,7 @@ def _auth_billing_graph(out: Path) -> None:
             {"source": "b1", "target": "b4", "relation": "calls"},
         ],
     }
-    (out / "graph.json").write_text(json.dumps(graph), encoding="utf-8")
+    _graph_write_text(out / "graph.grafeo", json.dumps(graph), encoding="utf-8")
 
 
 def _patch_cluster_only_reuse(monkeypatch):
@@ -918,17 +917,12 @@ def test_cluster_only_keeps_label_on_majority_membership_overlap(tmp_path, monke
     out.mkdir(parents=True)
     _auth_billing_graph(out)
     labels_path = out / ".graphify_labels.json"
-    labels_path.write_text(
-        json.dumps({"0": "Auth Engine", "1": "Billing Desk"}), encoding="utf-8"
-    )
+    _graph_write_text(labels_path, json.dumps({"0": "Auth Engine", "1": "Billing Desk"}), encoding="utf-8")
     old_members = {
         0: ["a1", "a2", "a3", "a4"],
         1: ["b1", "b2", "b3", "b4"],
     }
-    (out / ".graphify_labels.json.sig").write_text(
-        json.dumps({str(k): v for k, v in community_member_sigs(old_members).items()}),
-        encoding="utf-8",
-    )
+    _graph_write_text(out / ".graphify_labels.json.sig", json.dumps({str(k): v for k, v in community_member_sigs(old_members).items()}), encoding="utf-8")
 
     def _cluster_with_new(G, *args, **kwargs):
         return {
@@ -939,7 +933,7 @@ def test_cluster_only_keeps_label_on_majority_membership_overlap(tmp_path, monke
     monkeypatch.setattr("graphify.cluster.cluster", _cluster_with_new)
     monkeypatch.setattr(sys, "argv", ["graphify", "cluster-only", str(root), "--no-viz"])
     cli.main()
-    labels = json.loads(labels_path.read_text(encoding="utf-8"))
+    labels = json.loads(_graph_read_text(labels_path, encoding="utf-8"))
     assert labels["0"] == "Auth Engine"
     assert labels["1"] == "Billing Desk"
 
@@ -956,14 +950,9 @@ def test_cluster_only_keeps_label_on_majority_membership_overlap(tmp_path, monke
         ],
         "links": [],
     }
-    (fragment_out / "graph.json").write_text(json.dumps(fragment_graph), encoding="utf-8")
-    (fragment_out / ".graphify_labels.json").write_text(
-        json.dumps({"0": "Big Service"}), encoding="utf-8"
-    )
-    (fragment_out / ".graphify_labels.json.sig").write_text(
-        json.dumps({str(k): v for k, v in community_member_sigs({0: member_ids}).items()}),
-        encoding="utf-8",
-    )
+    _graph_write_text(fragment_out / "graph.grafeo", json.dumps(fragment_graph), encoding="utf-8")
+    _graph_write_text(fragment_out / ".graphify_labels.json", json.dumps({"0": "Big Service"}), encoding="utf-8")
+    _graph_write_text(fragment_out / ".graphify_labels.json.sig", json.dumps({str(k): v for k, v in community_member_sigs({0: member_ids}).items()}), encoding="utf-8")
 
     def _cluster_singletons(G, *args, **kwargs):
         return {i: [f"n{i:03d}"] for i in range(200)}
@@ -972,7 +961,7 @@ def test_cluster_only_keeps_label_on_majority_membership_overlap(tmp_path, monke
     monkeypatch.setattr(sys, "argv", ["graphify", "cluster-only", str(fragment), "--no-viz"])
     cli.main()
     fragment_labels = json.loads(
-        (fragment_out / ".graphify_labels.json").read_text(encoding="utf-8")
+        _graph_read_text(fragment_out / ".graphify_labels.json", encoding="utf-8")
     )
     assert "Big Service" not in fragment_labels.values()
 
@@ -986,9 +975,7 @@ def test_cluster_only_keeps_unchanged_label_when_count_changes(tmp_path, monkeyp
     out.mkdir()
     _auth_billing_graph(out)
     labels_path = out / ".graphify_labels.json"
-    labels_path.write_text(
-        json.dumps({"0": "Auth Engine", "1": "Billing Desk"}), encoding="utf-8"
-    )
+    _graph_write_text(labels_path, json.dumps({"0": "Auth Engine", "1": "Billing Desk"}), encoding="utf-8")
 
     def _cluster_plus_singleton(G, *args, **kwargs):
         return {
@@ -1000,7 +987,7 @@ def test_cluster_only_keeps_unchanged_label_when_count_changes(tmp_path, monkeyp
     monkeypatch.setattr("graphify.cluster.cluster", _cluster_plus_singleton)
     monkeypatch.setattr(sys, "argv", ["graphify", "cluster-only", str(tmp_path), "--no-viz"])
     cli.main()
-    labels = json.loads(labels_path.read_text(encoding="utf-8"))
+    labels = json.loads(_graph_read_text(labels_path, encoding="utf-8"))
     assert labels["0"] == "Auth Engine"
     assert labels["1"] == "Billing Desk"
 
@@ -1041,7 +1028,7 @@ def test_label_cli_drops_sentinel_and_bare_key_echoes(tmp_path, monkeypatch):
         ],
         "links": [],
     }
-    (out / "graph.json").write_text(json.dumps(graph), encoding="utf-8")
+    _graph_write_text(out / "graph.grafeo", json.dumps(graph), encoding="utf-8")
 
     def fake_generate(G, communities, *, backend=None, model=None, gods=None,
                       quiet=False, max_concurrency=4, batch_size=100, usage_out=None):
@@ -1056,7 +1043,7 @@ def test_label_cli_drops_sentinel_and_bare_key_echoes(tmp_path, monkeypatch):
 
     cli.main()
 
-    labels = json.loads((out / ".graphify_labels.json").read_text(encoding="utf-8"))
+    labels = json.loads(_graph_read_text(out / ".graphify_labels.json", encoding="utf-8"))
     assert labels["0"] == "Order Management"            # real name survives
     assert labels["5"] == "PaymentService"              # sentinel echo dropped -> hub label
     assert labels["7"] == "ShippingService"             # bare-key echo dropped -> hub label

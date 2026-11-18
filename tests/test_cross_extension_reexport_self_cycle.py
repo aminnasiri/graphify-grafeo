@@ -15,6 +15,8 @@ extension-aware — Option A rejected, #1033), the re-export edge lands on the
 sibling node, and no phantom 1-file cycle survives.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 from pathlib import Path
@@ -26,7 +28,7 @@ from graphify.extract import extract
 
 def _write(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    _graph_write_text(path, text, encoding="utf-8")
     return path
 
 
@@ -166,10 +168,10 @@ def test_same_basename_three_colliding_siblings_reexport_selects_named_variant(
 # extraction-time disambiguation salt hint (its only reader is the salt lookup
 # in ``_disambiguate_colliding_node_ids``). It carries an ABSOLUTE filesystem
 # path, so it must never survive its consumer onto a persisted edge: leaking it
-# into graph.json breaks determinism across checkout locations and the
+# into graph.grafeo breaks determinism across checkout locations and the
 # cross-machine merge/global-graph portability the codebase engineered for. The
 # following lock that the hint is stripped after disambiguation and never
-# reaches graph.json — on the raw-dump extract path AND the build path — and
+# reaches graph.grafeo — on the raw-dump extract path AND the build path — and
 # that a persisted absolute hint from a pre-fix graph is dropped on the next
 # build rather than carried forward.
 # --------------------------------------------------------------------------- #
@@ -211,22 +213,22 @@ def test_graph_json_has_no_target_file_and_no_absolute_path(tmp_path: Path):
 
     result = extract([mjs, ts], cache_root=tmp_path)
     graph = build([result], root=tmp_path)
-    out = tmp_path / "graph.json"
+    out = tmp_path / "graph.grafeo"
     to_json(graph, {}, str(out), force=True)
 
-    raw = out.read_text(encoding="utf-8")
+    raw = _graph_read_text(out, encoding="utf-8")
     data = json.loads(raw)
     leaked = [link for link in data["links"] if "target_file" in link]
-    assert not leaked, f"absolute target_file persisted into graph.json links: {leaked}"
+    assert not leaked, f"absolute target_file persisted into graph.grafeo links: {leaked}"
     assert str(tmp_path.resolve()) not in raw, (
-        "graph.json leaked an absolute checkout path (source_file is relativized, "
+        "graph.grafeo leaked an absolute checkout path (source_file is relativized, "
         "but the target_file hint was serialized verbatim)"
     )
 
 
 def test_graph_json_is_checkout_location_independent(tmp_path: Path):
     """Building the byte-identical repo at two different absolute locations must
-    yield identical graph.json edges. A leaked absolute target_file differs by
+    yield identical graph.grafeo edges. A leaked absolute target_file differs by
     its checkout prefix and would defeat the cross-machine merge/global-graph
     portability the codebase is built around."""
 
@@ -237,9 +239,9 @@ def test_graph_json_is_checkout_location_independent(tmp_path: Path):
         ts = _write(d / "foo.ts", 'export { N } from "./foo.mjs";\n')
         result = extract([mjs, ts], cache_root=d)
         graph = build([result], root=d)
-        out = d / "graph.json"
+        out = d / "graph.grafeo"
         to_json(graph, {}, str(out), force=True)
-        links = json.loads(out.read_text(encoding="utf-8"))["links"]
+        links = json.loads(_graph_read_text(out, encoding="utf-8"))["links"]
         return sorted(
             links,
             key=lambda link: (
@@ -250,12 +252,12 @@ def test_graph_json_is_checkout_location_independent(tmp_path: Path):
         )
 
     assert _links_built_at("loc_a") == _links_built_at("loc_bbbb_longer"), (
-        "graph.json edges differ across checkout locations — an absolute path leaked"
+        "graph.grafeo edges differ across checkout locations — an absolute path leaked"
     )
 
 
 def test_build_drops_persisted_target_file_from_a_pre_fix_graph(tmp_path: Path):
-    # A graph.json written by a pre-fix build carries an absolute target_file on
+    # A graph.grafeo written by a pre-fix build carries an absolute target_file on
     # its import edges. On the next (incremental) build those base edges are
     # re-serialized through build(), which does NOT re-run disambiguation — so
     # the serializer itself must drop the persisted absolute path rather than
@@ -301,9 +303,9 @@ def test_target_file_hint_never_written_to_the_ast_cache(tmp_path: Path):
     extract([mjs, ts], cache_root=tmp_path)
 
     ast_dir = tmp_path / "graphify-out" / "cache" / "ast"
-    entries = list(ast_dir.rglob("*.json")) if ast_dir.exists() else []
+    entries = list(ast_dir.rglob("*.json")) if _graph_exists(ast_dir) else []
     for entry in entries:
-        payload = json.loads(entry.read_text(encoding="utf-8"))
+        payload = json.loads(_graph_read_text(entry, encoding="utf-8"))
         for edge in payload.get("edges", []):
             assert "target_file" not in edge, (
                 f"AST cache entry {entry.name} stored a non-portable target_file "

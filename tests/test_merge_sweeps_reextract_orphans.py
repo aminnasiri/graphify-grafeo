@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 """Re-extraction must collect the placeholders it strands, not only prunes (#4399).
 
 build_merge drops the old nodes and edges of re-extracted files by source_file.
@@ -31,9 +33,9 @@ def _e(s, t, sf, rel="references"):
 
 
 def _save(extraction, tmp_path) -> str:
-    gp = Path(tmp_path) / "graph.json"
+    gp = Path(tmp_path) / "graph.grafeo"
     G = build_from_json(extraction)
-    gp.write_text(json.dumps(json_graph.node_link_data(G, edges="links")), encoding="utf-8")
+    _graph_write_text(gp, json.dumps(json_graph.node_link_data(G, edges="links")), encoding="utf-8")
     return str(gp)
 
 
@@ -111,9 +113,9 @@ def test_a_sourceless_semantic_node_is_untouched(tmp_path):
 
 def _save_he(extraction, tmp_path) -> str:
     gp = Path(_save(extraction, tmp_path))
-    data = json.loads(gp.read_text(encoding="utf-8"))
+    data = json.loads(_graph_read_text(gp, encoding="utf-8"))
     data["hyperedges"] = extraction["hyperedges"]
-    gp.write_text(json.dumps(data), encoding="utf-8")
+    _graph_write_text(gp, json.dumps(data), encoding="utf-8")
     return str(gp)
 
 

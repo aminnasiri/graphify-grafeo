@@ -2,7 +2,7 @@
 
 build_merge backs `graphify --update`. The regressions covered here:
 
-- #1574 / #5081: it read only nodes+edges from the existing graph.json, never
+- #1574 / #5081: it read only nodes+edges from the existing graph.grafeo, never
   hyperedges, so every incremental update collapsed the graph's hyperedge set
   down to just the re-extracted files'. Now existing hyperedges are carried
   forward, with re-extracted files' replaced (by source_file) and deleted files'
@@ -13,6 +13,8 @@ build_merge backs `graphify --update`. The regressions covered here:
   deleted files' nodes survived as ghosts. build_merge now infers a fallback root.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import os
@@ -25,11 +27,8 @@ from graphify.export import to_json
 
 
 def _write_graph(graph_path: Path, nodes, edges, hyperedges) -> None:
-    """Write a graph.json in the shape to_json emits (top-level hyperedges)."""
-    graph_path.write_text(
-        json.dumps({"nodes": nodes, "edges": edges, "hyperedges": hyperedges}),
-        encoding="utf-8",
-    )
+    """Write a graph.grafeo in the shape to_json emits (top-level hyperedges)."""
+    _graph_write_text(graph_path, json.dumps({"nodes": nodes, "edges": edges, "hyperedges": hyperedges}), encoding="utf-8")
 
 
 def _he_ids(G) -> set[str]:
@@ -41,7 +40,7 @@ def _he_ids(G) -> set[str]:
 def _seed_two_file_graph(tmp_path):
     root = tmp_path / "corpus"
     root.mkdir()
-    graph_path = tmp_path / "graph.json"
+    graph_path = tmp_path / "graph.grafeo"
     nodes = [
         {"id": "a1", "label": "a1", "file_type": "document", "source_file": "a.md"},
         {"id": "b1", "label": "b1", "file_type": "document", "source_file": "b.md"},
@@ -102,7 +101,7 @@ def test_update_keeps_unchanged_files_hyperedge_that_shares_an_id(tmp_path):
     id. Re-extracting one must not drop the other's (#3981)."""
     root = tmp_path / "corpus"
     root.mkdir()
-    graph_path = tmp_path / "graph.json"
+    graph_path = tmp_path / "graph.grafeo"
     nodes = [
         {"id": "a1", "label": "a1", "file_type": "document", "source_file": "a.md"},
         {"id": "b1", "label": "b1", "file_type": "document", "source_file": "b.md"},
@@ -147,7 +146,7 @@ def _seed_full_graph(tmp_path, *, nested_only=False):
     """The #5081 shape: three files, one hyperedge each, plus a cross-file one."""
     root = tmp_path / "corpus"
     root.mkdir()
-    graph_path = root / "graphify-out" / "graph.json"
+    graph_path = root / "graphify-out" / "graph.grafeo"
     graph_path.parent.mkdir(parents=True)
     nodes = [
         {"id": f"{f[0]}1", "label": f, "file_type": "document", "source_file": f}
@@ -165,7 +164,7 @@ def _seed_full_graph(tmp_path, *, nested_only=False):
         # node_link_data-only writer: hyperedges live in graph attrs only (#2485).
         data.pop("hyperedges")
         data["graph"] = {"hyperedges": hyperedges}
-    graph_path.write_text(json.dumps(data), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(data), encoding="utf-8")
     return root, graph_path
 
 
@@ -200,7 +199,7 @@ def test_update_keeps_unchanged_hyperedges_in_written_graph_json(tmp_path):
     G = _update_after_editing_b(graph_path, root)
     assert to_json(G, {}, str(graph_path), force=True) is True
 
-    data = json.loads(graph_path.read_text(encoding="utf-8"))
+    data = json.loads(_graph_read_text(graph_path, encoding="utf-8"))
     ids = {h["id"] for h in data["hyperedges"]}
     assert ids == {"he_a", "he_b_v2", "he_global"}
     assert data["graph"]["hyperedges"] == data["hyperedges"]
@@ -211,9 +210,9 @@ def test_deleted_file_member_is_pruned_from_surviving_hyperedges(tmp_path):
     survives. The cross-file one keeps its live members; one left with no live
     member is dropped."""
     root, graph_path = _seed_full_graph(tmp_path)
-    data = json.loads(graph_path.read_text(encoding="utf-8"))
+    data = json.loads(_graph_read_text(graph_path, encoding="utf-8"))
     data["hyperedges"].append({"id": "he_c_only", "label": "only c", "nodes": ["c1"]})
-    graph_path.write_text(json.dumps(data), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(data), encoding="utf-8")
 
     G = _update_after_editing_b(graph_path, root)  # deletes c.md
     hes = {h["id"]: h for h in G.graph["hyperedges"]}
@@ -222,7 +221,7 @@ def test_deleted_file_member_is_pruned_from_surviving_hyperedges(tmp_path):
 
 
 def test_update_reads_nested_only_hyperedge_slot(tmp_path):
-    """A graph.json written by a node_link_data-only writer stores its hyperedges
+    """A graph.grafeo written by a node_link_data-only writer stores its hyperedges
     solely under ``graph.hyperedges``. The incremental loader must fold that slot
     the way build_from_json does (#2485), or --update loses the whole set."""
     root, graph_path = _seed_full_graph(tmp_path, nested_only=True)
@@ -237,9 +236,9 @@ def test_update_falls_back_to_nested_when_top_level_slot_is_malformed(tmp_path):
     """A null top-level value must not mask a readable nested list, and the
     loader must not raise on it either."""
     root, graph_path = _seed_full_graph(tmp_path, nested_only=True)
-    data = json.loads(graph_path.read_text(encoding="utf-8"))
+    data = json.loads(_graph_read_text(graph_path, encoding="utf-8"))
     data["hyperedges"] = None
-    graph_path.write_text(json.dumps(data), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(data), encoding="utf-8")
     G = _update_after_editing_b(graph_path, root)
     ids = _he_ids(G)
     assert {"he_a", "he_global", "he_b_v2"} <= ids
@@ -252,7 +251,7 @@ def test_update_prefers_top_level_slot_over_stale_nested_copy(tmp_path):
     copy cannot resurrect hyperedges the graph already replaced."""
     root = tmp_path / "corpus"
     root.mkdir()
-    graph_path = tmp_path / "graph.json"
+    graph_path = tmp_path / "graph.grafeo"
     nodes = [
         {"id": "a1", "label": "a1", "file_type": "document", "source_file": "a.md"},
         {"id": "b1", "label": "b1", "file_type": "document", "source_file": "b.md"},
@@ -263,7 +262,7 @@ def test_update_prefers_top_level_slot_over_stale_nested_copy(tmp_path):
         "hyperedges": [{"id": "he_top", "source_file": "a.md", "nodes": ["a1"]}],
         "graph": {"hyperedges": [{"id": "he_stale", "source_file": "a.md", "nodes": ["a1"]}]},
     }
-    graph_path.write_text(json.dumps(data), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(data), encoding="utf-8")
     new_chunk = {
         "nodes": [{"id": "b1", "label": "b1", "file_type": "document", "source_file": "b.md"}],
         "edges": [],
@@ -299,7 +298,7 @@ def test_raw_merge_reads_nested_only_hyperedge_slot(tmp_path):
 def test_prune_without_root_removes_ghost_nodes_via_grandparent_fallback(tmp_path):
     root = tmp_path / "corpus"
     (root / "graphify-out").mkdir(parents=True)
-    graph_path = root / "graphify-out" / "graph.json"
+    graph_path = root / "graphify-out" / "graph.grafeo"
     nodes = [
         {"id": "h1", "label": "handoff", "file_type": "document", "source_file": "HANDOFF.md"},
         {"id": "k1", "label": "keep", "file_type": "document", "source_file": "KEEP.md"},
@@ -314,14 +313,14 @@ def test_prune_without_root_removes_ghost_nodes_via_grandparent_fallback(tmp_pat
 
 
 def test_prune_without_root_uses_graphify_root_marker(tmp_path):
-    # graph.json not under a <root>/graphify-out layout, so grandparent wouldn't
+    # graph.grafeo not under a <root>/graphify-out layout, so grandparent wouldn't
     # help — the committed .graphify_root marker must be honored instead.
     out = tmp_path / "out"
     out.mkdir()
-    graph_path = out / "graph.json"
+    graph_path = out / "graph.grafeo"
     real_root = tmp_path / "elsewhere" / "repo"
     real_root.mkdir(parents=True)
-    (out / ".graphify_root").write_text(str(real_root), encoding="utf-8")
+    _graph_write_text(out / ".graphify_root", str(real_root), encoding="utf-8")
     nodes = [{"id": "h1", "label": "handoff", "file_type": "document", "source_file": "HANDOFF.md"}]
     _write_graph(graph_path, nodes, [], [])
     assert _infer_merge_root(graph_path) == str(real_root.resolve())
@@ -333,9 +332,9 @@ def test_stale_graphify_root_marker_falls_back_to_graphify_out_parent(tmp_path):
     root = tmp_path / "repo"
     out = root / "graphify-out"
     out.mkdir(parents=True)
-    graph_path = out / "graph.json"
+    graph_path = out / "graph.grafeo"
     _write_graph(graph_path, [], [], [])
-    (out / ".graphify_root").write_text(str(tmp_path / "moved" / "repo"), encoding="utf-8")
+    _graph_write_text(out / ".graphify_root", str(tmp_path / "moved" / "repo"), encoding="utf-8")
 
     assert _infer_merge_root(graph_path) == str(root.resolve())
 
@@ -350,7 +349,7 @@ def test_prune_matches_across_symlinked_root(tmp_path):
     (real / "graphify-out").mkdir(parents=True)
     link = tmp_path / "link"
     os.symlink(real, link)
-    graph_path = real / "graphify-out" / "graph.json"
+    graph_path = real / "graphify-out" / "graph.grafeo"
     _write_graph(graph_path, [
         {"id": "h1", "label": "handoff", "file_type": "document", "source_file": "HANDOFF.md"},
         {"id": "k1", "label": "keep", "file_type": "document", "source_file": "KEEP.md"},
@@ -367,7 +366,7 @@ def test_reextracted_file_in_prune_sources_is_not_deleted(tmp_path):
     must be REPLACED, not deleted. The old edit-workflow passed the changed file
     in prune_sources; combined with dedup keeping a same-label node, that used to
     silently delete the freshly re-extracted concept. Replace wins over delete."""
-    graph_path = tmp_path / "graphify-out" / "graph.json"
+    graph_path = tmp_path / "graphify-out" / "graph.grafeo"
     graph_path.parent.mkdir(parents=True)
     _write_graph(
         graph_path,
@@ -395,7 +394,7 @@ def test_reextracted_file_in_prune_sources_is_not_deleted(tmp_path):
 def test_genuine_deletion_still_prunes(tmp_path):
     """#1796 guard must not break real deletions: a file in prune_sources but NOT
     in new_chunks is still removed."""
-    graph_path = tmp_path / "graphify-out" / "graph.json"
+    graph_path = tmp_path / "graphify-out" / "graph.grafeo"
     graph_path.parent.mkdir(parents=True)
     _write_graph(
         graph_path,
@@ -432,7 +431,7 @@ def test_prune_matches_node_stored_absolute_against_relative_delete(tmp_path):
     now normalizes the node side too + an absolute-identity fallback."""
     root = tmp_path / "corpus"
     (root / "graphify-out").mkdir(parents=True)
-    graph_path = root / "graphify-out" / "graph.json"
+    graph_path = root / "graphify-out" / "graph.grafeo"
     nodes = [
         # gone.py's node kept an ABSOLUTE source_file (a semantic subagent wrote
         # it that way, #932); keep.py's is relative.
@@ -462,7 +461,7 @@ def test_prune_reextracted_absolute_node_not_deleted(tmp_path):
     a re-extracted file."""
     root = tmp_path / "corpus"
     (root / "graphify-out").mkdir(parents=True)
-    graph_path = root / "graphify-out" / "graph.json"
+    graph_path = root / "graphify-out" / "graph.grafeo"
     _write_graph(graph_path, [
         {"id": "g1", "label": "gone", "file_type": "code",
          "source_file": str(root / "mod.py")},
@@ -489,7 +488,7 @@ def test_graphify_root_marker_with_a_utf8_bom_still_resolves(tmp_path):
     """
     out = tmp_path / "out"
     out.mkdir()
-    graph_path = out / "graph.json"
+    graph_path = out / "graph.grafeo"
     real_root = tmp_path / "elsewhere" / "repo"
     real_root.mkdir(parents=True)
     (out / ".graphify_root").write_bytes(

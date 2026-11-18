@@ -8,6 +8,8 @@ being stamped in manifest.json, preserving the existing graph and allowing
 subsequent incremental runs to retry.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 from pathlib import Path
@@ -43,17 +45,14 @@ def _ast_node(sf: str, name: str) -> dict:
 
 def _write_graph(graph_path: Path, nodes, edges=()) -> None:
     graph_path.parent.mkdir(parents=True, exist_ok=True)
-    graph_path.write_text(
-        json.dumps({"nodes": list(nodes), "edges": list(edges), "hyperedges": []}),
-        encoding="utf-8",
-    )
+    _graph_write_text(graph_path, json.dumps({"nodes": list(nodes), "edges": list(edges), "hyperedges": []}), encoding="utf-8")
 
 
 # ── 1. Unit Tests for build_merge anomaly flagging ────────────────────────────
 
 def test_build_merge_flags_unverified_semantic_shrink(tmp_path):
     """Semantic source with 3 prior nodes re-extracted with 1 node is flagged on G.graph."""
-    gp = tmp_path / "graphify-out" / "graph.json"
+    gp = tmp_path / "graphify-out" / "graph.grafeo"
     _write_graph(gp, [_sem_node("doc.md", f"n{i}") for i in range(3)])
 
     chunk = {"nodes": [_sem_node("doc.md", "n0")], "edges": []}
@@ -66,7 +65,7 @@ def test_build_merge_flags_unverified_semantic_shrink(tmp_path):
 
 def test_build_merge_flags_shrink_when_surviving_id_is_renamed(tmp_path):
     """Surviving semantic node renamed (n0 -> renamed_concept) still flags based on count."""
-    gp = tmp_path / "graphify-out" / "graph.json"
+    gp = tmp_path / "graphify-out" / "graph.grafeo"
     _write_graph(gp, [_sem_node("doc.md", f"sec_{i}") for i in range(3)])
 
     chunk = {"nodes": [_sem_node("doc.md", "renamed_concept")], "edges": []}
@@ -78,7 +77,7 @@ def test_build_merge_flags_shrink_when_surviving_id_is_renamed(tmp_path):
 
 def test_build_merge_own_file_shrink_remains_non_fatal(tmp_path):
     """build_merge must NOT raise an exception on own-file shrink; it returns G."""
-    gp = tmp_path / "graphify-out" / "graph.json"
+    gp = tmp_path / "graphify-out" / "graph.grafeo"
     _write_graph(gp, [_sem_node("doc.md", f"n{i}") for i in range(10)])
 
     chunk = {"nodes": [_sem_node("doc.md", "n0")], "edges": []}
@@ -88,7 +87,7 @@ def test_build_merge_own_file_shrink_remains_non_fatal(tmp_path):
 
 def test_build_merge_does_not_flag_ast_code_shrink(tmp_path):
     """Deterministic AST/code shrinkage (10 -> 1) is never flagged as unverified semantic shrink."""
-    gp = tmp_path / "graphify-out" / "graph.json"
+    gp = tmp_path / "graphify-out" / "graph.grafeo"
     _write_graph(gp, [_ast_node("mod.py", f"fn{i}") for i in range(10)])
 
     chunk = {"nodes": [_ast_node("mod.py", "fn0")], "edges": []}
@@ -100,7 +99,7 @@ def test_build_merge_does_not_flag_ast_code_shrink(tmp_path):
 
 def test_build_merge_equal_count_different_ids_not_flagged(tmp_path):
     """10 -> 10 semantic nodes with completely different IDs is not flagged as a shrink."""
-    gp = tmp_path / "graphify-out" / "graph.json"
+    gp = tmp_path / "graphify-out" / "graph.grafeo"
     _write_graph(gp, [_sem_node("doc.md", f"old_{i}") for i in range(10)])
 
     chunk = {"nodes": [_sem_node("doc.md", f"new_{i}") for i in range(10)], "edges": []}
@@ -112,7 +111,7 @@ def test_build_merge_equal_count_different_ids_not_flagged(tmp_path):
 
 def test_build_merge_semantic_growth_not_flagged(tmp_path):
     """Semantic growth (3 -> 4) is unaffected."""
-    gp = tmp_path / "graphify-out" / "graph.json"
+    gp = tmp_path / "graphify-out" / "graph.grafeo"
     _write_graph(gp, [_sem_node("doc.md", f"n{i}") for i in range(3)])
 
     chunk = {"nodes": [_sem_node("doc.md", f"n{i}") for i in range(4)], "edges": []}
@@ -124,7 +123,7 @@ def test_build_merge_semantic_growth_not_flagged(tmp_path):
 
 def test_build_merge_aggregates_multiple_chunks_per_source(tmp_path):
     """Multiple chunks for the same source are summed before comparison (2 + 2 = 4 >= 3 -> no shrink)."""
-    gp = tmp_path / "graphify-out" / "graph.json"
+    gp = tmp_path / "graphify-out" / "graph.grafeo"
     _write_graph(gp, [_sem_node("doc.md", f"n{i}") for i in range(3)])
 
     chunk1 = {"nodes": [_sem_node("doc.md", "c1_a"), _sem_node("doc.md", "c1_b")], "edges": []}
@@ -137,7 +136,7 @@ def test_build_merge_aggregates_multiple_chunks_per_source(tmp_path):
 
 def test_build_merge_source_specific_growth_cannot_mask_shrink(tmp_path):
     """Growth in B (3 -> 20) cannot mask unverified shrink in A (6 -> 2)."""
-    gp = tmp_path / "graphify-out" / "graph.json"
+    gp = tmp_path / "graphify-out" / "graph.grafeo"
     _write_graph(
         gp,
         [_sem_node("a.md", f"a{i}") for i in range(6)]
@@ -154,7 +153,7 @@ def test_build_merge_source_specific_growth_cannot_mask_shrink(tmp_path):
 
 def test_merge_raw_extraction_parity(tmp_path):
     """merge_raw_extraction also flags unverified semantic shrink."""
-    gp = tmp_path / "graph.json"
+    gp = tmp_path / "graph.grafeo"
     _write_graph(gp, [_sem_node("doc.md", f"n{i}") for i in range(5)])
 
     new = {"nodes": [_sem_node("doc.md", "n0")], "edges": [], "hyperedges": []}
@@ -181,8 +180,8 @@ def test_3203_e2e_repro_protected_and_manifest_unstamped(tmp_path, monkeypatch, 
     corpus.mkdir()
     readme = corpus / "README.md"
     guide = corpus / "GUIDE.md"
-    readme.write_text("# Readme\nInitial content\n", encoding="utf-8")
-    guide.write_text("# Guide\nGuide content\n", encoding="utf-8")
+    _graph_write_text(readme, "# Readme\nInitial content\n", encoding="utf-8")
+    _graph_write_text(guide, "# Guide\nGuide content\n", encoding="utf-8")
 
     out_dir = corpus / "graphify-out"
 
@@ -212,15 +211,15 @@ def test_3203_e2e_repro_protected_and_manifest_unstamped(tmp_path, monkeypatch, 
     code1 = _run_cli()
     assert code1 == 0
 
-    graph1 = json.loads((out_dir / "graph.json").read_text(encoding="utf-8"))
+    graph1 = json.loads(_graph_read_text(out_dir / "graph.grafeo", encoding="utf-8"))
     assert len(graph1["nodes"]) == 5
 
-    manifest1 = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+    manifest1 = json.loads(_graph_read_text(out_dir / "manifest.json", encoding="utf-8"))
     assert "README.md" in manifest1
     initial_hash = manifest1["README.md"]["semantic_hash"]
 
     # Step 2: Edit README.md and re-extract returning only 1 node
-    readme.write_text("# Readme\nEdited content\n", encoding="utf-8")
+    _graph_write_text(readme, "# Readme\nEdited content\n", encoding="utf-8")
 
     def _mock_llm_run2(files, **kwargs):
         on_chunk = kwargs.get("on_chunk_done")
@@ -247,11 +246,11 @@ def test_3203_e2e_repro_protected_and_manifest_unstamped(tmp_path, monkeypatch, 
     assert "Refusing to overwrite" in err
 
     # The existing graph on disk is still the healthy 5-node graph
-    graph2 = json.loads((out_dir / "graph.json").read_text(encoding="utf-8"))
+    graph2 = json.loads(_graph_read_text(out_dir / "graph.grafeo", encoding="utf-8"))
     assert len(graph2["nodes"]) == 5
 
     # Manifest is NOT stamped with the new hash for README.md
-    manifest2 = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+    manifest2 = json.loads(_graph_read_text(out_dir / "manifest.json", encoding="utf-8"))
     assert manifest2["README.md"]["semantic_hash"] == initial_hash
 
 
@@ -260,7 +259,7 @@ def test_3203_allow_partial_override_permits_intentional_reduction(tmp_path, mon
     corpus = tmp_path / "repo"
     corpus.mkdir()
     readme = corpus / "README.md"
-    readme.write_text("# Readme\nInitial content\n", encoding="utf-8")
+    _graph_write_text(readme, "# Readme\nInitial content\n", encoding="utf-8")
 
     out_dir = corpus / "graphify-out"
 
@@ -288,7 +287,7 @@ def test_3203_allow_partial_override_permits_intentional_reduction(tmp_path, mon
     assert code1 == 0
 
     # Re-extract with --allow-partial
-    readme.write_text("# Readme\nShortened content\n", encoding="utf-8")
+    _graph_write_text(readme, "# Readme\nShortened content\n", encoding="utf-8")
 
     def _mock_llm_run2(files, **kwargs):
         on_chunk = kwargs.get("on_chunk_done")
@@ -313,7 +312,7 @@ def test_3203_allow_partial_override_permits_intentional_reduction(tmp_path, mon
     assert code2 == 0
 
     # With override, the 1-node graph is persisted
-    graph = json.loads((out_dir / "graph.json").read_text(encoding="utf-8"))
+    graph = json.loads(_graph_read_text(out_dir / "graph.grafeo", encoding="utf-8"))
     assert len(graph["nodes"]) == 1
 
 
@@ -361,16 +360,16 @@ def _cache_entry(root: Path, path: Path) -> Path:
 
 def _clear_partial_flag(entry: Path) -> None:
     """Simulate an entry written by a graphify that predates this fix."""
-    data = json.loads(entry.read_text(encoding="utf-8"))
+    data = json.loads(_graph_read_text(entry, encoding="utf-8"))
     data.pop("partial", None)
-    entry.write_text(json.dumps(data), encoding="utf-8")
+    _graph_write_text(entry, json.dumps(data), encoding="utf-8")
 
 
 def _boot_corpus(tmp_path, monkeypatch, capsys, calls):
     corpus = tmp_path / "repo"
     corpus.mkdir()
     readme = corpus / "README.md"
-    readme.write_text("# Readme\nInitial content\n", encoding="utf-8")
+    _graph_write_text(readme, "# Readme\nInitial content\n", encoding="utf-8")
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda _: None)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-fake")
     monkeypatch.setattr(
@@ -391,7 +390,7 @@ def test_5083_degraded_entry_is_marked_partial_and_next_run_reextracts(
     corpus, readme = _boot_corpus(tmp_path, monkeypatch, capsys, calls)
     out_dir = corpus / "graphify-out"
 
-    readme.write_text("# Readme\nEdited content\n", encoding="utf-8")
+    _graph_write_text(readme, "# Readme\nEdited content\n", encoding="utf-8")
     monkeypatch.setattr(
         llmmod, "extract_corpus_parallel", _mock_extract(_doc_result("README.md", 1, "readme_doc"), calls)
     )
@@ -409,7 +408,7 @@ def test_5083_degraded_entry_is_marked_partial_and_next_run_reextracts(
     assert kept["partial"] is True
     assert len(kept["nodes"]) == 1
     # The graph on disk is untouched.
-    assert len(json.loads((out_dir / "graph.json").read_text(encoding="utf-8"))["nodes"]) == 3
+    assert len(json.loads(_graph_read_text(out_dir / "graph.grafeo", encoding="utf-8"))["nodes"]) == 3
 
     # Next run: the partial entry is a MISS, so the model is consulted again and
     # the healthy extraction lands instead of re-failing against the cache.
@@ -418,7 +417,7 @@ def test_5083_degraded_entry_is_marked_partial_and_next_run_reextracts(
     )
     assert _run_cli() == 0
     assert any(str(readme) in c for c in calls[-1])
-    assert len(json.loads((out_dir / "graph.json").read_text(encoding="utf-8"))["nodes"]) == 24
+    assert len(json.loads(_graph_read_text(out_dir / "graph.grafeo", encoding="utf-8"))["nodes"]) == 24
 
 
 def test_5083_cached_degraded_replay_is_marked_and_does_not_advise_allow_partial(
@@ -427,7 +426,7 @@ def test_5083_cached_degraded_replay_is_marked_and_does_not_advise_allow_partial
     calls: list = []
     corpus, readme = _boot_corpus(tmp_path, monkeypatch, capsys, calls)
 
-    readme.write_text("# Readme\nEdited content\n", encoding="utf-8")
+    _graph_write_text(readme, "# Readme\nEdited content\n", encoding="utf-8")
     monkeypatch.setattr(
         llmmod, "extract_corpus_parallel", _mock_extract(_doc_result("README.md", 1, "readme_doc"), calls)
     )
@@ -451,7 +450,7 @@ def test_5083_cached_degraded_replay_is_marked_and_does_not_advise_allow_partial
     # No misleading "pass --allow-partial" advice for a cached replay.
     assert "pass --allow-partial to overwrite a larger existing graph" not in err
     assert "marked 1 semantic cache entry partial" in err
-    assert json.loads(entry.read_text(encoding="utf-8"))["partial"] is True
+    assert json.loads(_graph_read_text(entry, encoding="utf-8"))["partial"] is True
 
     # Re-run now re-extracts and heals the graph.
     monkeypatch.setattr(
@@ -460,5 +459,5 @@ def test_5083_cached_degraded_replay_is_marked_and_does_not_advise_allow_partial
     assert _run_cli() == 0
     assert any(str(readme) in c for c in calls[-1])
     assert len(
-        json.loads((corpus / "graphify-out" / "graph.json").read_text(encoding="utf-8"))["nodes"]
+        json.loads(_graph_read_text(corpus / "graphify-out" / "graph.grafeo", encoding="utf-8"))["nodes"]
     ) == 24

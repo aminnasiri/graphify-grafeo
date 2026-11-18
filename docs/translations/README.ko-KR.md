@@ -66,7 +66,7 @@ graphify install               # detects your assistant and registers the skill
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 영속화된 그래프에는 `graph.schema_version` 이 포함되어 통합 측이 호환되지 않는 포맷 변경을 감지할 수 있으며, 더불어 그것을 생성한 Graphify 릴리스를 식별하는 `graph.graphify_version` 도 포함됩니다.
@@ -115,7 +115,7 @@ Shortest path (3 hops):
 | **God nodes** | 가장 많이 연결된 개념들로, 모든 것이 무엇을 거쳐 흐르는지 보입니다 |
 | **Communities** | 그래프를 서브시스템으로 분할(Leiden)하고, LLM 없이 라벨을 붙입니다 |
 | **Cross-file links** | `calls` / `imports` / `inherits` / `mixes_in` 를 tree-sitter AST 를 통해 ~40 languages 에 걸쳐 해석합니다 |
-| **Query, path, explain** | 질문하기, 두 대상 사이의 경로 추적하기, 하나의 개념 설명하기. 모두 `graph.json` 을 대상으로 합니다 |
+| **Query, path, explain** | 질문하기, 두 대상 사이의 경로 추적하기, 하나의 개념 설명하기. 모두 `graph.grafeo` 을 대상으로 합니다 |
 | **Rationale + doc refs** | `# NOTE:` / `# WHY:` 주석과 ADR/RFC 인용이 일급 노드가 되어 코드에 연결됩니다 |
 | **Beyond code** | 문서, PDF, 이미지, 동영상/오디오가 모두 같은 그래프에 매핑됩니다 |
 | **Local-first** | 코드는 tree-sitter 로 로컬에서 파싱됩니다(LLM 없음, 무엇도 머신을 벗어나지 않음). 문서/미디어에 대한 의미 분석 패스만 백엔드를 호출하며, 그것도 당신이 설정한 경우에만 그렇습니다 |
@@ -394,7 +394,7 @@ viz_node_limit=0
 
 ## 그래프를 직접 사용하기
 
-AI 어시스턴트 외에도, `graphify query`, `graphify path`, `graphify explain` 로 CLI 에서 직접 `graph.json` 을 쿼리할 수 있습니다. 여러 노드에 일치하는 이름은 추측하지 않고 후보를 나열하며 거부됩니다. 스크립트는 종료 코드로 결과를 읽을 수 있습니다: `0` 은 답, `3` 은 모호한 이름, `4` 는 일치하는 노드 없음. **[Ask better graph questions](https://docs.graphify.com/guides/querying)** 와 **[query reference](https://docs.graphify.com/reference/query)** 를 참고하세요.
+AI 어시스턴트 외에도, `graphify query`, `graphify path`, `graphify explain` 로 CLI 에서 직접 `graph.grafeo` 을 쿼리할 수 있습니다. 여러 노드에 일치하는 이름은 추측하지 않고 후보를 나열하며 거부됩니다. 스크립트는 종료 코드로 결과를 읽을 수 있습니다: `0` 은 답, `3` 은 모호한 이름, `4` 는 일치하는 노드 없음. **[Ask better graph questions](https://docs.graphify.com/guides/querying)** 와 **[query reference](https://docs.graphify.com/reference/query)** 를 참고하세요.
 
 ---
 

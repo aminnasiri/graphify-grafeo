@@ -215,6 +215,10 @@ def _atomic_replace(path: "str | Path", write_fn) -> None:
 
 def write_text_atomic(path: "str | Path", text: str) -> None:
     """Atomically write ``text`` (UTF-8) to ``path``. See :func:`_atomic_replace`."""
+    from graphify.store.io import state_database, write_state
+    if state_database(path) is not None:
+        write_state(path, json.loads(text))
+        return
     _atomic_replace(path, lambda f: f.write(text))
 
 
@@ -222,7 +226,7 @@ def write_text_atomic_if_changed(path: "str | Path", text: str) -> bool:
     """Atomically write ``text`` only if it differs from what is already on disk;
     return ``True`` if a write happened, ``False`` if the file was left untouched.
 
-    Exporters regenerate their whole page set on every ``graph.json`` change and
+    Exporters regenerate their whole page set on every ``graph.grafeo`` change and
     used to rewrite every file unconditionally — tens of thousands of identical
     pages per run, which also fires inotify / re-index / sync on unchanged
     content (#3060). Skipping the atomic replace when nothing changed avoids the
@@ -248,7 +252,13 @@ def write_json_atomic(
     temp file rather than materializing the whole string first (matters for very
     large graphs). ``ensure_ascii`` mirrors ``json.dump`` so callers that emit raw
     UTF-8 (non-ASCII labels/paths) keep byte-for-byte output. ``compact`` writes one
-    line with no padding after ``,``/``:`` (graph.json, #3413). See :func:`_atomic_replace`."""
+    line with no padding after ``,``/``:`` (graph.grafeo, #3413). See :func:`_atomic_replace`."""
+    from graphify.store.io import is_database, write_graph, write_state
+    if is_database(path):
+        write_graph(path, obj)
+        return
+    if write_state(path, obj):
+        return
     separators = (",", ":") if compact else None
     _atomic_replace(
         path, lambda f: json.dump(obj, f, indent=indent, ensure_ascii=ensure_ascii, separators=separators)
@@ -465,8 +475,31 @@ def out_path(*parts: str) -> Path:
     return Path(GRAPHIFY_OUT, *parts)
 
 
+def database_path(output_dir: "str | Path | None" = None, *, root: "str | Path | None" = None) -> Path:
+    """Project database path: environment, .graphifyrc, then output directory."""
+    output = Path(output_dir) if output_dir is not None else out_path()
+    project = Path(root) if root is not None else graph_root_for(output / "graph.grafeo")
+    from graphify.rcfile import load_graphifyrc
+    value = os.environ.get("GRAPHIFY_DATABASE") or load_graphifyrc(project).get("database_path")
+    if not value:
+        return output / "graph.grafeo"
+    target = Path(value).expanduser()
+    if target.suffix.lower() != ".grafeo":
+        raise ValueError("GRAPHIFY_DATABASE/database_path must name a .grafeo database")
+    return target if target.is_absolute() else project / target
+
+
 def graph_root_for(gp: Path) -> Path:
     """Resolve the selected graph's project without interpreting paths via CWD."""
+    from graphify.store.io import is_database, connection
+    if gp.exists() and is_database(gp):
+        try:
+            with connection(gp) as store:
+                root = store.get_metadata("scan_root")
+            if isinstance(root, str) and root:
+                return Path(root)
+        except (ValueError, OSError):
+            pass
     try:
         text = (gp.parent / ".graphify_root").read_text(encoding="utf-8-sig").strip()
         if text:
@@ -493,13 +526,13 @@ def graph_root_for(gp: Path) -> Path:
 
 
 def default_graph_json() -> str:
-    """Default ``graph.json`` path under the configured output dir.
+    """Default ``graph.grafeo`` path under the configured output dir.
 
     The package-wide fallback used by serve/build/benchmark/prs and the CLI read
     commands so a ``GRAPHIFY_OUT`` override is honoured everywhere, not just where
     the path is passed explicitly (#1423).
     """
-    return str(out_path("graph.json"))
+    return str(database_path())
 
 
 def is_absolute_any_platform(p: "str | Path | None") -> bool:
@@ -507,7 +540,7 @@ def is_absolute_any_platform(p: "str | Path | None") -> bool:
 
     ``Path.is_absolute()`` and ``os.path.isabs()`` answer for the HOST os only,
     which is the wrong question for a path that was *stored* — a ``source_file``
-    in ``graph.json``, a ``prune_sources`` entry, a cache key. Those travel
+    in ``graph.grafeo``, a ``prune_sources`` entry, a cache key. Those travel
     between machines (build in Docker/CI, update on a Windows workstation, or
     the reverse), so the host's rules do not describe the string in hand:
 
@@ -600,6 +633,9 @@ def nfc(s: str) -> str:
 
 def read_graph_json(path) -> dict:
     """A graph file's data with one copy of each string its rows repeat."""
+    from graphify.store.io import is_database, read_graph
+    if is_database(path):
+        return read_graph(path)
     shared: dict[str, str] = {}
 
     def share(row: dict) -> dict:
@@ -630,7 +666,7 @@ def consumed_graph_rows(data: dict) -> dict:
 def restore_arc_direction(data: dict) -> dict:
     """Stamp each link's stored direction as ``_src``/``_tgt`` before loading.
 
-    graph.json is written ``directed: false`` but carries true direction in arc
+    graph.grafeo is written ``directed: false`` but carries true direction in arc
     order (#563), or in ``_src``/``_tgt`` markers on legacy canonicalized files.
     An undirected ``node_link_graph`` load re-orders endpoints by node-list
     position, so readers recover direction from these markers. Existing markers
@@ -647,7 +683,7 @@ def restore_arc_direction(data: dict) -> dict:
 
 
 def load_node_link_graph(path_or_data):
-    """Load a graphify graph.json into a networkx graph, accepting both writers.
+    """Load a graphify graph.grafeo into a networkx graph, accepting both writers.
 
     The clustered writer stores edges under ``links`` (networkx's node-link
     default); the raw ``--no-cluster`` writer stores them under ``edges``.

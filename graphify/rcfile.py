@@ -164,6 +164,10 @@ def load_graphifyrc(root: Path) -> dict:
                     f"Invalid {key} in {rc_path} at line {line_num}: {val!r}. "
                     f"Must be {requirement}."
                 ) from exc
+        elif key == "database_path":
+            if not val or "\x00" in val or Path(val).suffix.lower() != ".grafeo":
+                raise ValueError(f"Invalid database_path in {rc_path} at line {line_num}")
+            cfg[key] = val
         elif key.startswith("language."):
             ext_part = key[len("language."):].strip()
             if not ext_part or any(ch.isspace() for ch in ext_part):

@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 """#4955: build_merge's #479 guard and to_json's write guard must not count
 the intentional ghost folds of build_from_json (#1145, #3344, #3705) as drops.
 """
@@ -15,8 +17,8 @@ def _n(id_, label, sf, loc=None, **kw):
 
 
 def _save(tmp_path, nodes, links=()):
-    path = tmp_path / "graph.json"
-    path.write_text(json.dumps({"directed": False, "multigraph": False, "graph": {},
+    path = tmp_path / "graph.grafeo"
+    _graph_write_text(path, json.dumps({"directed": False, "multigraph": False, "graph": {},
                                 "nodes": nodes, "links": list(links)}), encoding="utf-8")
     return path
 
@@ -71,7 +73,7 @@ def test_to_json_accepts_a_method_ghost_fold(tmp_path):
     G = build_merge([dict(EMPTY)], graph_path=str(path), dedup=True)
     assert set(G.nodes) == {"c_run"}
     assert to_json(G, {}, str(path)) is True
-    assert [n["id"] for n in json.loads(path.read_text())["nodes"]] == ["c_run"]
+    assert [n["id"] for n in json.loads(_graph_read_text(path))["nodes"]] == ["c_run"]
 
 
 def test_ghost_fold_map_is_not_written_to_graph_json(tmp_path):
@@ -79,7 +81,7 @@ def test_ghost_fold_map_is_not_written_to_graph_json(tmp_path):
                             _n("client_py", "client.py", "src/client.py")])
     G = build_merge([dict(EMPTY)], graph_path=str(path), dedup=True)
     assert to_json(G, {}, str(path)) is True
-    assert "_dedup_remap" not in json.loads(path.read_text()).get("graph", {})
+    assert "_dedup_remap" not in json.loads(_graph_read_text(path)).get("graph", {})
 
 
 # --- build_merge(dedup=False): intentional folds are not unexplained drops ---
@@ -154,4 +156,4 @@ def test_merge_then_write_round_trips_each_fold(tmp_path):
         path = _save(sub, disk)
         G = build_merge([dict(EMPTY)], graph_path=str(path), dedup=False)
         assert to_json(G, {}, str(path)) is True, name
-        assert len(json.loads(path.read_text())["nodes"]) == 1, name
+        assert len(json.loads(_graph_read_text(path))["nodes"]) == 1, name

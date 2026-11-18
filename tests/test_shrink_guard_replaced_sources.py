@@ -6,6 +6,8 @@ semantic nodes new ids. build_merge drops the old ones on purpose, so the
 touch, and files with an unverified shrink (#3203), stay guarded.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 from pathlib import Path
@@ -24,19 +26,18 @@ def _sem(sf: str, name: str) -> dict:
 
 def _write_graph(gp: Path, nodes) -> None:
     gp.parent.mkdir(parents=True, exist_ok=True)
-    gp.write_text(json.dumps({"nodes": list(nodes), "edges": [], "hyperedges": []}),
-                  encoding="utf-8")
+    _graph_write_text(gp, json.dumps({"nodes": list(nodes), "edges": [], "hyperedges": []}), encoding="utf-8")
 
 
 def _saved(tmp_path: Path) -> Path:
-    gp = tmp_path / "graphify-out" / "graph.json"
+    gp = tmp_path / "graphify-out" / "graph.grafeo"
     _write_graph(gp, [_sem("a.md", f"old{i}") for i in range(2)]
                  + [_sem("b.md", f"b{i}") for i in range(3)])
     return gp
 
 
 def _ids(gp: Path) -> set[str]:
-    return {n["id"] for n in json.loads(gp.read_text(encoding="utf-8"))["nodes"]}
+    return {n["id"] for n in json.loads(_graph_read_text(gp, encoding="utf-8"))["nodes"]}
 
 
 def test_reextracted_source_with_new_ids_is_not_lost(tmp_path):
@@ -46,7 +47,7 @@ def test_reextracted_source_with_new_ids_is_not_lost(tmp_path):
 
     assert to_json(G, {0: list(G.nodes)}, str(gp), force=False) is True
     assert _ids(gp) == {"a_md_new0", "a_md_new1", "b_md_b0", "b_md_b1", "b_md_b2"}
-    assert "_replaced_sources" not in json.loads(gp.read_text(encoding="utf-8")).get("graph", {})
+    assert "_replaced_sources" not in json.loads(_graph_read_text(gp, encoding="utf-8")).get("graph", {})
 
 
 def test_pruned_source_is_not_lost(tmp_path, capsys):
@@ -109,8 +110,8 @@ def test_extract_edit_with_new_ids_and_omitted_file_writes(tmp_path, monkeypatch
     """
     corpus = tmp_path / "repo"
     corpus.mkdir()
-    (corpus / "README.md").write_text("# Readme\nv1\n", encoding="utf-8")
-    (corpus / "GUIDE.md").write_text("# Guide\nv1\n", encoding="utf-8")
+    _graph_write_text(corpus / "README.md", "# Readme\nv1\n", encoding="utf-8")
+    _graph_write_text(corpus / "GUIDE.md", "# Guide\nv1\n", encoding="utf-8")
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda _: None)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-fake")
     argv = ["graphify", "extract", str(corpus), "--backend", "claude"]
@@ -120,12 +121,12 @@ def test_extract_edit_with_new_ids_and_omitted_file_writes(tmp_path, monkeypatch
         [_sem("README.md", "a"), _sem("README.md", "b"), _sem("GUIDE.md", "g")]))
     assert _run_cli() == 0
 
-    (corpus / "README.md").write_text("# Readme\nv2\n", encoding="utf-8")
-    (corpus / "GUIDE.md").write_text("# Guide\nv2\n", encoding="utf-8")
+    _graph_write_text(corpus / "README.md", "# Readme\nv2\n", encoding="utf-8")
+    _graph_write_text(corpus / "GUIDE.md", "# Guide\nv2\n", encoding="utf-8")
     monkeypatch.setattr(llmmod, "extract_corpus_parallel", _llm(
         [_sem("README.md", "c"), _sem("README.md", "d")], uncovered=["GUIDE.md"]))
     assert _run_cli() == 0
 
-    ids = _ids(corpus / "graphify-out" / "graph.json")
+    ids = _ids(corpus / "graphify-out" / "graph.grafeo")
     assert {"README_md_c", "README_md_d", "GUIDE_md_g"} <= ids
     assert not ids & {"README_md_a", "README_md_b"}

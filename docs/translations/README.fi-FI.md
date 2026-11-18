@@ -66,7 +66,7 @@ Siinä kaikki. Saat **kolme tiedostoa**:
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 Tallennettu graafi sisältää `graph.schema_version`-tiedon, jotta integraatiot voivat havaita
@@ -117,7 +117,7 @@ Mitä saat suoraan laatikosta:
 | **Jumalsolmut** | Eniten yhteyksiä omaavat käsitteet, niin että näet, minkä läpi kaikki virtaa |
 | **Yhteisöt** | Graafi jaettuna alijärjestelmiin (Leiden), LLM-vapailla etiketeillä |
 | **Tiedostojen väliset linkit** | `calls` / `imports` / `inherits` / `mixes_in` ratkaistuna ~40 kielen yli tree-sitter AST:llä |
-| **Query, path, explain** | Esitä kysymys, jäljitä polku kahden asian välillä tai selitä yksi käsite, kaikki `graph.json`-tiedostoa vasten |
+| **Query, path, explain** | Esitä kysymys, jäljitä polku kahden asian välillä tai selitä yksi käsite, kaikki `graph.grafeo`-tiedostoa vasten |
 | **Perustelut + dokumenttiviittaukset** | `# NOTE:` / `# WHY:` -kommentit ja ADR/RFC-viittaukset muuttuvat ensiluokkaisiksi solmuiksi, jotka on linkitetty koodiin |
 | **Koodin yli** | Dokumentit, PDF-tiedostot, kuvat ja video/ääni kartoittuvat kaikki samaan graafiin |
 | **Paikallinen ensin** | Koodi jäsennetään paikallisesti tree-sitterillä (ei LLM:ää, mikään ei poistu koneeltasi); vain dokumenttien/median semanttinen käsittely kutsuu taustajärjestelmää, ja vain jos määrität sellaisen |
@@ -402,7 +402,7 @@ Committaa tai jaa graafi, niin koko tiimisi kyselee samaa kontekstia, ja katselm
 
 ## Graafin käyttö suoraan
 
-AI-avustajasi lisäksi voit kysellä `graph.json`-tiedostoa suoraan CLI:stä komennoilla `graphify query`, `graphify path` ja `graphify explain`. Nimi, joka vastaa useita solmuja, hylätään listaamalla ehdokkaat sen sijaan, että arvattaisiin. Skriptit voivat lukea lopputuloksen paluukoodista: `0` vastaus, `3` monitulkintainen nimi, `4` ei vastaavaa solmua. Katso **[Esitä parempia graafikysymyksiä](https://docs.graphify.com/guides/querying)** ja **[kyselyviite](https://docs.graphify.com/reference/query)**.
+AI-avustajasi lisäksi voit kysellä `graph.grafeo`-tiedostoa suoraan CLI:stä komennoilla `graphify query`, `graphify path` ja `graphify explain`. Nimi, joka vastaa useita solmuja, hylätään listaamalla ehdokkaat sen sijaan, että arvattaisiin. Skriptit voivat lukea lopputuloksen paluukoodista: `0` vastaus, `3` monitulkintainen nimi, `4` ei vastaavaa solmua. Katso **[Esitä parempia graafikysymyksiä](https://docs.graphify.com/guides/querying)** ja **[kyselyviite](https://docs.graphify.com/reference/query)**.
 
 ---
 

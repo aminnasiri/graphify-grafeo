@@ -2,6 +2,8 @@
 contract, usually declared in another file, bind through the contract's C3
 linearization the way solc resolves them."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import importlib.util as _ilu
 import json
@@ -37,7 +39,7 @@ _OWNABLE = (
 def _edges(tmp_path: Path, files: dict[str, str]) -> set[tuple[str, str, str, str]]:
     """(caller contract, caller, relation, callee contract.callee) for calls/uses edges."""
     for name, text in files.items():
-        (tmp_path / name).write_text(text, encoding="utf-8")
+        _graph_write_text(tmp_path / name, text, encoding="utf-8")
     result = extract(sorted(tmp_path.glob("*.sol")), cache_root=tmp_path)
     nodes = {n["id"]: n for n in result["nodes"]}
     owner = {
@@ -187,18 +189,18 @@ def test_changed_files_rebuild_keeps_inherited_calls(tmp_path: Path):
         root = tmp_path / name
         root.mkdir()
         for fname, text in files.items():
-            (root / fname).write_text(text, encoding="utf-8")
+            _graph_write_text(root / fname, text, encoding="utf-8")
         roots.append(root)
     inc, full = roots
     assert _rebuild_code(inc, no_cluster=True, acquire_lock=False, force=True)
     for root in roots:
         p = root / "Vault.sol"
-        p.write_text(p.read_text(encoding="utf-8") + "// touched\n", encoding="utf-8")
+        _graph_write_text(p, p.read_text(encoding="utf-8") + "// touched\n", encoding="utf-8")
     assert _rebuild_code(inc, changed_paths=[inc / "Vault.sol"], no_cluster=True, acquire_lock=False)
     assert _rebuild_code(full, no_cluster=True, acquire_lock=False, force=True)
 
     def edges_of(root: Path) -> set[tuple[object, object, object]]:
-        g = json.loads((root / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+        g = json.loads(_graph_read_text(root / "graphify-out" / "graph.grafeo", encoding="utf-8"))
         label = {n["id"]: n.get("label") for n in g["nodes"]}
         links = g.get("links", g.get("edges", []))
         return {

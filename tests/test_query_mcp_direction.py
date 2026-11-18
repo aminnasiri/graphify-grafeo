@@ -1,6 +1,8 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 """`_query_graph_text` on the directed graph `_load_graph` builds (the MCP path).
 
-The CLI `query` loads graph.json undirected and is covered by
+The CLI `query` loads graph.grafeo undirected and is covered by
 tests/test_query_cli.py::test_query_cli_preserves_calls_direction_when_seeded_on_callee.
 The MCP server loads the same file through `_load_graph`, which forces
 `directed: True` (#2309), and `_bfs`/`_dfs` expand through `G.neighbors()` —
@@ -22,13 +24,13 @@ def _write_calls_graph(tmp_path):
     G.add_node("caller", label="caller_fn", source_file="a.py", source_location="L1", community=0)
     G.add_node("callee", label="callee_fn", source_file="b.py", source_location="L1", community=1)
     G.add_edge("caller", "callee", relation="calls", confidence="EXTRACTED", context="call")
-    graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(json_graph.node_link_data(G, edges="links")))
+    graph_path = tmp_path / "graph.grafeo"
+    _graph_write_text(graph_path, json.dumps(json_graph.node_link_data(G, edges="links")))
     return graph_path
 
 
 def test_mcp_query_seeded_on_callee_reaches_the_caller(tmp_path):
-    G = _load_graph(str(tmp_path / "graph.json")) if False else _load_graph(str(_write_calls_graph(tmp_path)))
+    G = _load_graph(str(tmp_path / "graph.grafeo")) if False else _load_graph(str(_write_calls_graph(tmp_path)))
     assert G.is_directed()  # the precondition the defect depends on
     for mode in ("bfs", "dfs"):
         text = _query_graph_text(G, "callee_fn", mode=mode, depth=2)
@@ -82,7 +84,7 @@ def test_traversal_view_leaves_undirected_graph_alone():
 
 def test_traversal_view_folds_mutual_arcs_like_the_cli_loader(tmp_path):
     """On a plain DiGraph, u->v and v->u become one undirected edge — the same
-    fold the CLI's undirected load of graph.json performs, so the two read
+    fold the CLI's undirected load of graph.grafeo performs, so the two read
     surfaces keep returning the same subgraph."""
     from graphify.serve import _traversal_view
     G = nx.Graph()
@@ -95,8 +97,8 @@ def test_traversal_view_folds_mutual_arcs_like_the_cli_loader(tmp_path):
         {"source": "a", "target": "b", "relation": "calls", "confidence": "EXTRACTED", "context": "call"},
         {"source": "b", "target": "a", "relation": "calls", "confidence": "EXTRACTED", "context": "call"},
     ]
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps(data))
-    cli_like = json_graph.node_link_graph(json.loads(p.read_text()), edges="links")
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps(data))
+    cli_like = json_graph.node_link_graph(json.loads(_graph_read_text(p)), edges="links")
     mcp_view = _traversal_view(_load_graph(str(p)))
     assert cli_like.number_of_edges() == mcp_view.number_of_edges() == 1

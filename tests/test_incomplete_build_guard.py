@@ -8,6 +8,8 @@ guard (force=False) on an incomplete run — unless `--allow-partial` is passed 
 and exits non-zero (before writing the manifest) if the guard refuses.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text, write_text as _graph_write_text
 
 import pytest
 
@@ -17,8 +19,8 @@ import graphify.__main__ as mainmod
 def _make_docs_corpus(tmp_path):
     # Docs-only corpus: no code files, so AST extraction is skipped and the only
     # driver of incompleteness is the (stubbed) semantic chunk run.
-    (tmp_path / "README.md").write_text("# Notes\nThe entry point overview.\n")
-    (tmp_path / "GUIDE.md").write_text("# Guide\nHow to use the thing.\n")
+    _graph_write_text(tmp_path / "README.md", "# Notes\nThe entry point overview.\n")
+    _graph_write_text(tmp_path / "GUIDE.md", "# Guide\nHow to use the thing.\n")
     return tmp_path
 
 
@@ -75,7 +77,7 @@ def test_partial_extraction_refuses_to_shrink_existing_graph(monkeypatch, tmp_pa
     err = capsys.readouterr().err
     assert "Refusing to overwrite" in err
     # The manifest must not be stamped for a graph we declined to write.
-    assert not (out_dir / "graphify-out" / "manifest.json").exists()
+    assert not _graph_exists(out_dir / "graphify-out" / "manifest.json")
 
 
 def test_partial_extraction_writes_when_not_shrinking(monkeypatch, tmp_path):
@@ -114,11 +116,8 @@ def test_complete_extraction_keeps_force_write(monkeypatch, tmp_path):
 def _seed_existing_graph(gout, n):
     import json
     gout.mkdir(parents=True, exist_ok=True)
-    (gout / "graph.json").write_text(
-        json.dumps({"nodes": [{"id": f"keep{i}", "label": f"k{i}"} for i in range(n)],
-                    "links": []}),
-        encoding="utf-8",
-    )
+    _graph_write_text(gout / "graph.grafeo", json.dumps({"nodes": [{"id": f"keep{i}", "label": f"k{i}"} for i in range(n)],
+                    "links": []}), encoding="utf-8")
 
 
 def _arm_no_cluster(monkeypatch, tmp_path, *, extra_argv=()):
@@ -143,7 +142,7 @@ def _arm_no_cluster(monkeypatch, tmp_path, *, extra_argv=()):
         ["graphify", "extract", str(corpus), "--backend", "claude", "--no-cluster",
          "--out", str(out_dir), *extra_argv],
     )
-    return gout / "graph.json"
+    return gout / "graph.grafeo"
 
 
 def test_no_cluster_incomplete_build_refuses_to_shrink(tmp_path, monkeypatch, capsys):
@@ -160,7 +159,7 @@ def test_no_cluster_incomplete_build_refuses_to_shrink(tmp_path, monkeypatch, ca
     assert exc.value.code == 1
     assert "Refusing to overwrite" in capsys.readouterr().err
     # The existing 5-node graph is untouched — the partial 1-node graph was refused.
-    assert len(json.loads(graph.read_text())["nodes"]) == 5
+    assert len(json.loads(_graph_read_text(graph))["nodes"]) == 5
 
 
 def test_no_cluster_incremental_incomplete_build_carries_existing_nodes(
@@ -176,7 +175,7 @@ def test_no_cluster_incremental_incomplete_build_carries_existing_nodes(
         mainmod.main()
 
     assert exc.value.code == 0  # the raw --no-cluster path exits 0 on success
-    ids = {n["id"] for n in json.loads(graph.read_text())["nodes"]}
+    ids = {n["id"] for n in json.loads(_graph_read_text(graph))["nodes"]}
     assert {f"keep{i}" for i in range(5)} <= ids, ids
     assert "s1" in ids, ids
 
@@ -191,20 +190,20 @@ def test_no_cluster_allow_partial_overwrites(tmp_path, monkeypatch):
         mainmod.main()
 
     assert exc.value.code == 0  # the raw --no-cluster path exits 0 on success
-    assert len(json.loads(graph.read_text())["nodes"]) == 1
+    assert len(json.loads(_graph_read_text(graph))["nodes"]) == 1
 
 
 def test_no_cluster_incomplete_build_fails_closed_on_malformed_existing_graph(
     tmp_path, monkeypatch, capsys
 ):
-    """A present-but-unparseable existing graph.json (corrupt or mid-write) could
+    """A present-but-unparseable existing graph.grafeo (corrupt or mid-write) could
     be hiding a complete graph, so an incomplete --no-cluster build must refuse
     to overwrite it — matching to_json's #479 fail-closed handling, not the
     fail-open 'proceed when we can't count' path. --force: the non-incremental
     raw-dump path (the incremental path fails even earlier, at the forward
     merge — see the test below)."""
     graph = _arm_no_cluster(monkeypatch, tmp_path, extra_argv=["--force"])
-    graph.write_text("{corrupt json", encoding="utf-8")  # non-empty, unparseable
+    _graph_write_text(graph, "{corrupt json", encoding="utf-8")  # non-empty, unparseable
 
     with pytest.raises(SystemExit) as exc:
         mainmod.main()
@@ -212,17 +211,17 @@ def test_no_cluster_incomplete_build_fails_closed_on_malformed_existing_graph(
     assert exc.value.code == 1
     assert "unparseable" in capsys.readouterr().err
     # The corrupt file is left untouched rather than clobbered by the partial build.
-    assert graph.read_text() == "{corrupt json"
+    assert _graph_read_text(graph) == "{corrupt json"
 
 
 def test_no_cluster_incremental_malformed_existing_graph_refuses_merge(
     tmp_path, monkeypatch, capsys
 ):
     """#2169: an incremental --no-cluster run must hard-fail on an unparseable
-    existing graph.json (build_merge's message) instead of raw-dumping this
+    existing graph.grafeo (build_merge's message) instead of raw-dumping this
     run's chunks over it."""
     graph = _arm_no_cluster(monkeypatch, tmp_path)
-    graph.write_text("{corrupt json", encoding="utf-8")  # non-empty, unparseable
+    _graph_write_text(graph, "{corrupt json", encoding="utf-8")  # non-empty, unparseable
 
     with pytest.raises(SystemExit) as exc:
         mainmod.main()
@@ -230,4 +229,4 @@ def test_no_cluster_incremental_malformed_existing_graph_refuses_merge(
     assert exc.value.code == 1
     assert "Cannot read" in capsys.readouterr().err
     # The corrupt file is left untouched rather than clobbered.
-    assert graph.read_text() == "{corrupt json"
+    assert _graph_read_text(graph) == "{corrupt json"

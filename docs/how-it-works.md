@@ -86,7 +86,13 @@ Every extracted file is fingerprinted by content hash. Re-runs skip unchanged fi
 
 ## The graph format
 
-The output `graph.json` uses NetworkX's node-link format. Each node has:
+Grafeo is the sole persistent store (`graphify-out/graph.grafeo`). Graph records,
+communities, labels, membership signatures and per-file hashes live in one
+transactional database. Updates reconcile only changed records; NetworkX remains
+a detached analytical view for clustering and retrieval. Python 3.12+ is required.
+See [storage and migration](graph-store.md).
+
+`graphify export json` explicitly produces `graph.json`, which uses NetworkX's node-link format. Each node has:
 - `id` — stable identifier
 - `label` — human-readable name
 - `file_type` — `code`, `document`, `paper`, `image`, `rationale`

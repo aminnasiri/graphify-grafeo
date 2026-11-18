@@ -1,4 +1,6 @@
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import json
 
@@ -18,8 +20,8 @@ def _write_graph(tmp_path):
     graph.add_edge("caller", "target", relation="calls", context="call", confidence="EXTRACTED")
     graph.add_edge("barrel", "target", relation="re_exports", context="export", confidence="EXTRACTED")
     graph.add_edge("consumer", "target", relation="imports", context="import", confidence="EXTRACTED")
-    graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(json_graph.node_link_data(graph, edges="links")), encoding="utf-8")
+    graph_path = tmp_path / "graph.grafeo"
+    _graph_write_text(graph_path, json.dumps(json_graph.node_link_data(graph, edges="links")), encoding="utf-8")
     return graph_path
 
 
@@ -75,8 +77,8 @@ def test_affected_cli_forces_directed_on_undirected_graph(monkeypatch, tmp_path,
     data = json_graph.node_link_data(graph, edges="links")
     # Persist as undirected on disk to reproduce the bug condition.
     data["directed"] = False
-    graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(data), encoding="utf-8")
+    graph_path = tmp_path / "graph.grafeo"
+    _graph_write_text(graph_path, json.dumps(data), encoding="utf-8")
 
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda _: None)
     monkeypatch.setattr(
@@ -96,7 +98,7 @@ def test_affected_cli_forces_directed_on_undirected_graph(monkeypatch, tmp_path,
 
 
 def test_affected_cli_loads_edges_keyed_graph(monkeypatch, tmp_path, capsys):
-    """graphify's `extract` writes graph.json with an "edges" key (not networkx's
+    """graphify's `extract` writes graph.grafeo with an "edges" key (not networkx's
     default "links"). affected.load_graph must handle it; before the edges/links
     normalization it raised an uncaught KeyError: 'links' (same class as #1198)."""
     graph = nx.DiGraph()
@@ -107,8 +109,8 @@ def test_affected_cli_loads_edges_keyed_graph(monkeypatch, tmp_path, capsys):
     # Emulate graphify extract output: top-level "edges" key instead of "links".
     data = json_graph.node_link_data(graph, edges="links")
     data["edges"] = data.pop("links")
-    graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(data), encoding="utf-8")
+    graph_path = tmp_path / "graph.grafeo"
+    _graph_write_text(graph_path, json.dumps(data), encoding="utf-8")
 
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda _: None)
     monkeypatch.setattr(
@@ -252,8 +254,8 @@ def test_affected_cli_source_file_path_uses_file_level_node(monkeypatch, tmp_pat
         context="import",
         confidence="EXTRACTED",
     )
-    graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(json_graph.node_link_data(graph, edges="links")), encoding="utf-8")
+    graph_path = tmp_path / "graph.grafeo"
+    _graph_write_text(graph_path, json.dumps(json_graph.node_link_data(graph, edges="links")), encoding="utf-8")
 
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda _: None)
     monkeypatch.setattr(
@@ -284,8 +286,8 @@ def _write_callsite_graph(tmp_path):
     g.add_edge("loader", "transition", relation="calls", context="call",
                confidence="EXTRACTED", source_file="apollo_pipeline_status.py",
                source_location="L158")
-    gp = tmp_path / "graph.json"
-    gp.write_text(json.dumps(json_graph.node_link_data(g, edges="links")), encoding="utf-8")
+    gp = tmp_path / "graph.grafeo"
+    _graph_write_text(gp, json.dumps(json_graph.node_link_data(g, edges="links")), encoding="utf-8")
     return gp
 
 
@@ -306,8 +308,8 @@ def test_affected_falls_back_to_def_line_when_edge_has_no_location(monkeypatch, 
     g.add_node("loader", label="load()", source_file="a.py", source_location="L90")
     g.add_node("t", label="target()", source_file="b.py", source_location="L5")
     g.add_edge("loader", "t", relation="calls", confidence="INFERRED")  # no source_location
-    gp = tmp_path / "graph.json"
-    gp.write_text(json.dumps(json_graph.node_link_data(g, edges="links")), encoding="utf-8")
+    gp = tmp_path / "graph.grafeo"
+    _graph_write_text(gp, json.dumps(json_graph.node_link_data(g, edges="links")), encoding="utf-8")
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda _: None)
     monkeypatch.setattr(mainmod.sys, "argv", ["graphify", "affected", "target", "--graph", str(gp)])
     mainmod.main()
@@ -346,7 +348,7 @@ def test_affected_absolute_seed_resolves_via_graph_root_off_cwd(tmp_path, monkey
     was the analysed repo root. Editors and scripts pass an absolute path from
     anywhere, so `affected` kept answering "nothing depends on this" — the
     maintainer's noted follow-up. The root is now derived from the graph's own
-    location (`<root>/graphify-out/graph.json`).
+    location (`<root>/graphify-out/graph.grafeo`).
     """
     from graphify.paths import GRAPHIFY_OUT_NAME
 
@@ -357,8 +359,8 @@ def test_affected_absolute_seed_resolves_via_graph_root_off_cwd(tmp_path, monkey
     g.add_node("target", label="Foo", source_file="pkg/foo.py", source_location="L1")
     g.add_node("caller", label="X()", source_file="app.py", source_location="L4")
     g.add_edge("caller", "target", relation="calls")
-    gp = out_dir / "graph.json"
-    gp.write_text(json.dumps(json_graph.node_link_data(g, edges="links")), encoding="utf-8")
+    gp = out_dir / "graph.grafeo"
+    _graph_write_text(gp, json.dumps(json_graph.node_link_data(g, edges="links")), encoding="utf-8")
 
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
@@ -385,8 +387,8 @@ def test_affected_absolute_seed_outside_root_misses_cleanly(tmp_path, monkeypatc
     g.add_node("target", label="Foo", source_file="pkg/foo.py", source_location="L1")
     g.add_node("caller", label="X()", source_file="app.py", source_location="L4")
     g.add_edge("caller", "target", relation="calls")
-    gp = out_dir / "graph.json"
-    gp.write_text(json.dumps(json_graph.node_link_data(g, edges="links")), encoding="utf-8")
+    gp = out_dir / "graph.grafeo"
+    _graph_write_text(gp, json.dumps(json_graph.node_link_data(g, edges="links")), encoding="utf-8")
 
     monkeypatch.chdir(tmp_path)
     outside_seed = str(tmp_path / "other-repo" / "pkg" / "foo.py")  # same basename, different tree
@@ -405,7 +407,7 @@ def test_affected_absolute_seed_outside_root_misses_cleanly(tmp_path, monkeypatc
 
 
 def test_affected_absolute_seed_with_graph_not_under_out_dir(tmp_path, monkeypatch, capsys):
-    """Fallback layout: when --graph points at a graph.json NOT under the
+    """Fallback layout: when --graph points at a graph.grafeo NOT under the
     graphify-out dir, the root is the graph's own parent (`else gp.parent`)."""
     repo_root = tmp_path / "repo"
     repo_root.mkdir(parents=True)
@@ -413,8 +415,8 @@ def test_affected_absolute_seed_with_graph_not_under_out_dir(tmp_path, monkeypat
     g.add_node("target", label="Foo", source_file="pkg/foo.py", source_location="L1")
     g.add_node("caller", label="X()", source_file="app.py", source_location="L4")
     g.add_edge("caller", "target", relation="calls")
-    gp = repo_root / "graph.json"  # directly under repo_root, not graphify-out/
-    gp.write_text(json.dumps(json_graph.node_link_data(g, edges="links")), encoding="utf-8")
+    gp = repo_root / "graph.grafeo"  # directly under repo_root, not graphify-out/
+    _graph_write_text(gp, json.dumps(json_graph.node_link_data(g, edges="links")), encoding="utf-8")
 
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()

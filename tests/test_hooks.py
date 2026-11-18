@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, is_file as _graph_is_file, read_text as _graph_read_text, write_text as _graph_write_text
 """Tests for hooks.py - git hook install/uninstall."""
 import os
 import shutil
@@ -22,8 +24,8 @@ def test_install_creates_hook(tmp_path):
     repo = _make_git_repo(tmp_path)
     result = install(repo)
     hook = repo / ".git" / "hooks" / "post-commit"
-    assert hook.exists()
-    assert _HOOK_MARKER in hook.read_text()
+    assert _graph_exists(hook)
+    assert _HOOK_MARKER in _graph_read_text(hook)
     assert "installed" in result
 
 
@@ -32,7 +34,7 @@ def test_install_is_executable(tmp_path):
     install(repo)
     hook = repo / ".git" / "hooks" / "post-commit"
     if os.name == "nt":
-        assert hook.read_text(encoding="utf-8").startswith("#!/bin/sh\n")
+        assert _graph_read_text(hook, encoding="utf-8").startswith("#!/bin/sh\n")
     else:
         assert hook.stat().st_mode & 0o111  # executable bit set
 
@@ -44,16 +46,16 @@ def test_install_idempotent(tmp_path):
     assert "already installed" in result
     # marker appears only once
     hook = repo / ".git" / "hooks" / "post-commit"
-    assert hook.read_text().count(_HOOK_MARKER) == 1
+    assert _graph_read_text(hook).count(_HOOK_MARKER) == 1
 
 
 def test_install_appends_to_existing_hook(tmp_path):
     repo = _make_git_repo(tmp_path)
     hook = repo / ".git" / "hooks" / "post-commit"
-    hook.write_text("#!/bin/bash\necho existing\n")
+    _graph_write_text(hook, "#!/bin/bash\necho existing\n")
     hook.chmod(0o755)
     install(repo)
-    content = hook.read_text()
+    content = _graph_read_text(hook)
     assert "existing" in content
     assert _HOOK_MARKER in content
 
@@ -63,7 +65,7 @@ def test_uninstall_removes_hook(tmp_path):
     install(repo)
     result = uninstall(repo)
     hook = repo / ".git" / "hooks" / "post-commit"
-    assert not hook.exists()
+    assert not _graph_exists(hook)
     assert "removed" in result.lower()
 
 
@@ -95,8 +97,8 @@ def test_install_creates_post_checkout_hook(tmp_path):
     repo = _make_git_repo(tmp_path)
     install(repo)
     hook = repo / ".git" / "hooks" / "post-checkout"
-    assert hook.exists()
-    assert _CHECKOUT_MARKER in hook.read_text()
+    assert _graph_exists(hook)
+    assert _CHECKOUT_MARKER in _graph_read_text(hook)
 
 
 def test_install_post_checkout_is_executable(tmp_path):
@@ -104,7 +106,7 @@ def test_install_post_checkout_is_executable(tmp_path):
     install(repo)
     hook = repo / ".git" / "hooks" / "post-checkout"
     if os.name == "nt":
-        assert hook.read_text(encoding="utf-8").startswith("#!/bin/sh\n")
+        assert _graph_read_text(hook, encoding="utf-8").startswith("#!/bin/sh\n")
     else:
         assert hook.stat().st_mode & 0o111
 
@@ -114,7 +116,7 @@ def test_uninstall_removes_post_checkout_hook(tmp_path):
     install(repo)
     uninstall(repo)
     hook = repo / ".git" / "hooks" / "post-checkout"
-    assert not hook.exists()
+    assert not _graph_exists(hook)
 
 
 def test_install_creates_post_merge_hook(tmp_path):
@@ -124,8 +126,8 @@ def test_install_creates_post_merge_hook(tmp_path):
     repo = _make_git_repo(tmp_path)
     install(repo)
     hook = repo / ".git" / "hooks" / "post-merge"
-    assert hook.exists()
-    assert _MERGE_HOOK_MARKER in hook.read_text()
+    assert _graph_exists(hook)
+    assert _MERGE_HOOK_MARKER in _graph_read_text(hook)
 
 
 def test_install_post_merge_is_executable(tmp_path):
@@ -133,7 +135,7 @@ def test_install_post_merge_is_executable(tmp_path):
     install(repo)
     hook = repo / ".git" / "hooks" / "post-merge"
     if os.name == "nt":
-        assert hook.read_text(encoding="utf-8").startswith("#!/bin/sh\n")
+        assert _graph_read_text(hook, encoding="utf-8").startswith("#!/bin/sh\n")
     else:
         assert hook.stat().st_mode & 0o111
 
@@ -143,7 +145,7 @@ def test_uninstall_removes_post_merge_hook(tmp_path):
     install(repo)
     uninstall(repo)
     hook = repo / ".git" / "hooks" / "post-merge"
-    assert not hook.exists()
+    assert not _graph_exists(hook)
 
 
 def test_status_shows_both_hooks(tmp_path):
@@ -172,8 +174,8 @@ def test_install_creates_post_rewrite_hook(tmp_path):
     repo = _make_git_repo(tmp_path)
     install(repo)
     hook = repo / ".git" / "hooks" / "post-rewrite"
-    assert hook.exists()
-    assert _REWRITE_HOOK_MARKER in hook.read_text()
+    assert _graph_exists(hook)
+    assert _REWRITE_HOOK_MARKER in _graph_read_text(hook)
 
 
 def test_install_post_rewrite_is_executable(tmp_path):
@@ -181,7 +183,7 @@ def test_install_post_rewrite_is_executable(tmp_path):
     install(repo)
     hook = repo / ".git" / "hooks" / "post-rewrite"
     if os.name == "nt":
-        assert hook.read_text(encoding="utf-8").startswith("#!/bin/sh\n")
+        assert _graph_read_text(hook, encoding="utf-8").startswith("#!/bin/sh\n")
     else:
         assert hook.stat().st_mode & 0o111
 
@@ -190,7 +192,7 @@ def test_uninstall_removes_post_rewrite_hook(tmp_path):
     repo = _make_git_repo(tmp_path)
     install(repo)
     uninstall(repo)
-    assert not (repo / ".git" / "hooks" / "post-rewrite").exists()
+    assert not _graph_exists(repo / ".git" / "hooks" / "post-rewrite")
 
 
 def test_status_shows_post_rewrite_hook(tmp_path):
@@ -205,16 +207,16 @@ def test_status_shows_post_rewrite_hook(tmp_path):
 def test_install_appends_to_a_user_post_rewrite_hook_and_uninstall_keeps_it(tmp_path):
     repo = _make_git_repo(tmp_path)
     hook = repo / ".git" / "hooks" / "post-rewrite"
-    hook.write_text("#!/bin/sh\necho 'user rewrite hook'\n", encoding="utf-8")
+    _graph_write_text(hook, "#!/bin/sh\necho 'user rewrite hook'\n", encoding="utf-8")
     hook.chmod(0o755)
 
     assert "appended to existing post-rewrite hook" in install(repo)
-    content = hook.read_text(encoding="utf-8")
+    content = _graph_read_text(hook, encoding="utf-8")
     assert "echo 'user rewrite hook'" in content
     assert _REWRITE_HOOK_MARKER in content
 
     uninstall(repo)
-    content = hook.read_text(encoding="utf-8")
+    content = _graph_read_text(hook, encoding="utf-8")
     assert "echo 'user rewrite hook'" in content
     assert _REWRITE_HOOK_MARKER not in content
 
@@ -240,7 +242,7 @@ def test_hooks_dir_rejects_multiline_git_output(tmp_path, monkeypatch):
     monkeypatch.setattr("subprocess.run", fake_run)
 
     assert _hooks_dir(repo) == repo / ".git" / "hooks"
-    assert not (repo / "--path-format=absolute\n.git").exists()
+    assert not _graph_exists(repo / "--path-format=absolute\n.git")
 
 
 def test_hooks_dir_accepts_absolute_git_hooks_path(tmp_path, monkeypatch):
@@ -274,8 +276,8 @@ def test_install_embeds_pinned_interpreter(tmp_path):
     import re, sys
     repo = _make_git_repo(tmp_path)
     install(repo)
-    commit_hook = (repo / ".git" / "hooks" / "post-commit").read_text()
-    checkout_hook = (repo / ".git" / "hooks" / "post-checkout").read_text()
+    commit_hook = _graph_read_text(repo / ".git" / "hooks" / "post-commit")
+    checkout_hook = _graph_read_text(repo / ".git" / "hooks" / "post-checkout")
     # Compute the sanitized value the same way install() does.
     expected = sys.executable if not re.search(r"[^a-zA-Z0-9/_.@:\\-]", sys.executable) else ""
     if expected:
@@ -303,7 +305,7 @@ def test_hook_check_no_additionalContext(tmp_path):
     import sys
     out = tmp_path / "graphify-out"
     out.mkdir()
-    (out / "graph.json").write_text("{}", encoding="utf-8")
+    _graph_write_text(out / "graph.grafeo", "{}", encoding="utf-8")
 
     result = subprocess.run(
         [sys.executable, "-m", "graphify", "hook-check"],
@@ -463,7 +465,7 @@ def test_rebuild_bodies_reject_an_out_of_repo_graphify_root(name, body, tmp_path
     outside = tmp_path / "outside"
     (repo / "graphify-out").mkdir(parents=True)
     outside.mkdir()
-    (repo / "graphify-out" / ".graphify_root").write_text(str(outside), encoding="utf-8")
+    _graph_write_text(repo / "graphify-out" / ".graphify_root", str(outside), encoding="utf-8")
     monkeypatch.chdir(repo)
     ns = {"Path": Path, "os": os}
     exec(compile(_extract_root_resolution(body), "<rebuild_body>", "exec"), ns)
@@ -480,7 +482,7 @@ def test_rebuild_bodies_honour_an_in_repo_graphify_root(name, body, tmp_path, mo
     repo = tmp_path / "repo"
     (repo / "graphify-out").mkdir(parents=True)
     (repo / "backend").mkdir()
-    (repo / "graphify-out" / ".graphify_root").write_text("backend", encoding="utf-8")
+    _graph_write_text(repo / "graphify-out" / ".graphify_root", "backend", encoding="utf-8")
     monkeypatch.chdir(repo)
     ns = {"Path": Path, "os": os}
     exec(compile(_extract_root_resolution(body), "<rebuild_body>", "exec"), ns)
@@ -499,7 +501,7 @@ def test_rebuild_bodies_treat_blank_graphify_out_as_default(name, body, tmp_path
     repo = tmp_path / "repo"
     (repo / "graphify-out").mkdir(parents=True)
     (repo / "backend").mkdir()
-    (repo / "graphify-out" / ".graphify_root").write_text("backend", encoding="utf-8")
+    _graph_write_text(repo / "graphify-out" / ".graphify_root", "backend", encoding="utf-8")
     script = (
         "import os\nfrom pathlib import Path\n"
         + _extract_root_resolution(body)
@@ -531,7 +533,7 @@ def test_rebuild_bodies_survive_a_graphify_root_symlink_loop(name, body, tmp_pat
     (repo / "graphify-out").mkdir(parents=True)
     (repo / "loop_a").symlink_to(repo / "loop_b")
     (repo / "loop_b").symlink_to(repo / "loop_a")
-    (repo / "graphify-out" / ".graphify_root").write_text("loop_a", encoding="utf-8")
+    _graph_write_text(repo / "graphify-out" / ".graphify_root", "loop_a", encoding="utf-8")
     monkeypatch.chdir(repo)
     ns = {"Path": Path, "os": os}
     exec(compile(_extract_root_resolution(body), "<rebuild_body>", "exec"), ns)
@@ -681,7 +683,7 @@ def test_installed_hooks_contain_no_nohup(tmp_path):
     repo = _make_git_repo(tmp_path)
     install(repo)
     for name in ("post-commit", "post-checkout"):
-        text = (repo / ".git" / "hooks" / name).read_text(encoding="utf-8")
+        text = _graph_read_text(repo / ".git" / "hooks" / name, encoding="utf-8")
         assert "nohup" not in text, f"installed {name} still references nohup"
         assert "start_new_session=True" in text
 
@@ -718,7 +720,7 @@ def test_posix_custom_hookspath_still_works(tmp_path):
     _set_hookspath(repo, ".husky")
     msg = install(repo)
     assert "post-commit" in msg
-    assert (repo / ".husky" / "post-commit").exists()
+    assert _graph_exists(repo / ".husky" / "post-commit")
 
 
 def test_hookspath_outside_repo_falls_back_to_default(tmp_path, capsys):
@@ -733,9 +735,9 @@ def test_hookspath_outside_repo_falls_back_to_default(tmp_path, capsys):
     msg = install(repo)
     err = capsys.readouterr().err
     assert "refusing hooks path" in err
-    assert not outside.exists()
-    assert (repo / ".git" / "hooks" / "post-commit").exists()
-    assert (repo / ".git" / "hooks" / "post-checkout").exists()
+    assert not _graph_exists(outside)
+    assert _graph_exists(repo / ".git" / "hooks" / "post-commit")
+    assert _graph_exists(repo / ".git" / "hooks" / "post-checkout")
     assert ".git" in msg and "hooks" in msg
 
 
@@ -746,7 +748,7 @@ def test_hookspath_relative_escape_falls_back_to_default(tmp_path, capsys):
     _hooks_dir(repo)
     err = capsys.readouterr().err
     assert "refusing hooks path" in err
-    assert not (tmp_path / "escaped").exists()
+    assert not _graph_exists(tmp_path / "escaped")
     assert _hooks_dir(repo) == (repo / ".git" / "hooks").resolve()
 
 
@@ -760,7 +762,7 @@ def test_linked_worktree_keeps_its_default_hooks_dir(tmp_path):
                    check=True, capture_output=True)
     subprocess.run(["git", "-C", str(main), "config", "user.name", "t"],
                    check=True, capture_output=True)
-    (main / "f").write_text("x\n", encoding="utf-8")
+    _graph_write_text(main / "f", "x\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(main), "add", "f"], check=True, capture_output=True)
     subprocess.run(["git", "-C", str(main), "commit", "-m", "x"],
                    check=True, capture_output=True)
@@ -774,7 +776,7 @@ def test_linked_worktree_keeps_its_default_hooks_dir(tmp_path):
     got = _hooks_dir(wt)
     assert got == (wt / expected).resolve()
     assert _is_within_repo_git(got, main)
-    assert not (wt / ".git" / "hooks").exists()
+    assert not _graph_exists(wt / ".git" / "hooks")
 
 
 def _is_within_repo_git(hooks: Path, main: Path) -> bool:
@@ -809,14 +811,14 @@ def test_linked_worktree_hooks_dir_under_non_ascii_path(tmp_path, monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", cp1252_locale_run)
     assert _hooks_dir(wt) == (main / ".git" / "hooks").resolve()
-    assert not (tmp_path / "café".encode("utf-8").decode("cp1252")).exists()
+    assert not _graph_exists(tmp_path / "café".encode("utf-8").decode("cp1252"))
 
 
 def test_default_hooks_dir_unaffected(tmp_path):
     """No core.hooksPath -> normal .git/hooks install, no rejection."""
     repo = _make_git_repo(tmp_path)
     install(repo)
-    assert (repo / ".git" / "hooks" / "post-commit").exists()
+    assert _graph_exists(repo / ".git" / "hooks" / "post-commit")
 
 
 # ── foreground hook cost: probes must be cheap and quiet ─────────────────────
@@ -865,10 +867,7 @@ def _detect_run(tmp_path, home, stub_bin, env_extra=None):
     (per the #2126/#2641 convention)."""
     from graphify.hooks import _PYTHON_DETECT
     script = tmp_path / "detect_run.sh"
-    script.write_text(
-        _PYTHON_DETECT + '\necho "RESOLVED=$GRAPHIFY_PYTHON"\n',
-        encoding="utf-8", newline="\n",
-    )
+    _graph_write_text(script, _PYTHON_DETECT + '\necho "RESOLVED=$GRAPHIFY_PYTHON"\n', encoding="utf-8", newline="\n")
     env = dict(os.environ)
     env["HOME"] = str(home)
     env.pop("UV_TOOL_DIR", None)
@@ -905,7 +904,7 @@ def _broken_uv_machine(tmp_path):
     # under uv tool install no system python can see the isolated venv (#2852).
     for name in ("python3", "python"):
         py = stub_bin / name
-        py.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8", newline="\n")
+        _graph_write_text(py, "#!/bin/sh\nexit 1\n", encoding="utf-8", newline="\n")
         py.chmod(0o755)
     return home, stub_bin
 
@@ -915,10 +914,7 @@ def _tool_venv(home, tool, rel, ok):
     ok=False simulates a venv without graphify (the probe must reject it)."""
     py = home / ".local" / "share" / "uv" / "tools" / tool / rel
     py.parent.mkdir(parents=True, exist_ok=True)
-    py.write_text(
-        "#!/bin/sh\nexit 0\n" if ok else "#!/bin/sh\nexit 1\n",
-        encoding="utf-8", newline="\n",
-    )
+    _graph_write_text(py, "#!/bin/sh\nexit 0\n" if ok else "#!/bin/sh\nexit 1\n", encoding="utf-8", newline="\n")
     py.chmod(0o755)
     return py
 
@@ -954,7 +950,7 @@ def test_uv_tool_env_honors_uv_tool_dir_and_windows_layout(tmp_path):
     tools = tmp_path / "custom-tools"
     py = tools / "graphifyy" / "Scripts" / "python.exe"
     py.parent.mkdir(parents=True)
-    py.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8", newline="\n")
+    _graph_write_text(py, "#!/bin/sh\nexit 0\n", encoding="utf-8", newline="\n")
     py.chmod(0o755)
     res = _detect_run(tmp_path, home, stub_bin, env_extra={"UV_TOOL_DIR": str(tools)})
     assert res.returncode == 0, res.stderr
@@ -983,13 +979,10 @@ def test_shebang_parse_requires_leading_hash_bang(tmp_path):
     home, stub_bin = _broken_uv_machine(tmp_path)
     mine = _tool_venv(home, "graphifyy", "bin/python", ok=True)
     decoy = stub_bin / "fakepy"
-    decoy.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8", newline="\n")
+    _graph_write_text(decoy, "#!/bin/sh\nexit 0\n", encoding="utf-8", newline="\n")
     decoy.chmod(0o755)
     launcher = stub_bin / "graphify"
-    launcher.write_text(
-        f"{decoy}\nnot a script — the first line just names a python\n",
-        encoding="utf-8", newline="\n",
-    )
+    _graph_write_text(launcher, f"{decoy}\nnot a script — the first line just names a python\n", encoding="utf-8", newline="\n")
     launcher.chmod(0o755)
     res = _detect_run(tmp_path, home, stub_bin)
     assert res.returncode == 0, res.stderr
@@ -1041,15 +1034,11 @@ def _shell_verdict(pattern: str, candidate: str, tmp_path) -> str:
     allowlist runs.
     """
     script = tmp_path / "case_test.sh"
-    script.write_text(
-        f"CANDIDATE={_sh_single_quote(candidate)}\n"
+    _graph_write_text(script, f"CANDIDATE={_sh_single_quote(candidate)}\n"
         f'case "$CANDIDATE" in\n'
         f"  {pattern}) echo REJECTED ;;\n"
         f"  *) echo ACCEPTED ;;\n"
-        f"esac\n",
-        encoding="utf-8",
-        newline="\n",
-    )
+        f"esac\n", encoding="utf-8", newline="\n")
     # Invoke by bare filename from cwd: a Windows absolute path in argv would
     # hit the same backslash mangling the script contents just avoided.
     result = subprocess.run(
@@ -1140,10 +1129,7 @@ def test_shell_verdict_delivers_the_payload_bash_unmodified(payload, tmp_path):
     while a backslash path never gets tested at all.
     """
     script = tmp_path / "echo_payload.sh"
-    script.write_text(
-        f"CANDIDATE={_sh_single_quote(payload)}\nprintf %s \"$CANDIDATE\"\n",
-        encoding="utf-8", newline="\n",
-    )
+    _graph_write_text(script, f"CANDIDATE={_sh_single_quote(payload)}\nprintf %s \"$CANDIDATE\"\n", encoding="utf-8", newline="\n")
     result = subprocess.run(
         ["bash", script.name], capture_output=True, text=True, cwd=str(tmp_path),
     )
@@ -1234,7 +1220,7 @@ def test_worktree_guard_runs_on_primary_skips_linked(tmp_path):
     _git("init", "-q", ".", cwd=primary)
     _git("config", "user.email", "t@t.co", cwd=primary)
     _git("config", "user.name", "t", cwd=primary)
-    (primary / "a.txt").write_text("x")
+    _graph_write_text(primary / "a.txt", "x")
     _git("add", "-A", cwd=primary)
     _git("commit", "-qm", "init", cwd=primary)
     linked = tmp_path / "linked"
@@ -1284,7 +1270,7 @@ def test_toplevel_anchor_runs_from_the_top_when_git_starts_the_hook_in_a_subdir(
     _git("init", "-q", ".", cwd=primary)
     _git("config", "user.email", "t@t.co", cwd=primary)
     _git("config", "user.name", "t", cwd=primary)
-    (primary / "a.txt").write_text("x")
+    _graph_write_text(primary / "a.txt", "x")
     _git("add", "-A", cwd=primary)
     _git("commit", "-qm", "init", cwd=primary)
     sub = primary / ".claude" / "worktrees"
@@ -1306,14 +1292,14 @@ def test_toplevel_anchor_runs_from_the_top_when_git_starts_the_hook_in_a_subdir(
     for label, cwd, extra in cases:
         r = subprocess.run(["sh", "-c", snippet], cwd=cwd, env={**env, **extra},
                            capture_output=True, text=True)
-        assert (primary / "anchored.txt").exists(), f"{label}: did not run at the top ({r.stderr})"
-        assert not (sub / "anchored.txt").exists(), f"{label}: ran in the subdirectory"
+        assert _graph_exists(primary / "anchored.txt"), f"{label}: did not run at the top ({r.stderr})"
+        assert not _graph_exists(sub / "anchored.txt"), f"{label}: ran in the subdirectory"
         assert "GIT_OK" in r.stdout, f"{label}: git broke after the cd ({r.stderr})"
-        (primary / "anchored.txt").unlink()
+        _graph_unlink(primary / "anchored.txt")
 
     r = subprocess.run(["sh", "-c", snippet], cwd=linked, env=env,
                        capture_output=True, text=True)
-    assert not (linked / "anchored.txt").exists() and not (primary / "anchored.txt").exists(), \
+    assert not _graph_exists(linked / "anchored.txt") and not _graph_exists(primary / "anchored.txt"), \
         "the linked worktree must still be skipped by the guard"
 
 
@@ -1322,15 +1308,12 @@ def test_toplevel_anchor_runs_from_the_top_when_git_starts_the_hook_in_a_subdir(
 def _append_duplicate_config_entries(repo: Path) -> None:
     """Append git-legal duplicate keys/sections (as VS Code writes them)."""
     cfg = repo / ".git" / "config"
-    cfg.write_text(
-        cfg.read_text(encoding="utf-8")
+    _graph_write_text(cfg, cfg.read_text(encoding="utf-8")
         + '[remote "origin"]\n'
         + "\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
         + "\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
         + "[core]\n"
-        + "\tignorecase = true\n",
-        encoding="utf-8",
-    )
+        + "\tignorecase = true\n", encoding="utf-8")
 
 
 def test_hooks_dir_no_warning_on_duplicate_config_keys(tmp_path, capsys):
@@ -1358,7 +1341,7 @@ def test_hooks_dir_duplicate_config_keys_honor_custom_hookspath(tmp_path, capsys
     assert d == (repo / ".husky").resolve()
 
 
-# ── #1902: hook install must register the graph.json union merge driver ─────
+# ── #1902: hook install must register the graph.grafeo union merge driver ─────
 
 def test_install_registers_merge_driver(tmp_path):
     """install() must set merge.graphify.* via git config and add the
@@ -1373,9 +1356,9 @@ def test_install_registers_merge_driver(tmp_path):
     driver = res.stdout.strip()
     assert driver
     assert "merge-driver %O %A %B" in driver
-    attrs = (repo / ".gitattributes").read_text(encoding="utf-8")
+    attrs = _graph_read_text(repo / ".gitattributes", encoding="utf-8")
     assert any(
-        "graph.json" in line and "merge=graphify" in line
+        "graph.grafeo" in line and "merge=graphify" in line
         for line in attrs.splitlines()
     )
     assert "merge driver" in result
@@ -1386,7 +1369,7 @@ def test_install_merge_driver_idempotent(tmp_path):
     repo = _make_git_repo(tmp_path)
     install(repo)
     install(repo)
-    lines = (repo / ".gitattributes").read_text(encoding="utf-8").splitlines()
+    lines = _graph_read_text(repo / ".gitattributes", encoding="utf-8").splitlines()
     matches = [l for l in lines if "merge=graphify" in l]
     assert len(matches) == 1
 
@@ -1394,9 +1377,9 @@ def test_install_merge_driver_idempotent(tmp_path):
 def test_install_preserves_existing_gitattributes(tmp_path):
     """A pre-existing .gitattributes entry must survive install (no clobber)."""
     repo = _make_git_repo(tmp_path)
-    (repo / ".gitattributes").write_text("*.png binary\n", encoding="utf-8")
+    _graph_write_text(repo / ".gitattributes", "*.png binary\n", encoding="utf-8")
     install(repo)
-    content = (repo / ".gitattributes").read_text(encoding="utf-8")
+    content = _graph_read_text(repo / ".gitattributes", encoding="utf-8")
     assert "*.png binary" in content
     assert "merge=graphify" in content
 
@@ -1405,7 +1388,7 @@ def test_uninstall_removes_merge_driver_keeps_other_attrs(tmp_path):
     """uninstall() must unset merge.graphify.* and remove only the graphify
     .gitattributes line, keeping the file when other entries exist."""
     repo = _make_git_repo(tmp_path)
-    (repo / ".gitattributes").write_text("*.png binary\n", encoding="utf-8")
+    _graph_write_text(repo / ".gitattributes", "*.png binary\n", encoding="utf-8")
     install(repo)
     uninstall(repo)
     res = subprocess.run(
@@ -1413,7 +1396,7 @@ def test_uninstall_removes_merge_driver_keeps_other_attrs(tmp_path):
         capture_output=True, text=True,
     )
     assert res.returncode != 0
-    content = (repo / ".gitattributes").read_text(encoding="utf-8")
+    content = _graph_read_text(repo / ".gitattributes", encoding="utf-8")
     assert "*.png binary" in content
     assert "merge=graphify" not in content
 
@@ -1492,7 +1475,7 @@ def test_install_pins_interpreter_path_with_spaces(tmp_path, monkeypatch):
     install(repo)
 
     for name in ("post-commit", "post-checkout"):
-        script = (repo / ".git" / "hooks" / name).read_text()
+        script = _graph_read_text(repo / ".git" / "hooks" / name)
         assert f"_PINNED='{exe}'" in script, f"{name} did not pin the spaced interpreter"
         assert "_PINNED=''" not in script, f"{name} pinned an empty interpreter (#2166)"
 
@@ -1502,11 +1485,11 @@ def test_graphifyrc_parsing(tmp_path):
     from graphify.hooks import _load_graphifyrc
 
     rc = tmp_path / ".graphifyrc"
-    rc.write_text("# comment\nviz_node_limit=0\n", encoding="utf-8")
+    _graph_write_text(rc, "# comment\nviz_node_limit=0\n", encoding="utf-8")
     cfg = _load_graphifyrc(tmp_path)
     assert cfg.get("viz_node_limit") == 0
 
-    rc.write_text("viz_node_limit=invalid\n", encoding="utf-8")
+    _graph_write_text(rc, "viz_node_limit=invalid\n", encoding="utf-8")
     with pytest.raises(ValueError, match="Invalid viz_node_limit"):
         _load_graphifyrc(tmp_path)
 
@@ -1515,8 +1498,8 @@ def test_no_config_preserves_existing_hook(tmp_path):
     """Test 2: Without .graphifyrc, generated hooks omit GRAPHIFY_VIZ_NODE_LIMIT export."""
     repo = _make_git_repo(tmp_path)
     install(repo)
-    commit_hook = (repo / ".git" / "hooks" / "post-commit").read_text()
-    checkout_hook = (repo / ".git" / "hooks" / "post-checkout").read_text()
+    commit_hook = _graph_read_text(repo / ".git" / "hooks" / "post-commit")
+    checkout_hook = _graph_read_text(repo / ".git" / "hooks" / "post-checkout")
     assert "GRAPHIFY_VIZ_NODE_LIMIT" not in commit_hook
     assert "GRAPHIFY_VIZ_NODE_LIMIT" not in checkout_hook
 
@@ -1524,11 +1507,11 @@ def test_no_config_preserves_existing_hook(tmp_path):
 def test_config_baked_into_generated_hook(tmp_path):
     """Test 3: viz_node_limit from .graphifyrc is baked into both hooks."""
     repo = _make_git_repo(tmp_path)
-    (repo / ".graphifyrc").write_text("viz_node_limit=0\n", encoding="utf-8")
+    _graph_write_text(repo / ".graphifyrc", "viz_node_limit=0\n", encoding="utf-8")
     install(repo)
 
-    commit_hook = (repo / ".git" / "hooks" / "post-commit").read_text()
-    checkout_hook = (repo / ".git" / "hooks" / "post-checkout").read_text()
+    commit_hook = _graph_read_text(repo / ".git" / "hooks" / "post-commit")
+    checkout_hook = _graph_read_text(repo / ".git" / "hooks" / "post-checkout")
 
     assert 'export GRAPHIFY_VIZ_NODE_LIMIT="${GRAPHIFY_VIZ_NODE_LIMIT:-0}"' in commit_hook
     assert 'export GRAPHIFY_VIZ_NODE_LIMIT="${GRAPHIFY_VIZ_NODE_LIMIT:-0}"' in checkout_hook
@@ -1539,9 +1522,9 @@ def test_baked_viz_limit_yields_to_an_explicit_per_run_override(tmp_path):
     GRAPHIFY_VIZ_NODE_LIMIT: the baked line uses the `${VAR:-<n>}` default form,
     so an already-set env value wins (mirrors GRAPHIFY_MAX_WORKERS)."""
     repo = _make_git_repo(tmp_path)
-    (repo / ".graphifyrc").write_text("viz_node_limit=100\n", encoding="utf-8")
+    _graph_write_text(repo / ".graphifyrc", "viz_node_limit=100\n", encoding="utf-8")
     install(repo)
-    commit_hook = (repo / ".git" / "hooks" / "post-commit").read_text()
+    commit_hook = _graph_read_text(repo / ".git" / "hooks" / "post-commit")
 
     # default form, not an unconditional assignment that would override the env
     assert 'export GRAPHIFY_VIZ_NODE_LIMIT="${GRAPHIFY_VIZ_NODE_LIMIT:-100}"' in commit_hook
@@ -1560,7 +1543,7 @@ def test_status_survives_a_malformed_graphifyrc(tmp_path):
     diagnostic into a traceback; it reports the problem and continues."""
     repo = _make_git_repo(tmp_path)
     install(repo)
-    (repo / ".graphifyrc").write_text("viz_node_limit=not-an-int\n", encoding="utf-8")
+    _graph_write_text(repo / ".graphifyrc", "viz_node_limit=not-an-int\n", encoding="utf-8")
 
     result = status(repo)  # must not raise
     assert "installed" in result
@@ -1570,14 +1553,14 @@ def test_changing_config_updates_existing_hook(tmp_path):
     """Test 4: Re-running install updates existing Graphify hook block with new config."""
     repo = _make_git_repo(tmp_path)
     rc = repo / ".graphifyrc"
-    rc.write_text("viz_node_limit=5000\n", encoding="utf-8")
+    _graph_write_text(rc, "viz_node_limit=5000\n", encoding="utf-8")
     install(repo)
 
-    rc.write_text("viz_node_limit=0\n", encoding="utf-8")
+    _graph_write_text(rc, "viz_node_limit=0\n", encoding="utf-8")
     result = install(repo)
 
     assert "updated existing" in result
-    commit_hook = (repo / ".git" / "hooks" / "post-commit").read_text()
+    commit_hook = _graph_read_text(repo / ".git" / "hooks" / "post-commit")
     assert 'export GRAPHIFY_VIZ_NODE_LIMIT="${GRAPHIFY_VIZ_NODE_LIMIT:-0}"' in commit_hook
     assert 'export GRAPHIFY_VIZ_NODE_LIMIT="${GRAPHIFY_VIZ_NODE_LIMIT:-5000}"' not in commit_hook
     assert commit_hook.count("# graphify-hook-start") == 1
@@ -1589,17 +1572,14 @@ def test_user_hook_content_survives_update(tmp_path):
     hooks_dir = repo / ".git" / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
     post_commit = hooks_dir / "post-commit"
-    post_commit.write_text(
-        "#!/bin/sh\necho 'user content before'\n"
+    _graph_write_text(post_commit, "#!/bin/sh\necho 'user content before'\n"
         "# graphify-hook-start\nold block\n# graphify-hook-end\n"
-        "echo 'user content after'\n",
-        encoding="utf-8",
-    )
+        "echo 'user content after'\n", encoding="utf-8")
 
-    (repo / ".graphifyrc").write_text("viz_node_limit=0\n", encoding="utf-8")
+    _graph_write_text(repo / ".graphifyrc", "viz_node_limit=0\n", encoding="utf-8")
     install(repo)
 
-    content = post_commit.read_text()
+    content = _graph_read_text(post_commit)
     assert "echo 'user content before'" in content
     assert "echo 'user content after'" in content
     assert 'export GRAPHIFY_VIZ_NODE_LIMIT="${GRAPHIFY_VIZ_NODE_LIMIT:-0}"' in content
@@ -1610,14 +1590,14 @@ def test_status_reports_configuration(tmp_path):
     """Test 6: graphify hook status exposes configured viz node limit and detects out-of-date hooks."""
     repo = _make_git_repo(tmp_path)
     rc = repo / ".graphifyrc"
-    rc.write_text("viz_node_limit=0\n", encoding="utf-8")
+    _graph_write_text(rc, "viz_node_limit=0\n", encoding="utf-8")
     install(repo)
 
     res = status(repo)
     assert "viz node limit: 0" in res
     assert "(out of date" not in res
 
-    rc.write_text("viz_node_limit=100\n", encoding="utf-8")
+    _graph_write_text(rc, "viz_node_limit=100\n", encoding="utf-8")
     res_outdated = status(repo)
     assert "out of date" in res_outdated
     assert "viz node limit: 100" in res_outdated
@@ -1626,11 +1606,11 @@ def test_status_reports_configuration(tmp_path):
 def test_both_hooks_configured(tmp_path):
     """Test 7: Verify both post-commit and post-checkout hooks receive the setting."""
     repo = _make_git_repo(tmp_path)
-    (repo / ".graphifyrc").write_text("viz_node_limit=42\n", encoding="utf-8")
+    _graph_write_text(repo / ".graphifyrc", "viz_node_limit=42\n", encoding="utf-8")
     install(repo)
 
     for name in ("post-commit", "post-checkout"):
-        hook_text = (repo / ".git" / "hooks" / name).read_text()
+        hook_text = _graph_read_text(repo / ".git" / "hooks" / name)
         assert 'export GRAPHIFY_VIZ_NODE_LIMIT="${GRAPHIFY_VIZ_NODE_LIMIT:-42}"' in hook_text
 
 
@@ -1732,7 +1712,7 @@ _LAUNCH_LINE = "launching background rebuild"
 def _stub_python(tmp_path: Path) -> Path:
     """A 'python' that passes the find_spec probe and swallows the launcher."""
     py = tmp_path / "stubpy"
-    py.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8", newline="\n")
+    _graph_write_text(py, "#!/bin/sh\nexit 0\n", encoding="utf-8", newline="\n")
     py.chmod(0o755)
     return py
 
@@ -1741,7 +1721,7 @@ def _emitted_hook_run(repo: Path, script: str, args: list[str], env_extra: dict[
     stub = _stub_python(repo.parent)
     rendered = script.replace("__PINNED_PYTHON__", str(stub)).replace("__VIZ_LIMIT_EXPORT__", "")
     hook = repo.parent / "emitted-hook.sh"
-    hook.write_text(rendered, encoding="utf-8", newline="\n")
+    _graph_write_text(hook, rendered, encoding="utf-8", newline="\n")
     env = dict(os.environ)
     env["HOME"] = str(repo.parent / "home")
     for key in ("GIT_DIR", "GRAPHIFY_OUT", "GRAPHIFY_SKIP_HOOK"):
@@ -1761,17 +1741,17 @@ def _git(repo: Path, *args: str) -> None:
 
 
 def _repo_with_graph_only_commit(tmp_path: Path, out_dir: str) -> Path:
-    """Two commits: a source file, then ONLY <out_dir>/graph.json — the
+    """Two commits: a source file, then ONLY <out_dir>/graph.grafeo — the
     tracked-output case the post-commit filter exists for."""
     repo = tmp_path / "repo"
     repo.mkdir()
     _git(repo, "init", "-q")
-    (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
+    _graph_write_text(repo / "a.py", "x = 1\n", encoding="utf-8")
     _git(repo, "add", "a.py")
     _git(repo, "commit", "-q", "-m", "src")
     (repo / out_dir).mkdir()
-    (repo / out_dir / "graph.json").write_text("{}", encoding="utf-8")
-    _git(repo, "add", f"{out_dir}/graph.json")
+    _graph_write_text(repo / out_dir / "graph.grafeo", "{}", encoding="utf-8")
+    _git(repo, "add", f"{out_dir}/graph.grafeo")
     _git(repo, "commit", "-q", "-m", "graph")
     return repo
 
@@ -1848,7 +1828,7 @@ def _repo_with_code_commits(tmp_path: Path, names: tuple[str, ...]) -> Path:
     _git(repo, "init", "-q")
     (repo / "graphify-out").mkdir()
     for name in names:
-        (repo / name).write_text(f"def {name[0]}(): pass\n", encoding="utf-8")
+        _graph_write_text(repo / name, f"def {name[0]}(): pass\n", encoding="utf-8")
         _git(repo, "add", name)
         _git(repo, "commit", "-q", "-m", name)
     return repo
@@ -1863,9 +1843,9 @@ def _head(repo: Path, rev: str) -> str:
 def _write_sequencer(repo: Path, todo: str, head: str | None = None) -> None:
     seq = repo / ".git" / "sequencer"
     seq.mkdir()
-    (seq / "todo").write_text(todo, encoding="utf-8")
+    _graph_write_text(seq / "todo", todo, encoding="utf-8")
     if head is not None:
-        (seq / "head").write_text(head + "\n", encoding="utf-8")
+        _graph_write_text(seq / "head", head + "\n", encoding="utf-8")
 
 
 def _changed_dump(tmp_path: Path, monkeypatch) -> Path:
@@ -1876,10 +1856,7 @@ def _changed_dump(tmp_path: Path, monkeypatch) -> Path:
 
     def dumping_stub(where: Path) -> Path:
         py = where / "stubpy"
-        py.write_text(
-            f'#!/bin/sh\n[ -n "$GRAPHIFY_CHANGED" ] && printf %s "$GRAPHIFY_CHANGED" > "{dump}"\nexit 0\n',
-            encoding="utf-8", newline="\n",
-        )
+        _graph_write_text(py, f'#!/bin/sh\n[ -n "$GRAPHIFY_CHANGED" ] && printf %s "$GRAPHIFY_CHANGED" > "{dump}"\nexit 0\n', encoding="utf-8", newline="\n")
         py.chmod(0o755)
         return py
 
@@ -1891,7 +1868,7 @@ def _changed_dump(tmp_path: Path, monkeypatch) -> Path:
 def test_commit_hook_does_not_skip_on_cherry_pick_head(tmp_path):
     """git leaves CHERRY_PICK_HEAD on disk while post-commit runs, so it is not a skip signal (#4490)."""
     repo = _repo_with_code_commits(tmp_path, ("a.py", "b.py"))
-    (repo / ".git" / "CHERRY_PICK_HEAD").write_text("0" * 40 + "\n", encoding="utf-8")
+    _graph_write_text(repo / ".git" / "CHERRY_PICK_HEAD", "0" * 40 + "\n", encoding="utf-8")
     result = _emitted_hook_run(repo, _HOOK_SCRIPT, [], {})
     assert _LAUNCH_LINE in result.stdout, f"stdout={result.stdout!r}\nstderr={result.stderr!r}"
 
@@ -1908,7 +1885,7 @@ def test_commit_hook_skips_a_pick_while_more_picks_are_pending(tmp_path):
 @_SH_ONLY
 def test_commit_hook_skips_a_revert_step_while_more_steps_are_pending(tmp_path):
     repo = _repo_with_code_commits(tmp_path, ("a.py",))
-    (repo / "x.py").write_text("def x(): pass\n", encoding="utf-8")
+    _graph_write_text(repo / "x.py", "def x(): pass\n", encoding="utf-8")
     _git(repo, "add", "x.py")
     _git(repo, "commit", "-q", "-m", 'Revert "x"')
     _write_sequencer(repo, "revert aaaaaaa x\nrevert bbbbbbb y\n")
@@ -1940,7 +1917,7 @@ def test_commit_hook_rebuilds_on_the_last_pick_from_where_the_sequence_began(tmp
     _write_sequencer(repo, "pick ccccccc c.py\n", head=_head(repo, "HEAD~2"))
     result = _emitted_hook_run(repo, _HOOK_SCRIPT, [], {})
     assert _LAUNCH_LINE in result.stdout, f"stdout={result.stdout!r}\nstderr={result.stderr!r}"
-    assert set(dump.read_text(encoding="utf-8").split()) == {"b.py", "c.py"}
+    assert set(_graph_read_text(dump, encoding="utf-8").split()) == {"b.py", "c.py"}
 
 
 @_SH_ONLY
@@ -1951,7 +1928,7 @@ def test_commit_hook_ignores_the_base_of_a_stale_sequencer(tmp_path, monkeypatch
     _write_sequencer(repo, "pick ccccccc not-the-last-commit\n", head=_head(repo, "HEAD~2"))
     result = _emitted_hook_run(repo, _HOOK_SCRIPT, [], {})
     assert _LAUNCH_LINE in result.stdout, f"stdout={result.stdout!r}\nstderr={result.stderr!r}"
-    assert set(dump.read_text(encoding="utf-8").split()) == {"c.py"}
+    assert set(_graph_read_text(dump, encoding="utf-8").split()) == {"c.py"}
 
 
 @_SH_ONLY
@@ -1986,13 +1963,13 @@ def test_post_merge_hook_runs_after_a_real_merge(tmp_path):
 
     git("init", "-q", "-b", "main")
     (repo / "graphify-out").mkdir()
-    (repo / "graphify-out" / "graph.json").write_text("{}", encoding="utf-8")
-    (repo / "a.py").write_text("def a(): pass\n", encoding="utf-8")
+    _graph_write_text(repo / "graphify-out" / "graph.grafeo", "{}", encoding="utf-8")
+    _graph_write_text(repo / "a.py", "def a(): pass\n", encoding="utf-8")
     git("add", ".")
     git("commit", "-qm", "init", env=quiet)
     install(repo)
     git("checkout", "-qb", "feat", env=quiet)
-    (repo / "b.py").write_text("def b(): pass\n", encoding="utf-8")
+    _graph_write_text(repo / "b.py", "def b(): pass\n", encoding="utf-8")
     git("add", ".")
     git("commit", "-qm", "b", env=quiet)
     git("checkout", "-q", "main", env=quiet)
@@ -2019,9 +1996,9 @@ def test_commit_hook_still_rebuilds_for_a_source_change(tmp_path):
     """Control: a commit that touches source alongside the renamed output dir
     must still launch — the filter drops output-dir paths, not the rebuild."""
     repo = _repo_with_graph_only_commit(tmp_path, "custom-out")
-    (repo / "b.py").write_text("y = 2\n", encoding="utf-8")
-    (repo / "custom-out" / "graph.json").write_text("{\"n\": 1}", encoding="utf-8")
-    _git(repo, "add", "b.py", "custom-out/graph.json")
+    _graph_write_text(repo / "b.py", "y = 2\n", encoding="utf-8")
+    _graph_write_text(repo / "custom-out" / "graph.grafeo", "{\"n\": 1}", encoding="utf-8")
+    _git(repo, "add", "b.py", "custom-out/graph.grafeo")
     _git(repo, "commit", "-q", "-m", "src+graph")
     result = _emitted_hook_run(repo, _HOOK_SCRIPT, [], {"GRAPHIFY_OUT": "custom-out"})
     assert result.returncode == 0, result.stderr
@@ -2043,9 +2020,9 @@ def test_status_flags_a_hook_block_from_an_older_graphify(tmp_path):
     repo = _make_git_repo(tmp_path)
     install(repo)
     hook = repo / ".git" / "hooks" / "post-commit"
-    text = hook.read_text(encoding="utf-8")
+    text = _graph_read_text(hook, encoding="utf-8")
     assert "0x08000000 | 0x00000200" in text
-    hook.write_text(text.replace("0x08000000 | 0x00000200", _PRE_2253_FLAGS), encoding="utf-8")
+    _graph_write_text(hook, text.replace("0x08000000 | 0x00000200", _PRE_2253_FLAGS), encoding="utf-8")
 
     res = status(repo)
     assert "out of date" in _status_line(res, "post-commit")
@@ -2062,10 +2039,10 @@ def test_status_ignores_the_pinned_interpreter(tmp_path):
     repo = _make_git_repo(tmp_path)
     install(repo)
     hook = repo / ".git" / "hooks" / "post-commit"
-    text = hook.read_text(encoding="utf-8")
+    text = _graph_read_text(hook, encoding="utf-8")
     repinned = re.sub(r"(?m)^_PINNED='[^']*'$", "_PINNED='/opt/other/bin/python3'", text)
     assert repinned != text
-    hook.write_text(repinned, encoding="utf-8")
+    _graph_write_text(hook, repinned, encoding="utf-8")
 
     assert "out of date" not in status(repo)
 
@@ -2075,10 +2052,10 @@ def test_status_compares_only_the_graphify_block(tmp_path):
     repo = _make_git_repo(tmp_path)
     hooks_dir = repo / ".git" / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
-    (hooks_dir / "post-commit").write_text("#!/bin/sh\necho 'user before'\n", encoding="utf-8")
+    _graph_write_text(hooks_dir / "post-commit", "#!/bin/sh\necho 'user before'\n", encoding="utf-8")
     install(repo)
     hook = hooks_dir / "post-commit"
-    hook.write_text(hook.read_text(encoding="utf-8") + "echo 'user after'\n", encoding="utf-8")
+    _graph_write_text(hook, hook.read_text(encoding="utf-8") + "echo 'user after'\n", encoding="utf-8")
 
     assert "out of date" not in status(repo)
 
@@ -2122,13 +2099,13 @@ def test_post_commit_changed_list_matches_real_non_ascii_files(tmp_path):
     _git("config", "user.email", "t@t.co")
     _git("config", "user.name", "t")
     _git("config", "core.quotePath", "true")  # git's default; pin it against user config
-    (tmp_path / "seed.txt").write_text("x")
+    _graph_write_text(tmp_path / "seed.txt", "x")
     _git("add", "-A")
     _git("commit", "-qm", "init")
     for name in names:
         p = tmp_path / name
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text("def f():\n    return 1\n", encoding="utf-8")
+        _graph_write_text(p, "def f():\n    return 1\n", encoding="utf-8")
     _git("add", "-A")
     _git("commit", "-qm", "edit")
 
@@ -2143,13 +2120,13 @@ def test_post_commit_changed_list_matches_real_non_ascii_files(tmp_path):
     # ...and names git still quotes decode back to the real file.
     got = [_unquote_git_path(l) for l in raw]
     assert sorted(got) == sorted(names)
-    assert all((tmp_path / g).is_file() for g in got)
+    assert all(_graph_is_file(tmp_path / g) for g in got)
 
 
 def _watch_fn(name):
     import graphify.watch as watch_mod
 
-    tree = ast.parse(Path(watch_mod.__file__).read_text(encoding="utf-8"))
+    tree = ast.parse(_graph_read_text(Path(watch_mod.__file__), encoding="utf-8"))
     return next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name)
 
 

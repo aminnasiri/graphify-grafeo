@@ -1,5 +1,7 @@
 """Adding an unrelated type must not erase a uniquely qualified call (#5185)."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import os
@@ -83,13 +85,13 @@ def test_competing_type_preserves_explicit_receiver(
     left = tmp_path / f"Left.{suffix}"
     use = tmp_path / ("Caller.cpp" if suffix == "hpp" else f"Caller.{suffix}")
     right = tmp_path / f"Right.{suffix}"
-    left.write_text(target, encoding="utf-8")
-    use.write_text(caller, encoding="utf-8")
+    _graph_write_text(left, target, encoding="utf-8")
+    _graph_write_text(use, caller, encoding="utf-8")
     selected_id = None
     for added in (False, True):
         paths = [left, use]
         if added:
-            right.write_text(competitor, encoding="utf-8")
+            _graph_write_text(right, competitor, encoding="utf-8")
             paths.append(right)
         if reverse:
             paths.reverse()
@@ -131,7 +133,7 @@ def test_absent_explicit_type_never_falls_back_to_bare_name(
 ):
     paths = [tmp_path / f"Left.{suffix}", tmp_path / f"Caller.{suffix}"]
     for path, body in zip(paths, (target, caller)):
-        path.write_text(body, encoding="utf-8")
+        _graph_write_text(path, body, encoding="utf-8")
     result = extract(paths, root=tmp_path, cache_root=tmp_path / "cache", parallel=False)
     nodes = {n["id"]: n for n in result["nodes"]}
     assert not [
@@ -143,14 +145,11 @@ def test_absent_explicit_type_never_falls_back_to_bare_name(
 
 def test_swift_nested_lexical_type_beats_unrelated_top_level_type(tmp_path: Path):
     path = tmp_path / "Types.swift"
-    path.write_text(
-        "class Outer {\n"
+    _graph_write_text(path, "class Outer {\n"
         " class Builder {\n static func setEnabled(_ v: Bool) {}\n }\n"
         " func run() { Builder.setEnabled(true) }\n"
         "}\n"
-        "class Builder {\n static func setEnabled(_ v: Bool) {}\n}\n",
-        encoding="utf-8",
-    )
+        "class Builder {\n static func setEnabled(_ v: Bool) {}\n}\n", encoding="utf-8")
     result = extract([path], root=tmp_path, cache_root=tmp_path / "cache", parallel=False)
     nodes = {n["id"]: n for n in result["nodes"]}
     targets = [
@@ -167,12 +166,9 @@ def test_swift_qualified_constructor_does_not_guess_an_unrelated_method(
     tmp_path: Path, constructor: str,
 ):
     path = tmp_path / "Types.swift"
-    path.write_text(
-        "class Left {\n class Builder {\n func setEnabled(_ v: Bool) {}\n }\n}\n"
+    _graph_write_text(path, "class Left {\n class Builder {\n func setEnabled(_ v: Bool) {}\n }\n}\n"
         "class Right {\n class Builder {}\n}\n"
-        f"class Caller {{\n func run() {{\n let b = {constructor}\n b.setEnabled(true)\n }}\n}}\n",
-        encoding="utf-8",
-    )
+        f"class Caller {{\n func run() {{\n let b = {constructor}\n b.setEnabled(true)\n }}\n}}\n", encoding="utf-8")
     result = extract([path], root=tmp_path, cache_root=tmp_path / "cache", parallel=False)
     assert not result["failed_sources"]
     assert not result["skipped_sources"]
@@ -193,12 +189,9 @@ def test_csharp_inherited_nested_lookup_does_not_bypass_a_missing_or_hidden_type
     tmp_path: Path, child: str,
 ):
     path = tmp_path / "Types.cs"
-    path.write_text(
-        "public class Parent { public class Builder { public void setEnabled(bool v) {} } }\n"
+    _graph_write_text(path, "public class Parent { public class Builder { public void setEnabled(bool v) {} } }\n"
         + child
-        + "\npublic class Caller { public void run(Child.Builder b) { b.setEnabled(true); } }\n",
-        encoding="utf-8",
-    )
+        + "\npublic class Caller { public void run(Child.Builder b) { b.setEnabled(true); } }\n", encoding="utf-8")
     result = extract([path], root=tmp_path, cache_root=tmp_path / "cache", parallel=False)
     assert not result["failed_sources"]
     assert not result["skipped_sources"]
@@ -219,14 +212,11 @@ def test_csharp_qualified_type_respects_lexical_shadowing(
     tmp_path: Path, qualifier: str, namespace: str, type_path: str,
 ):
     path = tmp_path / "Types.cs"
-    path.write_text(
-        "namespace Left { public class Builder { public void setEnabled(bool v) {} } }\n"
+    _graph_write_text(path, "namespace Left { public class Builder { public void setEnabled(bool v) {} } }\n"
         "namespace Local {\n"
         " public class Left { public class Builder { public void setEnabled(bool v) {} } }\n"
         f" public class Caller {{ public void run({qualifier} b) {{ b.setEnabled(true); }} }}\n"
-        "}\n",
-        encoding="utf-8",
-    )
+        "}\n", encoding="utf-8")
     result = extract([path], root=tmp_path, cache_root=tmp_path / "cache", parallel=False)
     nodes = {n["id"]: n for n in result["nodes"]}
     owners = {e["target"]: nodes[e["source"]] for e in result["edges"] if e["relation"] == "method"}
@@ -253,7 +243,7 @@ def test_kotlin_import_alias_only_binds_its_local_name(
         f"package local\n{import_statement}\n"
         f"class Caller {{ fun run() {{ {receiver}.setEnabled(true) }} }}\n",
     )):
-        path.write_text(body, encoding="utf-8")
+        _graph_write_text(path, body, encoding="utf-8")
     result = extract(paths, root=tmp_path, cache_root=tmp_path / "cache", parallel=False)
     nodes = {n["id"]: n for n in result["nodes"]}
     targets = [
@@ -286,7 +276,7 @@ def test_changed_caller_keeps_unchanged_qualified_type_facts(
 
     left, use, right = [tmp_path / f"{stem}.{suffix}" for stem in ("Left", "Caller", "Right")]
     for path, body in zip((left, use, right), (target, caller, competitor)):
-        path.write_text(body, encoding="utf-8")
+        _graph_write_text(path, body, encoding="utf-8")
 
     def rebuild():
         if backend == "watch":
@@ -303,7 +293,7 @@ def test_changed_caller_keeps_unchanged_qualified_type_facts(
             assert result.returncode == 0, result.stdout + result.stderr
 
     def targets():
-        graph = json.loads((tmp_path / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+        graph = json.loads(_graph_read_text(tmp_path / "graphify-out" / "graph.grafeo", encoding="utf-8"))
         nodes = {n["id"]: n for n in graph["nodes"]}
         return {
             e["target"] for e in graph.get("links", graph.get("edges", []))
@@ -316,6 +306,6 @@ def test_changed_caller_keeps_unchanged_qualified_type_facts(
     rebuild()
     before = targets()
     assert len(before) == 1, name
-    use.write_text(caller + "\n// changed caller\n", encoding="utf-8")
+    _graph_write_text(use, caller + "\n// changed caller\n", encoding="utf-8")
     rebuild()
     assert targets() == before, name

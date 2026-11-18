@@ -2,7 +2,7 @@
 
 A single-repo build binds `obj.method()` only when the receiver's type is declared
 in the same build, so a call into another repository was dropped with the receiver
-type already in hand and nothing about it reached `graph.json` — the only artifact
+type already in hand and nothing about it reached `graph.grafeo` — the only artifact
 `merge-graphs` and `global add` read. The two-repo graph was missing precisely the
 edges that make it a call graph.
 
@@ -13,6 +13,8 @@ cross-repo-only scope, and the language guard are what keep it from fabricating 
 from a name collision.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import importlib
 import json
@@ -277,7 +279,7 @@ def test_an_objc_selector_answers_through_either_sigil():
 
 
 def test_an_objc_callee_that_already_carries_a_sigil_still_binds():
-    # A parked selector is written bare, but the payload comes from `graph.json`
+    # A parked selector is written bare, but the payload comes from `graph.grafeo`
     # and a sigiled one must not ask the index for `--greet`.
     G = _graph(
         caller=_caller("a", [dict(PARKED_OBJC[0], callee="-greet")],
@@ -465,7 +467,7 @@ def test_a_go_call_does_not_bind_to_a_differently_cased_method():
 
 def _write_graph(path: Path, nodes: list[dict], links: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"directed": False, "multigraph": False, "graph": {},
+    _graph_write_text(path, json.dumps({"directed": False, "multigraph": False, "graph": {},
                                 "nodes": nodes, "links": links}), encoding="utf-8")
 
 
@@ -475,16 +477,16 @@ def _merge(tmp_path: Path, a: Path, b: Path) -> dict:
                              "--out", str(out)],
                             cwd=tmp_path, capture_output=True, text=True)
     assert result.returncode == 0, f"merge failed: {result.stderr}"
-    return {"data": json.loads(out.read_text(encoding="utf-8")), "stdout": result.stdout}
+    return {"data": json.loads(_graph_read_text(out, encoding="utf-8")), "stdout": result.stdout}
 
 
 def _build(tmp_path: Path, repo: str, name: str, body: str) -> Path:
-    """Extract one repo the way a real build does and write its `graph.json`."""
+    """Extract one repo the way a real build does and write its `graph.grafeo`."""
     from graphify.extract import extract
 
     path = tmp_path / repo / name
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(body, encoding="utf-8")
+    _graph_write_text(path, body, encoding="utf-8")
     result = extract([path], cache_root=tmp_path / repo / "graphify-out")
     graph = tmp_path / repo / "graphify-out" / "graph.json"
     _write_graph(graph, result["nodes"], result["edges"])
@@ -492,9 +494,9 @@ def _build(tmp_path: Path, repo: str, name: str, body: str) -> Path:
 
 
 def _parked(graph: Path) -> list[dict]:
-    """Every parked entry in a written `graph.json`, flattened across nodes."""
+    """Every parked entry in a written `graph.grafeo`, flattened across nodes."""
     return [entry
-            for node in json.loads(graph.read_text(encoding="utf-8"))["nodes"]
+            for node in json.loads(_graph_read_text(graph, encoding="utf-8"))["nodes"]
             if isinstance(node.get("metadata"), dict)
             for entry in node["metadata"].get("unresolved_calls", [])]
 
@@ -770,7 +772,7 @@ def test_extraction_parks_the_argument_count(tmp_path: Path):
     from graphify.extract import extract
 
     src = tmp_path / "App.java"
-    src.write_text("class App { void go(Svc s) { s.run(1); s.run(1, 2); } }\n", encoding="utf-8")
+    _graph_write_text(src, "class App { void go(Svc s) { s.run(1); s.run(1, 2); } }\n", encoding="utf-8")
     result = extract([src], cache_root=tmp_path / "graphify-out")
     parked = [
         entry

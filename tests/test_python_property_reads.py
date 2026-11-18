@@ -6,6 +6,8 @@ one class) get a `references` edge with `context: property_read`, and only when 
 spelled exactly like the read.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 from pathlib import Path
@@ -36,7 +38,7 @@ def _edges(tmp_path: Path, files: dict[str, str]):
     for name, body in files.items():
         p = tmp_path / name
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(body, encoding="utf-8")
+        _graph_write_text(p, body, encoding="utf-8")
         paths.append(p)
     r = extract(paths, root=tmp_path, cache_root=tmp_path / "graphify-out", parallel=False)
     nodes = {n["id"]: n for n in r["nodes"]}
@@ -118,18 +120,18 @@ def test_changed_files_rebuild_keeps_the_read_of_an_unchanged_property(tmp_path:
         root = tmp_path / name
         root.mkdir()
         for fname, body in files.items():
-            (root / fname).write_text(body, encoding="utf-8")
+            _graph_write_text(root / fname, body, encoding="utf-8")
         roots.append(root)
     inc, full = roots
     assert _rebuild_code(inc, no_cluster=True, acquire_lock=False, force=True)
     for root in roots:
         p = root / "use.py"
-        p.write_text(p.read_text(encoding="utf-8") + "# touched\n", encoding="utf-8")
+        _graph_write_text(p, p.read_text(encoding="utf-8") + "# touched\n", encoding="utf-8")
     assert _rebuild_code(inc, changed_paths=[inc / "use.py"], no_cluster=True, acquire_lock=False)
     assert _rebuild_code(full, no_cluster=True, acquire_lock=False, force=True)
 
     def calls_of(root):
-        g = json.loads((root / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+        g = json.loads(_graph_read_text(root / "graphify-out" / "graph.grafeo", encoding="utf-8"))
         return {(e["source"], e["target"]) for e in g.get("links", g.get("edges", []))
                 if e["relation"] in ("calls", "references")}
 
@@ -145,7 +147,7 @@ def test_schema_bump_retires_entries_cached_without_property_reads(tmp_path: Pat
     files = {"resp.py": _RESPONSE}
     paths = []
     for name, body in files.items():
-        (tmp_path / name).write_text(body, encoding="utf-8")
+        _graph_write_text(tmp_path / name, body, encoding="utf-8")
         paths.append(tmp_path / name)
     current = cache_mod._AST_CACHE_SCHEMA
     monkeypatch.setattr(cache_mod, "_EXTRACTOR_VERSION", "same-version")

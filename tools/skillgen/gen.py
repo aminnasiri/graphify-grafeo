@@ -1511,7 +1511,10 @@ _SANCTIONED_MONOLITH_DIFFS = (
 
 def _is_sanctioned_monolith_diff(line: str) -> bool:
     """Whether a single added/removed monolith line is an allowed change."""
-    return not line.strip() or any(pred(line) for pred in _SANCTIONED_MONOLITH_DIFFS)
+    return not line.strip() or any(
+        pred(line) or pred(line.replace("graph.grafeo", "graph.json"))
+        for pred in _SANCTIONED_MONOLITH_DIFFS
+    )
 
 
 def monolith_roundtrip(platform: Platform) -> list[str]:
@@ -1544,6 +1547,8 @@ def monolith_roundtrip(platform: Platform) -> list[str]:
         if not _is_trigger_line(l)
     ]
 
+    from tools.skillgen.storage_migration import migrate_storage_instructions
+    original_lines = migrate_storage_instructions("\n".join(original_lines)).splitlines()
     added = Counter(rendered_lines) - Counter(original_lines)
     removed = Counter(original_lines) - Counter(rendered_lines)
 
@@ -1608,6 +1613,8 @@ def always_on_roundtrip() -> list[str]:
                     f"old text not found in {ALWAYS_ON_BASELINE_REF}"
                 )
             expected = expected.replace(old, new)
+        from tools.skillgen.storage_migration import migrate_storage_instructions
+        expected = migrate_storage_instructions(expected)
         if rendered[path] != expected:
             problems.append(
                 f"always_on/{basename}.md does not reproduce {const_name} byte for byte "

@@ -1,4 +1,6 @@
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 from copy import deepcopy
 import json
@@ -236,7 +238,7 @@ def test_diagnose_file_and_cli_report_invalid_nodes_without_writing(
         assert "\nnodes: 0\n" in output
         assert "\nunverified_code_nodes: 0\n" in output
         assert f"post_build_error: {summary['post_build_error']}" in output
-    assert graph_path.read_bytes() == original
+    assert _graph_read_bytes(graph_path) == original
 
 
 def test_diagnose_extraction_still_counts_unverified_nodes_in_mixed_list() -> None:
@@ -278,7 +280,7 @@ def test_diagnose_extraction_stops_examples_at_requested_limit() -> None:
 
 def test_diagnose_extraction_defaults_raw_inputs_to_directed(tmp_path: Path) -> None:
     graph_path = tmp_path / "raw-extraction.json"
-    graph_path.write_text(json.dumps(_diagnostic_fixture()), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(_diagnostic_fixture()), encoding="utf-8")
 
     summary = diagnose_file(graph_path)
 
@@ -288,7 +290,7 @@ def test_diagnose_extraction_defaults_raw_inputs_to_directed(tmp_path: Path) -> 
 
 def test_diagnose_file_reads_json_and_formats_report(tmp_path: Path) -> None:
     graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(_diagnostic_fixture()), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(_diagnostic_fixture()), encoding="utf-8")
 
     summary = diagnose_file(graph_path, directed=True, max_examples=2)
     report = format_diagnostic_report(summary)
@@ -324,7 +326,7 @@ def test_format_diagnostic_report_includes_build_and_suppression_errors(
 
 def test_diagnostic_json_report_is_serializable(tmp_path: Path) -> None:
     graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(_diagnostic_fixture()), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(_diagnostic_fixture()), encoding="utf-8")
 
     summary = diagnose_file(graph_path, directed=True)
     payload = format_diagnostic_json(summary)
@@ -337,16 +339,13 @@ def test_diagnostic_json_report_is_serializable(tmp_path: Path) -> None:
 
 def test_scan_producer_suppression_sites_finds_seen_sets(tmp_path: Path) -> None:
     source = tmp_path / "extract.py"
-    source.write_text(
-        "\n".join(
+    _graph_write_text(source, "\n".join(
             [
                 "seen_call_pairs: set[tuple[str, str]] = set()",
                 "seen_static_ref_pairs: set[tuple[str, str, str]] = set()",
                 "other = set()",
             ]
-        ),
-        encoding="utf-8",
-    )
+        ), encoding="utf-8")
 
     result = scan_producer_suppression_sites(source)
 
@@ -358,7 +357,7 @@ def test_scan_producer_suppression_sites_finds_seen_sets(tmp_path: Path) -> None
 
 def test_scan_producer_suppression_sites_handles_unknown_tuple_arity(tmp_path: Path) -> None:
     source = tmp_path / "extract.py"
-    source.write_text("seen_blank: set[tuple[ ]] = set()\n", encoding="utf-8")
+    _graph_write_text(source, "seen_blank: set[tuple[ ]] = set()\n", encoding="utf-8")
 
     result = scan_producer_suppression_sites(source)
 
@@ -368,7 +367,7 @@ def test_scan_producer_suppression_sites_handles_unknown_tuple_arity(tmp_path: P
 
 def test_diagnose_file_rejects_oversized_graph(monkeypatch, tmp_path: Path) -> None:
     graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(_diagnostic_fixture()), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(_diagnostic_fixture()), encoding="utf-8")
     monkeypatch.setattr("graphify.security._MAX_GRAPH_FILE_BYTES", 16)
 
     with pytest.raises(ValueError, match="exceeds"):
@@ -377,7 +376,7 @@ def test_diagnose_file_rejects_oversized_graph(monkeypatch, tmp_path: Path) -> N
 
 def test_diagnose_file_rejects_non_object_json(tmp_path: Path) -> None:
     graph_path = tmp_path / "graph.json"
-    graph_path.write_text("[]", encoding="utf-8")
+    _graph_write_text(graph_path, "[]", encoding="utf-8")
 
     with pytest.raises(ValueError, match="JSON object"):
         diagnose_file(graph_path)
@@ -387,7 +386,7 @@ def test_diagnose_file_defaults_to_json_directed_flag(tmp_path: Path) -> None:
     graph_path = tmp_path / "graph.json"
     payload = _diagnostic_fixture()
     payload["directed"] = False
-    graph_path.write_text(json.dumps(payload), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(payload), encoding="utf-8")
 
     summary = diagnose_file(graph_path)
 
@@ -399,7 +398,7 @@ def test_diagnose_file_explicit_directed_override(tmp_path: Path) -> None:
     graph_path = tmp_path / "graph.json"
     payload = _diagnostic_fixture()
     payload["directed"] = False
-    graph_path.write_text(json.dumps(payload), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(payload), encoding="utf-8")
 
     summary = diagnose_file(graph_path, directed=True)
 
@@ -417,7 +416,7 @@ def test_scan_producer_suppression_sites_reports_missing_file(tmp_path: Path) ->
 
 def test_diagnose_multigraph_cli_human_output(monkeypatch, tmp_path: Path, capsys) -> None:
     graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(_diagnostic_fixture()), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(_diagnostic_fixture()), encoding="utf-8")
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda _: None)
     monkeypatch.setattr(
         mainmod.sys,
@@ -438,7 +437,7 @@ def test_diagnose_multigraph_cli_undirected_override(monkeypatch, tmp_path: Path
     graph_path = tmp_path / "graph.json"
     payload = _diagnostic_fixture()
     payload["directed"] = True
-    graph_path.write_text(json.dumps(payload), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(payload), encoding="utf-8")
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda _: None)
     monkeypatch.setattr(
         mainmod.sys,
@@ -455,7 +454,7 @@ def test_diagnose_multigraph_cli_undirected_override(monkeypatch, tmp_path: Path
 
 def test_diagnose_multigraph_cli_max_examples_zero(monkeypatch, tmp_path: Path, capsys) -> None:
     graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(_diagnostic_fixture()), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(_diagnostic_fixture()), encoding="utf-8")
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda _: None)
     monkeypatch.setattr(
         mainmod.sys,
@@ -478,7 +477,7 @@ def test_diagnose_multigraph_cli_max_examples_zero(monkeypatch, tmp_path: Path, 
 
 def test_diagnose_multigraph_cli_json_output(monkeypatch, tmp_path: Path, capsys) -> None:
     graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(_diagnostic_fixture()), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(_diagnostic_fixture()), encoding="utf-8")
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda _: None)
     monkeypatch.setattr(
         mainmod.sys,
@@ -527,7 +526,7 @@ def test_diagnose_multigraph_cli_rejects_conflicting_direction_flags(
     capsys,
 ) -> None:
     graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(_diagnostic_fixture()), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(_diagnostic_fixture()), encoding="utf-8")
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda _: None)
     monkeypatch.setattr(
         mainmod.sys,

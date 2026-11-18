@@ -61,7 +61,8 @@ def _corpus(root: Path) -> Path:
 def built(tmp_path: Path) -> Path:
     root = _corpus(tmp_path / "corpus")
     assert _rebuild_code(root, acquire_lock=False) is True
-    assert (root / OUT / "manifest.json").exists()
+    from graphify.store.io import state_exists
+    assert state_exists(root / OUT / "manifest.json")
     return root
 
 

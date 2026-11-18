@@ -23,6 +23,8 @@ observed (or the guard to be proven) into a genuine subprocess with a
 deliberately constructed environment, rather than mocking in process.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, write_text as _graph_write_text
 
 import json
 import os
@@ -124,7 +126,7 @@ def test_update_still_runs_end_to_end_with_hashseed_unset(tmp_path):
     one, the shape an interactive shell or an agent's own process has), must
     still let `graphify update .` complete successfully all the way through
     the re-exec."""
-    (tmp_path / "a.py").write_text("def f():\n    return g()\n\ndef g():\n    return 1\n")
+    _graph_write_text(tmp_path / "a.py", "def f():\n    return g()\n\ndef g():\n    return 1\n")
 
     env = {
         k: v for k, v in os.environ.items()
@@ -136,7 +138,7 @@ def test_update_still_runs_end_to_end_with_hashseed_unset(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr
-    assert (tmp_path / "graphify-out" / "graph.json").exists()
+    assert _graph_exists(tmp_path / "graphify-out" / "graph.grafeo")
 
 
 def test_reexec_uses_execvpe_on_posix(monkeypatch):
@@ -150,7 +152,7 @@ def test_reexec_uses_execvpe_on_posix(monkeypatch):
 def test_reexec_waits_and_propagates_exit_code_on_windows(monkeypatch):
     """#3799: on Windows os.exec* spawns a detached process and the parent
     exits at once (sometimes with an access violation), so the caller saw
-    the command finish before graph.json was written. The Windows branch
+    the command finish before graph.grafeo was written. The Windows branch
     must run the child synchronously and exit with the child's status."""
     import subprocess
     import graphify.__main__ as mainmod

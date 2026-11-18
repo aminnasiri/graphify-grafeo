@@ -7,6 +7,8 @@ Kernel, or a module the file `import`s or `use`s, so every migration's
 Phoenix component's `table/1` and turned it into the top god node.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 from pathlib import Path
@@ -30,7 +32,7 @@ def _cross_file_calls(tmp_path: Path, files: dict[str, str]) -> set[tuple[str, s
     for name, body in files.items():
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body, encoding="utf-8")
+        _graph_write_text(path, body, encoding="utf-8")
         paths.append(path)
     result = extract(paths, cache_root=tmp_path / "graphify-out")
     label = {n["id"]: n["label"] for n in result["nodes"]}
@@ -154,8 +156,7 @@ def test_same_file_sibling_module_does_not_steal_a_bare_call(tmp_path: Path):
     """
     path = tmp_path / "lib" / "my_app" / "both.ex"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        "defmodule MyApp.ModuleA do\n"
+    _graph_write_text(path, "defmodule MyApp.ModuleA do\n"
         "  def process(x) do\n"
         "    x\n"
         "  end\n"
@@ -169,8 +170,7 @@ def test_same_file_sibling_module_does_not_steal_a_bare_call(tmp_path: Path):
         "  def process(x) do\n"
         "    x * 2\n"
         "  end\n"
-        "end\n"
-    )
+        "end\n")
     result = extract([path], cache_root=tmp_path / "graphify-out")
     go_nid = next(n["id"] for n in result["nodes"] if n["label"] == "go()")
     targets = [
@@ -209,7 +209,7 @@ def test_imported_call_survives_incremental_rebuild(tmp_path: Path):
 
     corpus = tmp_path / "corpus"
     corpus.mkdir()
-    (corpus / "helpers.ex").write_text(_HELPERS, encoding="utf-8")
+    _graph_write_text(corpus / "helpers.ex", _HELPERS, encoding="utf-8")
     caller = corpus / "user.ex"
 
     def _caller(extra: str = "") -> str:
@@ -224,11 +224,11 @@ def test_imported_call_survives_incremental_rebuild(tmp_path: Path):
             "end\n"
         )
 
-    caller.write_text(_caller(), encoding="utf-8")
-    graph_path = corpus / "graphify-out" / "graph.json"
+    _graph_write_text(caller, _caller(), encoding="utf-8")
+    graph_path = corpus / "graphify-out" / "graph.grafeo"
 
     def calls() -> set[tuple[str, str]]:
-        data = json.loads(graph_path.read_text(encoding="utf-8"))
+        data = json.loads(_graph_read_text(graph_path, encoding="utf-8"))
         label = {n["id"]: n["label"] for n in data["nodes"]}
         return {
             (label[e["source"]], label[e["target"]])
@@ -239,7 +239,7 @@ def test_imported_call_survives_incremental_rebuild(tmp_path: Path):
     assert _rebuild_code(corpus, no_cluster=True, acquire_lock=False) is True
     assert ("show()", "fmt()") in calls()
 
-    caller.write_text(_caller("\n  def other, do: :ok\n"), encoding="utf-8")
+    _graph_write_text(caller, _caller("\n  def other, do: :ok\n"), encoding="utf-8")
     assert _rebuild_code(corpus, changed_paths=[caller], no_cluster=True,
                          acquire_lock=False) is True
     assert ("show()", "fmt()") in calls()

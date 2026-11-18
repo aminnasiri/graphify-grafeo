@@ -1,5 +1,7 @@
 # write graph to HTML, JSON, SVG, GraphML, Obsidian vault, and Neo4j Cypher
 from __future__ import annotations
+from graphify.store.io import state_exists as _state_exists, write_state_text as _write_state_text
+from graphify.store.io import read_json as _read_graph_data
 import hashlib
 import html as _html
 import json
@@ -54,15 +56,39 @@ def backup_if_protected(out_dir: Path) -> "Path | None":
     if os.environ.get("GRAPHIFY_NO_BACKUP"):
         return None
     out = Path(out_dir)
+    from graphify.paths import database_path
+    native_path = database_path(out)
+    if native_path.exists():
+        from graphify.store.io import connection
+        try:
+            with connection(native_path) as store:
+                metadata = store.snapshot().metadata
+                labels = metadata.get("state:.graphify_labels.json", {})
+                curated = any(v != f"Community {k}" for k, v in labels.items())
+                if not (out / ".graphify_semantic_marker").exists() and not curated:
+                    return None
+                identity = {"metadata": metadata, "revision": store.get_revision()}
+                digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:12]
+                target = out / (date.today().isoformat() + "-" + digest)
+                target.mkdir(exist_ok=True)
+                store.backup(target / "graph.grafeo")
+            for name in _BACKUP_ARTIFACTS:
+                artifact = out / name
+                if name != "graph.json" and artifact.is_file():
+                    shutil.copy2(artifact, target / name)
+            return target
+        except Exception as exc:
+            print(f"[graphify] warning: database backup failed: {exc}", file=sys.stderr)
+            return None
     if not (out / "graph.json").exists():
         return None
 
     is_semantic = (out / ".graphify_semantic_marker").exists()
     is_curated = False
     labels_file = out / ".graphify_labels.json"
-    if labels_file.exists():
+    if _state_exists(labels_file):
         try:
-            labels = json.loads(labels_file.read_text(encoding="utf-8"))
+            labels = _read_graph_data(labels_file)
             is_curated = any(v != f"Community {k}" for k, v in labels.items())
         except Exception:
             pass
@@ -284,17 +310,17 @@ def _load_existing_graph_nodes(path: "str | Path"):
         # Oversized: reading it to compare would be the DoS the cap guards against.
         return None
     try:
-        raw = p.read_text(encoding="utf-8")
+        raw = _read_graph_data(p) if p.suffix == ".grafeo" else p.read_text(encoding="utf-8")
     except Exception:
         # Present but unreadable: fail closed if it has bytes, else nothing to lose.
         try:
             return MALFORMED_GRAPH if p.stat().st_size > 0 else None
         except Exception:
             return None
-    if not raw.strip():
+    if not raw or (isinstance(raw, str) and not raw.strip()):
         return None
     try:
-        data = json.loads(raw)
+        data = raw if isinstance(raw, dict) else json.loads(raw)
     except Exception:
         return MALFORMED_GRAPH
     nodes = data.get("nodes") if isinstance(data, dict) else None
@@ -339,7 +365,8 @@ def existing_graph_node_counts_by_source(path: "str | Path"):
     return counts
 
 
-def to_json(G: nx.Graph, communities: dict[int, list[str]], output_path: str, *, force: bool = False, built_at_commit: str | None = None, community_labels: dict[int, str] | None = None, original_links: "list[dict] | None" = None) -> bool:
+def to_json(G: nx.Graph, communities: dict[int, list[str]], output_path: str, *, force: bool = False, built_at_commit: str | None = None, community_labels: dict[int, str] | None = None, original_links: "list[dict] | None" = None, manifest: dict | None = None, store_metadata: dict | None = None, expected_revision: int | None = None) -> bool:
+    baseline_revision = expected_revision if expected_revision is not None else G.graph.get("_store_revision")
     # Drop #3774 accounting before any write. Extract pops these first; every
     # other caller of to_json (the documented build_merge persist path) does not.
     from graphify.build import take_dedup_remap, take_shrink_accounting
@@ -365,17 +392,17 @@ def to_json(G: nx.Graph, communities: dict[int, list[str]], output_path: str, *,
             oversized = False
         if not oversized:
             try:
-                raw = existing_path.read_text(encoding="utf-8")
+                raw = _read_graph_data(existing_path) if existing_path.suffix == ".grafeo" else existing_path.read_text(encoding="utf-8")
             except Exception:
                 raw = ""
-            if not raw.strip():
+            if not raw or (isinstance(raw, str) and not raw.strip()):
                 # Empty/whitespace existing file (e.g. a freshly touched path):
                 # no nodes to lose, so any new graph is a growth — proceed.
                 existing_n = 0
                 existing_nodes = []
             else:
                 try:
-                    existing_data = json.loads(raw)
+                    existing_data = raw if isinstance(raw, dict) else json.loads(raw)
                     del raw
                     existing_nodes = existing_data.get("nodes", [])
                     # Only the node list is compared; let the links go now.
@@ -447,7 +474,12 @@ def to_json(G: nx.Graph, communities: dict[int, list[str]], output_path: str, *,
                    built_at_commit=built_at_commit, output_path=output_path)
     from graphify.paths import write_json_atomic
     # Atomic write: a crash/ENOSPC mid-write must not truncate a good graph.json.
-    write_json_atomic(output_path, data, compact=True)
+    if Path(output_path).suffix == ".grafeo":
+        from graphify.store.io import write_graph
+        write_graph(output_path, data, manifest=manifest, metadata=store_metadata,
+                    expected_revision=baseline_revision)
+    else:
+        write_json_atomic(output_path, data, compact=True)
     return True
 
 
@@ -559,7 +591,7 @@ def to_data(G: nx.Graph, communities: dict[int, list[str]], *,
             if existing_path is not None and existing_path.exists():
                 from graphify.security import check_graph_file_size_cap
                 check_graph_file_size_cap(existing_path)
-                _prev = json.loads(existing_path.read_text(encoding="utf-8"))
+                _prev = _read_graph_data(existing_path)
                 if isinstance(_prev, dict):
                     _prev_hyperedges = _prev.get("hyperedges")
                 # Only the hyperedges are read; do not hold the whole parse.
@@ -579,6 +611,7 @@ def to_data(G: nx.Graph, communities: dict[int, list[str]], *,
         data["graph"]["hyperedges"] = hyperedges
     data["hyperedges"] = hyperedges
     graph_metadata = data.setdefault("graph", {})
+    graph_metadata.pop("_store_revision", None)
     graph_metadata["schema_version"] = GRAPH_SCHEMA_VERSION
     graphify_version = _graphify_version()
     if graphify_version is not None:
@@ -886,7 +919,7 @@ def to_obsidian(
     # file NOT in the manifest is the user's and is never overwritten.
     _manifest_path = out / ".graphify_obsidian_manifest.json"
     try:
-        _owned: set[str] = set(json.loads(_manifest_path.read_text(encoding="utf-8")).get("files", []))
+        _owned: set[str] = set(_read_graph_data(_manifest_path).get("files", []))
         _manifest_existed = True
     except (OSError, ValueError):
         _owned = set()
@@ -1208,7 +1241,7 @@ def to_obsidian(
     # own notes while still refusing to touch the user's. Warn (once, aggregated)
     # about anything skipped to avoid clobbering a pre-existing file.
     try:
-        _manifest_path.write_text(json.dumps({"files": sorted(set(_written))}, indent=2), encoding="utf-8")
+        _write_state_text(_manifest_path, json.dumps({"files": sorted(set(_written))}, indent=2))
     except OSError:
         pass
     if _skipped:

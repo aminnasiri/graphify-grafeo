@@ -2,6 +2,8 @@
 prefix/prune helpers in graphify/build.py, and the cross-repo guard in
 graphify/dedup.py."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import pytest
@@ -32,7 +34,7 @@ def _graph_to_json(G, path):
         data = jg.node_link_data(G, edges="links")
     except TypeError:
         data = jg.node_link_data(G)
-    path.write_text(json.dumps(data), encoding="utf-8")
+    _graph_write_text(path, json.dumps(data), encoding="utf-8")
 
 
 # ── build.py helpers ──────────────────────────────────────────────────────────
@@ -139,13 +141,13 @@ def test_prune_repo_returns_zero_if_not_present():
 # ── global_graph.py ───────────────────────────────────────────────────────────
 
 def test_global_add_creates_global_graph(tmp_path):
-    src_graph = tmp_path / "graph.json"
+    src_graph = tmp_path / "graph.grafeo"
     G = _make_graph([{"id": "userservice", "label": "UserService", "source_file": "src/user.py"}])
     _graph_to_json(G, src_graph)
 
     global_dir = tmp_path / ".graphify"
     with patch("graphify.global_graph._GLOBAL_DIR", global_dir), \
-         patch("graphify.global_graph._GLOBAL_GRAPH", global_dir / "global-graph.json"), \
+         patch("graphify.global_graph._GLOBAL_GRAPH", global_dir / "global-graph.grafeo"), \
          patch("graphify.global_graph._GLOBAL_MANIFEST", global_dir / "global-manifest.json"):
         from graphify.global_graph import global_add
         result = global_add(src_graph, "repoA")
@@ -153,19 +155,19 @@ def test_global_add_creates_global_graph(tmp_path):
     assert result["skipped"] is False
     assert result["nodes_added"] > 0
     manifest_path = global_dir / "global-manifest.json"
-    assert manifest_path.exists()
-    manifest = json.loads(manifest_path.read_text())
+    assert _graph_exists(manifest_path)
+    manifest = json.loads(_graph_read_text(manifest_path))
     assert "repoA" in manifest["repos"]
 
 
 def test_global_add_skip_on_unchanged_hash(tmp_path):
-    src_graph = tmp_path / "graph.json"
+    src_graph = tmp_path / "graph.grafeo"
     G = _make_graph([{"id": "userservice", "label": "UserService", "source_file": "src/user.py"}])
     _graph_to_json(G, src_graph)
 
     global_dir = tmp_path / ".graphify"
     with patch("graphify.global_graph._GLOBAL_DIR", global_dir), \
-         patch("graphify.global_graph._GLOBAL_GRAPH", global_dir / "global-graph.json"), \
+         patch("graphify.global_graph._GLOBAL_GRAPH", global_dir / "global-graph.grafeo"), \
          patch("graphify.global_graph._GLOBAL_MANIFEST", global_dir / "global-manifest.json"):
         from graphify.global_graph import global_add
         global_add(src_graph, "repoA")
@@ -183,7 +185,7 @@ def test_global_add_two_repos_no_collision(tmp_path):
     _graph_to_json(G2, g2)
 
     global_dir = tmp_path / ".graphify"
-    global_graph_path = global_dir / "global-graph.json"
+    global_graph_path = global_dir / "global-graph.grafeo"
     global_manifest_path = global_dir / "global-manifest.json"
     with patch("graphify.global_graph._GLOBAL_DIR", global_dir), \
          patch("graphify.global_graph._GLOBAL_GRAPH", global_graph_path), \
@@ -199,13 +201,13 @@ def test_global_add_two_repos_no_collision(tmp_path):
 
 
 def test_global_remove(tmp_path):
-    src_graph = tmp_path / "graph.json"
+    src_graph = tmp_path / "graph.grafeo"
     G = _make_graph([{"id": "userservice", "label": "UserService", "source_file": "src/user.py"}])
     _graph_to_json(G, src_graph)
 
     global_dir = tmp_path / ".graphify"
     with patch("graphify.global_graph._GLOBAL_DIR", global_dir), \
-         patch("graphify.global_graph._GLOBAL_GRAPH", global_dir / "global-graph.json"), \
+         patch("graphify.global_graph._GLOBAL_GRAPH", global_dir / "global-graph.grafeo"), \
          patch("graphify.global_graph._GLOBAL_MANIFEST", global_dir / "global-manifest.json"):
         from graphify.global_graph import global_add, global_remove
         global_add(src_graph, "repoA")
@@ -215,7 +217,7 @@ def test_global_remove(tmp_path):
     # manifest should no longer list repoA - need to re-patch for list call
     global_dir2 = global_dir  # same dir
     with patch("graphify.global_graph._GLOBAL_DIR", global_dir2), \
-         patch("graphify.global_graph._GLOBAL_GRAPH", global_dir2 / "global-graph.json"), \
+         patch("graphify.global_graph._GLOBAL_GRAPH", global_dir2 / "global-graph.grafeo"), \
          patch("graphify.global_graph._GLOBAL_MANIFEST", global_dir2 / "global-manifest.json"):
         from graphify.global_graph import global_list
         repos = global_list()
@@ -225,7 +227,7 @@ def test_global_remove(tmp_path):
 def test_global_remove_unknown_tag_raises(tmp_path):
     global_dir = tmp_path / ".graphify"
     with patch("graphify.global_graph._GLOBAL_DIR", global_dir), \
-         patch("graphify.global_graph._GLOBAL_GRAPH", global_dir / "global-graph.json"), \
+         patch("graphify.global_graph._GLOBAL_GRAPH", global_dir / "global-graph.grafeo"), \
          patch("graphify.global_graph._GLOBAL_MANIFEST", global_dir / "global-manifest.json"):
         from graphify.global_graph import global_remove
         with pytest.raises(KeyError):
@@ -241,7 +243,7 @@ def test_global_add_collision_warning(tmp_path, capsys):
 
     global_dir = tmp_path / ".graphify"
     with patch("graphify.global_graph._GLOBAL_DIR", global_dir), \
-         patch("graphify.global_graph._GLOBAL_GRAPH", global_dir / "global-graph.json"), \
+         patch("graphify.global_graph._GLOBAL_GRAPH", global_dir / "global-graph.grafeo"), \
          patch("graphify.global_graph._GLOBAL_MANIFEST", global_dir / "global-manifest.json"):
         from graphify.global_graph import global_add
         global_add(g1, "myrepo")
@@ -299,8 +301,8 @@ def test_merge_graphs_prefixes_ids(tmp_path):
     repo1.mkdir(parents=True)
     repo2.mkdir(parents=True)
 
-    g1_path = repo1 / "graph.json"
-    g2_path = repo2 / "graph.json"
+    g1_path = repo1 / "graph.grafeo"
+    g2_path = repo2 / "graph.grafeo"
     _graph_to_json(G1, g1_path)
     _graph_to_json(G2, g2_path)
 
@@ -308,7 +310,7 @@ def test_merge_graphs_prefixes_ids(tmp_path):
     graphs = []
     graph_paths = [g1_path, g2_path]
     for gp in graph_paths:
-        data = json.loads(gp.read_text())
+        data = json.loads(_graph_read_text(gp))
         if "links" not in data and "edges" in data:
             data = dict(data, links=data["edges"])
         try:
@@ -351,7 +353,7 @@ def test_global_add_rewires_edges_to_deduplicated_externals(tmp_path):
 
     global_dir = tmp_path / ".graphify"
     with patch("graphify.global_graph._GLOBAL_DIR", global_dir), \
-         patch("graphify.global_graph._GLOBAL_GRAPH", global_dir / "global-graph.json"), \
+         patch("graphify.global_graph._GLOBAL_GRAPH", global_dir / "global-graph.grafeo"), \
          patch("graphify.global_graph._GLOBAL_MANIFEST", global_dir / "global-manifest.json"):
         from graphify.global_graph import global_add, _load_global_graph
         global_add(g1, "repoA")
@@ -369,7 +371,7 @@ def test_global_add_rewires_edges_to_deduplicated_externals(tmp_path):
 
 
 def test_global_add_rejects_oversized_source_graph(monkeypatch, tmp_path):
-    """#F4: global_add must refuse to read a source graph.json that
+    """#F4: global_add must refuse to read a source graph.grafeo that
     exceeds the size cap, rather than json.loads-ing it into memory."""
     import pytest
 
@@ -380,7 +382,7 @@ def test_global_add_rejects_oversized_source_graph(monkeypatch, tmp_path):
     global_dir = tmp_path / ".graphify"
     monkeypatch.setattr("graphify.security._MAX_GRAPH_FILE_BYTES", 8)
     with patch("graphify.global_graph._GLOBAL_DIR", global_dir), \
-         patch("graphify.global_graph._GLOBAL_GRAPH", global_dir / "global-graph.json"), \
+         patch("graphify.global_graph._GLOBAL_GRAPH", global_dir / "global-graph.grafeo"), \
          patch("graphify.global_graph._GLOBAL_MANIFEST", global_dir / "global-manifest.json"):
         from graphify.global_graph import global_add
         with pytest.raises(ValueError, match="exceeds"):

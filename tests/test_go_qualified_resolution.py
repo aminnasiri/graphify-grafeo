@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 """Regression coverage for package-qualified Go calls and type references."""
 
 from pathlib import Path
@@ -25,11 +27,9 @@ def _ids(result: dict, *, label: str, suffix: str) -> set[str]:
 
 def test_external_package_new_does_not_bind_to_local_new(tmp_path: Path) -> None:
     """``errors.New`` must not become a call to an unrelated local ``New``."""
-    (tmp_path / "go.mod").write_text("module example.com/repro\n\ngo 1.22\n")
-    (tmp_path / "factory.go").write_text("package repro\n\nfunc New() int { return 1 }\n")
-    (tmp_path / "worker.go").write_text(
-        'package repro\n\nimport "errors"\n\nfunc Build() error { return errors.New("boom") }\n'
-    )
+    _graph_write_text(tmp_path / "go.mod", "module example.com/repro\n\ngo 1.22\n")
+    _graph_write_text(tmp_path / "factory.go", "package repro\n\nfunc New() int { return 1 }\n")
+    _graph_write_text(tmp_path / "worker.go", 'package repro\n\nimport "errors"\n\nfunc Build() error { return errors.New("boom") }\n')
 
     result = _extract(tmp_path)
     build_ids = _ids(result, label="Build", suffix="worker.go")
@@ -46,17 +46,15 @@ def test_external_package_new_does_not_bind_to_local_new(tmp_path: Path) -> None
 
 def test_internal_aliased_package_new_resolves_exact_import(tmp_path: Path) -> None:
     """An imported internal package selector resolves despite same-name decoys."""
-    (tmp_path / "go.mod").write_text("module example.com/repro\n\ngo 1.22\n")
+    _graph_write_text(tmp_path / "go.mod", "module example.com/repro\n\ngo 1.22\n")
     factory = tmp_path / "factory"
     factory.mkdir()
-    (factory / "factory.go").write_text("package factory\n\nfunc New() int { return 1 }\n")
+    _graph_write_text(factory / "factory.go", "package factory\n\nfunc New() int { return 1 }\n")
     app = tmp_path / "app"
     app.mkdir()
-    (app / "decoy.go").write_text("package app\n\nfunc New() int { return 2 }\n")
-    (app / "worker.go").write_text(
-        'package app\n\nimport maker "example.com/repro/factory"\n\n'
-        "func Build() int { return maker.New() }\n"
-    )
+    _graph_write_text(app / "decoy.go", "package app\n\nfunc New() int { return 2 }\n")
+    _graph_write_text(app / "worker.go", 'package app\n\nimport maker "example.com/repro/factory"\n\n'
+        "func Build() int { return maker.New() }\n")
 
     result = _extract(tmp_path)
     build_ids = _ids(result, label="Build", suffix="app/worker.go")
@@ -75,13 +73,9 @@ def test_internal_aliased_package_new_resolves_exact_import(tmp_path: Path) -> N
 
 def test_external_qualified_type_does_not_bind_to_local_function(tmp_path: Path) -> None:
     """``*testing.T`` must not reference an unrelated local function ``T``."""
-    (tmp_path / "go.mod").write_text("module example.com/repro\n\ngo 1.22\n")
-    (tmp_path / "translate.go").write_text(
-        "package repro\n\nfunc T(message string) string { return message }\n"
-    )
-    (tmp_path / "worker_test.go").write_text(
-        'package repro\n\nimport "testing"\n\nfunc TestBuild(t *testing.T) {}\n'
-    )
+    _graph_write_text(tmp_path / "go.mod", "module example.com/repro\n\ngo 1.22\n")
+    _graph_write_text(tmp_path / "translate.go", "package repro\n\nfunc T(message string) string { return message }\n")
+    _graph_write_text(tmp_path / "worker_test.go", 'package repro\n\nimport "testing"\n\nfunc TestBuild(t *testing.T) {}\n')
 
     result = _extract(tmp_path)
     test_ids = _ids(result, label="TestBuild", suffix="worker_test.go")
@@ -100,17 +94,15 @@ def test_external_qualified_type_does_not_bind_to_local_function(tmp_path: Path)
 
 def test_internal_qualified_type_resolves_exact_import(tmp_path: Path) -> None:
     """An aliased internal qualified type points to its package definition."""
-    (tmp_path / "go.mod").write_text("module example.com/repro\n\ngo 1.22\n")
+    _graph_write_text(tmp_path / "go.mod", "module example.com/repro\n\ngo 1.22\n")
     model = tmp_path / "model"
     model.mkdir()
-    (model / "user.go").write_text("package model\n\ntype User struct{}\n")
+    _graph_write_text(model / "user.go", "package model\n\ntype User struct{}\n")
     app = tmp_path / "app"
     app.mkdir()
-    (app / "decoy.go").write_text("package app\n\ntype User struct{}\n")
-    (app / "handler.go").write_text(
-        'package app\n\nimport domain "example.com/repro/model"\n\n'
-        "func Handle(user *domain.User) {}\n"
-    )
+    _graph_write_text(app / "decoy.go", "package app\n\ntype User struct{}\n")
+    _graph_write_text(app / "handler.go", 'package app\n\nimport domain "example.com/repro/model"\n\n'
+        "func Handle(user *domain.User) {}\n")
 
     result = _extract(tmp_path)
     handle_ids = _ids(result, label="Handle", suffix="app/handler.go")
@@ -128,24 +120,20 @@ def test_internal_qualified_type_resolves_exact_import(tmp_path: Path) -> None:
 
 def test_incremental_qualified_resolution_uses_unchanged_context(tmp_path: Path) -> None:
     """Changed callers still resolve calls and types defined in unchanged files."""
-    (tmp_path / "go.mod").write_text("module example.com/repro\n\ngo 1.22\n")
+    _graph_write_text(tmp_path / "go.mod", "module example.com/repro\n\ngo 1.22\n")
     factory = tmp_path / "factory"
     factory.mkdir()
     target = factory / "factory.go"
-    target.write_text(
-        "package factory\n\ntype User struct{}\n\n"
-        "func New() *User { return &User{} }\n"
-    )
+    _graph_write_text(target, "package factory\n\ntype User struct{}\n\n"
+        "func New() *User { return &User{} }\n")
     app = tmp_path / "app"
     app.mkdir()
     caller = app / "worker.go"
-    caller.write_text(
-        'package app\n\nimport maker "example.com/repro/factory"\n\n'
-        "func Build() *maker.User { return maker.New() }\n"
-    )
+    _graph_write_text(caller, 'package app\n\nimport maker "example.com/repro/factory"\n\n'
+        "func Build() *maker.User { return maker.New() }\n")
     full = _extract(tmp_path)
 
-    caller.write_text(caller.read_text() + "\n")
+    _graph_write_text(caller, caller.read_text() + "\n")
     changed = extract(
         [caller],
         cache_root=tmp_path,
@@ -174,11 +162,10 @@ def test_incremental_qualified_resolution_uses_unchanged_context(tmp_path: Path)
 
 def _case_only_sibling_corpus(tmp_path: Path) -> None:
     """Exported wrapper + unexported worker of the same name, plus a decoy."""
-    (tmp_path / "go.mod").write_text("module example.com/repro\n\ngo 1.22\n")
+    _graph_write_text(tmp_path / "go.mod", "module example.com/repro\n\ngo 1.22\n")
     pkg_a = tmp_path / "pkga"
     pkg_a.mkdir()
-    (pkg_a / "a.go").write_text(
-        "package pkga\n"
+    _graph_write_text(pkg_a / "a.go", "package pkga\n"
         "\n"
         "func Run() error {\n"
         "\treturn run(1)\n"
@@ -186,13 +173,10 @@ def _case_only_sibling_corpus(tmp_path: Path) -> None:
         "\n"
         "func run(n int) error {\n"
         "\treturn nil\n"
-        "}\n"
-    )
+        "}\n")
     pkg_b = tmp_path / "pkgb"
     pkg_b.mkdir()
-    (pkg_b / "b.go").write_text(
-        "package pkgb\n\nfunc run(s string) error {\n\treturn nil\n}\n"
-    )
+    _graph_write_text(pkg_b / "b.go", "package pkgb\n\nfunc run(s string) error {\n\treturn nil\n}\n")
 
 
 def test_case_only_sibling_functions_are_both_extracted(tmp_path: Path) -> None:
@@ -227,11 +211,11 @@ def test_case_only_sibling_does_not_bind_to_another_package(tmp_path: Path) -> N
 def test_case_only_sibling_exported_keeps_stable_id(tmp_path: Path) -> None:
     """The exported member keeps the plain id whether or not a sibling exists.
 
-    Cross-package edges and graph.json entries from files an incremental rebuild
+    Cross-package edges and graph.grafeo entries from files an incremental rebuild
     does not touch all target the exported symbol, so its id must not depend on
     the presence of an unexported case-only sibling.
     """
-    (tmp_path / "go.mod").write_text("module example.com/repro\n\ngo 1.22\n")
+    _graph_write_text(tmp_path / "go.mod", "module example.com/repro\n\ngo 1.22\n")
     pkg = tmp_path / "pkga"
     pkg.mkdir()
     solo = "package pkga\n\nfunc Run() error {\n\treturn nil\n}\n"
@@ -247,10 +231,10 @@ def test_case_only_sibling_exported_keeps_stable_id(tmp_path: Path) -> None:
         "}\n"
     )
 
-    (pkg / "a.go").write_text(solo)
+    _graph_write_text(pkg / "a.go", solo)
     solo_ids = _ids(_extract(tmp_path), label="Run", suffix="a.go")
 
-    (pkg / "a.go").write_text(with_sibling)
+    _graph_write_text(pkg / "a.go", with_sibling)
     result = _extract(tmp_path)
     exported = _ids(result, label="Run", suffix="a.go")
     unexported = _ids(result, label="run", suffix="a.go")
@@ -271,24 +255,19 @@ def test_incremental_sibling_addition_keeps_cross_package_edge(tmp_path: Path) -
     from graphify.build import build_from_json, build_merge
     from graphify.export import to_json
 
-    (tmp_path / "go.mod").write_text("module example.com/repro\n\ngo 1.22\n")
+    _graph_write_text(tmp_path / "go.mod", "module example.com/repro\n\ngo 1.22\n")
     (tmp_path / "pkga").mkdir()
     (tmp_path / "app").mkdir()
-    (tmp_path / "pkga" / "a.go").write_text(
-        "package pkga\n\nfunc Run() error {\n\treturn nil\n}\n"
-    )
-    (tmp_path / "app" / "app.go").write_text(
-        'package app\n\nimport "example.com/repro/pkga"\n\n'
-        "func Start() error {\n\treturn pkga.Run()\n}\n"
-    )
+    _graph_write_text(tmp_path / "pkga" / "a.go", "package pkga\n\nfunc Run() error {\n\treturn nil\n}\n")
+    _graph_write_text(tmp_path / "app" / "app.go", 'package app\n\nimport "example.com/repro/pkga"\n\n'
+        "func Start() error {\n\treturn pkga.Run()\n}\n")
 
     full = _extract(tmp_path)
     graph = build_from_json(full, root=str(tmp_path), directed=False)
-    graph_path = tmp_path / "graph.json"
+    graph_path = tmp_path / "graph.grafeo"
     to_json(graph, {i: [n] for i, n in enumerate(graph.nodes)}, str(graph_path))
 
-    (tmp_path / "pkga" / "a.go").write_text(
-        "package pkga\n"
+    _graph_write_text(tmp_path / "pkga" / "a.go", "package pkga\n"
         "\n"
         "func Run() error {\n"
         "\treturn run(1)\n"
@@ -296,8 +275,7 @@ def test_incremental_sibling_addition_keeps_cross_package_edge(tmp_path: Path) -
         "\n"
         "func run(n int) error {\n"
         "\treturn nil\n"
-        "}\n"
-    )
+        "}\n")
     partial = extract(
         [tmp_path / "pkga" / "a.go"],
         cache_root=tmp_path,
@@ -323,15 +301,13 @@ def test_incremental_sibling_addition_keeps_cross_package_edge(tmp_path: Path) -
 def test_case_only_sibling_methods_are_both_extracted(tmp_path: Path) -> None:
     """Methods ``Get`` and ``get`` on the same type in one file are two symbols,
     not one — the receiver-based id path must salt the collision too (#2779)."""
-    (tmp_path / "go.mod").write_text("module example.com/repro\n\ngo 1.22\n")
+    _graph_write_text(tmp_path / "go.mod", "module example.com/repro\n\ngo 1.22\n")
     pkg = tmp_path / "pkga"
     pkg.mkdir()
-    (pkg / "a.go").write_text(
-        "package pkga\n\n"
+    _graph_write_text(pkg / "a.go", "package pkga\n\n"
         "type Store struct{}\n\n"
         "func (s Store) Get() int { return s.get() }\n\n"
-        "func (s Store) get() int { return 0 }\n"
-    )
+        "func (s Store) get() int { return 0 }\n")
     result = _extract(tmp_path)
     exported = _ids(result, label="Get", suffix="a.go")
     unexported = _ids(result, label="get", suffix="a.go")
@@ -343,14 +319,12 @@ def test_case_only_sibling_methods_are_both_extracted(tmp_path: Path) -> None:
 def test_case_only_sibling_all_exported_are_both_extracted(tmp_path: Path) -> None:
     """When no member is the unique exported one (``Run`` and ``RUN`` both start
     uppercase), each is salted so neither is dropped (#2779, all-salted branch)."""
-    (tmp_path / "go.mod").write_text("module example.com/repro\n\ngo 1.22\n")
+    _graph_write_text(tmp_path / "go.mod", "module example.com/repro\n\ngo 1.22\n")
     pkg = tmp_path / "pkga"
     pkg.mkdir()
-    (pkg / "a.go").write_text(
-        "package pkga\n\n"
+    _graph_write_text(pkg / "a.go", "package pkga\n\n"
         "func Run() int { return 1 }\n\n"
-        "func RUN() int { return 2 }\n"
-    )
+        "func RUN() int { return 2 }\n")
     result = _extract(tmp_path)
     run1 = _ids(result, label="Run", suffix="a.go")
     run2 = _ids(result, label="RUN", suffix="a.go")
@@ -372,10 +346,10 @@ _GIN_CONTEXT = "type Context struct {\n\twriterMem responseWriter\n\tWriter    R
 
 
 def _gin_corpus(tmp_path: Path, *blocks: str) -> dict:
-    (tmp_path / "go.mod").write_text("module example.com/repro\n\ngo 1.22\n")
+    _graph_write_text(tmp_path / "go.mod", "module example.com/repro\n\ngo 1.22\n")
     pkg = tmp_path / "gin"
     pkg.mkdir(exist_ok=True)
-    (pkg / "response_writer.go").write_text("package gin\n\n" + "\n".join(blocks))
+    _graph_write_text(pkg / "response_writer.go", "package gin\n\n" + "\n".join(blocks))
     return _extract(tmp_path)
 
 

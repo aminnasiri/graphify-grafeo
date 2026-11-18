@@ -118,7 +118,7 @@ deleted = list(incremental.get('deleted_files', []))
 # now that replace — not the dedup pass — reconciles changed files).
 prune = list(deleted) or None
 
-# Use build_merge() — reads graph.json directly without NetworkX round-trip
+# Use build_merge() — reads graph.grafeo directly without NetworkX round-trip
 # so edge direction (calls, implements, imports) is always preserved (#801).
 # Pass root= so prune_sources (absolute paths from detect_incremental) are
 # relativized to match the graph's relative source_file values; without it
@@ -128,7 +128,7 @@ prune = list(deleted) or None
 # reciprocal A<->B edges (#1392).
 G = build_merge(
     [new_extraction],
-    graph_path='graphify-out/graph.json',
+    graph_path='graphify-out/graph.grafeo',
     prune_sources=prune,
     root=INPUT_PATH,
     directed=IS_DIRECTED,
@@ -144,7 +144,7 @@ merged_out = {
          'source': d.get('_src', u), 'target': d.get('_tgt', v)}
         for u, v, d in G.edges(data=True)
     ],
-    # G.graph["hyperedges"] holds hyperedges from both existing graph.json
+    # G.graph["hyperedges"] holds hyperedges from both existing graph.grafeo
     # and new_extraction (build_merge combines them). Falling back to
     # new_extraction only would silently drop prior-run hyperedges (#801).
     'hyperedges': list(G.graph.get('hyperedges', [])),
@@ -217,7 +217,7 @@ if old_data:
 "
 ```
 
-Before the merge step, save the old graph: `cp graphify-out/graph.json graphify-out/.graphify_old.json`
+Before the merge step, save the old graph: `graphify export json --out graphify-out/.graphify_old.json`
 Clean up after: `rm -f graphify-out/.graphify_old.json`
 
 ---
@@ -230,4 +230,4 @@ Skip Steps 1–3. Re-run clustering on the existing graph:
 graphify cluster-only .
 ```
 
-`graphify cluster-only .` is **self-contained**: it re-clusters, names communities, and regenerates `GRAPH_REPORT.md`, `graph.json`, and `graph.html` from the existing graph. **Do not re-run Steps 5–9** — they read intermediate files (`.graphify_extract.json`, `.graphify_detect.json`, `.graphify_analysis.json`) that a prior build's cleanup (Step 9) already deleted, so they raise `FileNotFoundError` (#1392). When it finishes, present the refreshed `GRAPH_REPORT.md` summary as usual.
+`graphify cluster-only .` is **self-contained**: it re-clusters, names communities, and regenerates `GRAPH_REPORT.md`, `graph.grafeo`, and `graph.html` from the existing graph. **Do not re-run Steps 5–9** — they read intermediate files (`.graphify_extract.json`, `.graphify_detect.json`, `.graphify_analysis.json`) that a prior build's cleanup (Step 9) already deleted, so they raise `FileNotFoundError` (#1392). When it finishes, present the refreshed `GRAPH_REPORT.md` summary as usual.

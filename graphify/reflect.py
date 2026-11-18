@@ -17,7 +17,7 @@ to "preferred" once corroborated by enough distinct results; one save can't mint
 trusted lesson. When a graph is in hand, source nodes that no longer exist are dropped.
 
 It is deterministic: no LLM, stable sort orders, byte-stable output for a given input
-and a given ``now``. When a graph (`graph.json` + `.graphify_analysis.json`) is available
+and a given ``now``. When a graph (`graph.grafeo` + `.graphify_analysis.json`) is available
 the lessons are also grouped by community label; without it they degrade to a single
 flat section.
 
@@ -26,6 +26,8 @@ because ``graphify export wiki`` deletes every ``wiki/*.md`` on each run — a l
 written there would be clobbered on the next export.
 """
 from __future__ import annotations
+from graphify.store.io import state_exists as _state_exists
+from graphify.store.io import read_json as _read_graph_data
 
 import json
 import re
@@ -39,8 +41,8 @@ from graphify.paths import GRAPHIFY_OUT_NAME
 
 _UNCATEGORIZED = "Uncategorized"
 
-# Derived experiential layer written alongside graph.json (a SIDECAR, kept
-# separate from the durable structural truth in graph.json — no learning_*
+# Derived experiential layer written alongside graph.grafeo (a SIDECAR, kept
+# separate from the durable structural truth in graph.grafeo — no learning_*
 # fields are ever stamped into the graph itself). Read-surface annotations are
 # merged in at display time from this file.
 LEARNING_SIDECAR_NAME = ".graphify_learning.json"
@@ -164,31 +166,31 @@ def _load_node_community(graph_path: Path, analysis_path: Path,
     """Build a lookup from node id AND node label -> community label, or None if the
     graph isn't available.
 
-    Mirrors how `graphify export wiki` reads graph.json + .graphify_analysis.json +
+    Mirrors how `graphify export wiki` reads graph.grafeo + .graphify_analysis.json +
     .graphify_labels.json. Community membership in the analysis sidecar is keyed by
     node id, but `save-result` cites nodes by label, so both are mapped — otherwise a
     cited ``build_from_json()`` never finds its community and every lesson collapses
     into Uncategorized. Best-effort: any missing/unparseable artifact disables grouping.
     """
-    if not graph_path.exists() or not analysis_path.exists():
+    if not graph_path.exists() or not _state_exists(analysis_path):
         return None
     try:
-        analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+        analysis = _read_graph_data(analysis_path)
     except (OSError, ValueError):
         return None
     communities = analysis.get("communities", {})
     if not communities:
         return None
     labels: dict[str, str] = {}
-    if labels_path.exists():
+    if _state_exists(labels_path):
         try:
-            labels = json.loads(labels_path.read_text(encoding="utf-8"))
+            labels = _read_graph_data(labels_path)
         except (OSError, ValueError):
             labels = {}
     # id -> label from the graph, so a label-form citation resolves to a community too.
     id_to_label: dict[str, str] = {}
     try:
-        gdata = json.loads(graph_path.read_text(encoding="utf-8"))
+        gdata = _read_graph_data(graph_path)
         for n in gdata.get("nodes", []):
             if isinstance(n, dict) and n.get("id") is not None and n.get("label") is not None:
                 id_to_label[str(n["id"])] = str(n["label"])
@@ -220,7 +222,7 @@ def _load_known_nodes(graph_path: Path) -> set[str] | None:
     indexing ids alone silently dropped every label-form citation (the common case).
     """
     try:
-        data = json.loads(Path(graph_path).read_text(encoding="utf-8"))
+        data = _read_graph_data(Path(graph_path))
     except (OSError, ValueError):
         return None
     nodes = data.get("nodes")
@@ -555,7 +557,8 @@ def lessons_fresh(out_path: Path, memory_dir: Path,
             continue
         gp = Path(input_path)
         try:
-            newest = max(newest, gp.stat().st_mtime)
+            from graphify.store.io import state_database
+            newest = max(newest, (state_database(gp) or gp).stat().st_mtime)
         except OSError:
             pass
     return out_mtime >= newest
@@ -597,9 +600,8 @@ def reflect(memory_dir: Path, out_path: Path,
                             known_nodes=known_nodes)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(render_lessons_md(agg), encoding="utf-8")
 
-    # Also project a derived experiential sidecar next to graph.json when a graph
+    # Also project a derived experiential sidecar next to graph.grafeo when a graph
     # is in hand. Best-effort: a sidecar failure must never break LESSONS.md.
     if graph_path is not None:
         try:
@@ -607,21 +609,23 @@ def reflect(memory_dir: Path, out_path: Path,
         except Exception:
             pass
 
+    # Write after the database overlay checkpoint so --if-stale stays fresh.
+    out_path.write_text(render_lessons_md(agg), encoding="utf-8")
     return out_path, agg
 
 
 # --- work-memory overlay sidecar ------------------------------------------------
 #
 # A derived, experiential projection of the reflect aggregate, written next to
-# graph.json as ``.graphify_learning.json``. It carries which nodes have proven
+# graph.grafeo as ``.graphify_learning.json``. It carries which nodes have proven
 # preferred/tentative/contested, a code fingerprint for staleness detection, and
-# a short provenance trail. graph.json (durable structural truth) is never
+# a short provenance trail. graph.grafeo (durable structural truth) is never
 # touched — read surfaces merge this overlay in only at display time.
 
 
 def _build_id_label_maps(graph_path: Path) -> tuple[dict[str, str], dict[str, list[str]],
                                                     dict[str, dict[str, Any]]]:
-    """From graph.json build:
+    """From graph.grafeo build:
 
     - ``id_set``: id -> id (every node id, so an id-form citation resolves to itself)
     - ``label_to_ids``: label -> [ids] (so a label-form citation can be resolved,
@@ -634,7 +638,7 @@ def _build_id_label_maps(graph_path: Path) -> tuple[dict[str, str], dict[str, li
     label_to_ids: dict[str, list[str]] = {}
     node_by_id: dict[str, dict[str, Any]] = {}
     try:
-        data = json.loads(Path(graph_path).read_text(encoding="utf-8"))
+        data = _read_graph_data(Path(graph_path))
     except (OSError, ValueError):
         return id_set, label_to_ids, node_by_id
     for n in data.get("nodes", []):
@@ -668,7 +672,7 @@ def _resolve_canonical_id(cited: str, id_set: dict[str, str],
 def _resolve_source_path(src: str, graph_path: Path) -> Path | None:
     """Locate a node's ``source_file`` on disk, returning an existing file or None.
 
-    ``source_file`` is stored relative to the PROJECT root, but graph.json may
+    ``source_file`` is stored relative to the PROJECT root, but graph.grafeo may
     live in ``<root>/graphify-out/`` (so its own dir is not the root) or directly
     at the root (``extract --out .``). Resolve the root in the most-likely order
     and return the first candidate where the file actually exists, so a defeated
@@ -678,8 +682,8 @@ def _resolve_source_path(src: str, graph_path: Path) -> Path | None:
 
     Order: the committed ``.graphify_root`` marker (#686/#1423 — authoritative for
     an absolute/elsewhere ``GRAPHIFY_OUT`` override); then the layout-appropriate
-    root *first* — graph.json's parent's parent for the ``graphify-out`` layout,
-    or graph.json's own dir for a flat layout — which avoids matching a same-named
+    root *first* — graph.grafeo's parent's parent for the ``graphify-out`` layout,
+    or graph.grafeo's own dir for a flat layout — which avoids matching a same-named
     file one directory up; then the other of the two; then the cwd.
     """
     if not src:
@@ -830,9 +834,9 @@ def write_learning_sidecar(agg: dict[str, Any], graph_path: Path,
     """
     overlay = build_learning_overlay(agg, graph_path, now=now)
     sidecar = Path(graph_path).parent / LEARNING_SIDECAR_NAME
-    sidecar.write_text(
+    from graphify.paths import write_text_atomic
+    write_text_atomic(sidecar,
         json.dumps(overlay, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
-        encoding="utf-8",
     )
     return sidecar
 
@@ -850,7 +854,7 @@ def load_learning_overlay(graph_path: Path) -> dict[str, dict[str, Any]]:
     """
     sidecar = Path(graph_path).parent / LEARNING_SIDECAR_NAME
     try:
-        data = json.loads(sidecar.read_text(encoding="utf-8"))
+        data = _read_graph_data(sidecar)
     except (OSError, ValueError):
         return {}
     nodes = data.get("nodes") if isinstance(data, dict) else None

@@ -12,6 +12,8 @@ Driven the way Claude Code drives it: `graphify hook-guard search` in a
 subprocess with the PreToolUse JSON on stdin.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import os
@@ -33,17 +35,17 @@ GRAPH = {
 def _project(tmp_path):
     proj = tmp_path / "proj"
     (proj / "src").mkdir(parents=True)
-    (proj / "src" / "app.py").write_text("import os\n\ndef run():\n    return os.getcwd()\n", encoding="utf-8")
-    (proj / "README.md").write_text("# demo\n", encoding="utf-8")
-    (proj / "package.json").write_text("{}\n", encoding="utf-8")
+    _graph_write_text(proj / "src" / "app.py", "import os\n\ndef run():\n    return os.getcwd()\n", encoding="utf-8")
+    _graph_write_text(proj / "README.md", "# demo\n", encoding="utf-8")
+    _graph_write_text(proj / "package.json", "{}\n", encoding="utf-8")
     (proj / "logo.png").write_bytes(b"\x89PNG")
     out = proj / "graphify-out"
     out.mkdir()
-    (out / "GRAPH_REPORT.md").write_text("# report\n", encoding="utf-8")
-    (out / "graph.json").write_text(json.dumps(GRAPH), encoding="utf-8")
+    _graph_write_text(out / "GRAPH_REPORT.md", "# report\n", encoding="utf-8")
+    _graph_write_text(out / "graph.grafeo", json.dumps(GRAPH), encoding="utf-8")
     outside = tmp_path / "elsewhere"
     outside.mkdir()
-    (outside / "other.py").write_text("x = 1\n", encoding="utf-8")
+    _graph_write_text(outside / "other.py", "x = 1\n", encoding="utf-8")
     return proj
 
 
@@ -95,7 +97,7 @@ def _is_read_nudge(out):
 
 def _nudges(proj):
     d = proj / "graphify-out" / "cache" / "hook_sessions"
-    return {p.name: p.read_text() for p in d.glob("*.nudges")} if d.is_dir() else {}
+    return {p.name: _graph_read_text(p) for p in d.glob("*.nudges")} if d.is_dir() else {}
 
 
 READERS = [
@@ -152,7 +154,7 @@ SILENT = [
     "cat ../elsewhere/other.py",   # outside the project (#1840)
     "cat {tmp}/elsewhere/other.py",
     "cat graphify-out/GRAPH_REPORT.md",  # graph output (#4961)
-    "head graphify-out/graph.json",
+    "head graphify-out/graph.grafeo",
     "cat $HOME/src/app.py",        # shell expansion: target unknown
     "cat src/*.py",
     "python src/app.py",           # runs code, does not print it
@@ -182,8 +184,7 @@ def test_bash_reads_share_the_read_budget(tmp_path):
 @pytest.mark.parametrize("tool_name", ["Bash", None])
 def test_strict_mode_never_blocks_a_bash_read(tool_name, tmp_path):
     proj = _project(tmp_path)
-    (proj / "graphify-out" / "manifest.json").write_text(json.dumps({"src/app.py": {"mtime": 1}}),
-                                                         encoding="utf-8")
+    _graph_write_text(proj / "graphify-out" / "manifest.json", json.dumps({"src/app.py": {"mtime": 1}}), encoding="utf-8")
     os.utime(proj / "src" / "app.py", (1, 1))  # older than the graph: fresh, indexed
     for env in (None, _env(proj, GRAPHIFY_HOOK_STRICT="1")):
         out = _bash("cat src/app.py", proj, sid=f"strict-{env is None}", strict=True,
@@ -212,7 +213,7 @@ def test_relative_path_resolves_against_the_bash_cwd(tmp_path):
 
 def test_stale_file_gets_the_stale_read_nudge(tmp_path):
     proj = _project(tmp_path)
-    (proj / "graphify-out" / "needs_update").write_text("1", encoding="utf-8")
+    _graph_write_text(proj / "graphify-out" / "needs_update", "1", encoding="utf-8")
     out = _bash("cat src/app.py", proj)
     assert "may be STALE" in json.loads(out)["hookSpecificOutput"]["additionalContext"]
 
@@ -234,7 +235,7 @@ def test_searches_keep_the_search_nudge(command, tmp_path):
 
 def test_no_graph_no_nudge(tmp_path):
     proj = _project(tmp_path)
-    (proj / "graphify-out" / "graph.json").unlink()
+    _graph_unlink(proj / "graphify-out" / "graph.grafeo")
     assert _bash("cat src/app.py", proj) == ""
-    (proj / "graphify-out" / "graph.json").write_text(json.dumps(GRAPH), encoding="utf-8")
+    _graph_write_text(proj / "graphify-out" / "graph.grafeo", json.dumps(GRAPH), encoding="utf-8")
     assert _is_read_nudge(_bash("cat src/app.py", proj))

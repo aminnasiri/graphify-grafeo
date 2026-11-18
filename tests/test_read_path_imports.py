@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 """Read-only commands do not import the language extractors.
 
 `query` (and the MCP server's graph load) call build.graph_has_legacy_ids,
@@ -70,7 +72,7 @@ _COMMANDS = {
 def graph_dir(tmp_path):
     out = tmp_path / "graphify-out"
     out.mkdir()
-    (out / "graph.json").write_text(json.dumps(_GRAPH), encoding="utf-8")
+    _graph_write_text(out / "graph.grafeo", json.dumps(_GRAPH), encoding="utf-8")
     return tmp_path
 
 
@@ -93,7 +95,7 @@ def test_mcp_graph_load_does_not_import_extractors(graph_dir):
     probe = (
         "import json, sys\n"
         "from graphify.serve import _load_graph\n"
-        f"_load_graph({str(graph_dir / 'graphify-out' / 'graph.json')!r})\n"
+        f"_load_graph({str(graph_dir / 'graphify-out' / 'graph.grafeo')!r})\n"
         "print(json.dumps(sorted(m for m in sys.modules if m.startswith('graphify.extractors'))))\n"
     )
     proc = subprocess.run(

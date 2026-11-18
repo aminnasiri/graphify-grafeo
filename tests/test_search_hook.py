@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 """The Bash PreToolUse guard nudges toward the graph before grep/find searches.
 
 Since #522 it runs as the shell-agnostic `graphify hook-guard search` subcommand
@@ -27,7 +29,7 @@ def _env():
 def _run(command, cwd, *, graph: bool):
     if graph:
         (cwd / "graphify-out").mkdir(parents=True, exist_ok=True)
-        (cwd / "graphify-out" / "graph.json").write_text("{}", encoding="utf-8")
+        _graph_write_text(cwd / "graphify-out" / "graph.grafeo", "{}", encoding="utf-8")
     stdin = json.dumps({"tool_input": {"command": command}})
     return subprocess.run(
         [sys.executable, "-m", "graphify", "hook-guard", "search"],
@@ -39,7 +41,7 @@ def _run_grep_tool(tool_input, cwd, *, graph: bool):
     """Feed a Grep-tool-shaped payload (pattern/path/glob, no command) to the guard."""
     if graph:
         (cwd / "graphify-out").mkdir(parents=True, exist_ok=True)
-        (cwd / "graphify-out" / "graph.json").write_text("{}", encoding="utf-8")
+        _graph_write_text(cwd / "graphify-out" / "graph.grafeo", "{}", encoding="utf-8")
     stdin = json.dumps({"tool_name": "Grep", "tool_input": tool_input})
     return subprocess.run(
         [sys.executable, "-m", "graphify", "hook-guard", "search"],
@@ -117,7 +119,7 @@ def test_nudge_payload_is_valid_pretooluse_json(tmp_path):
 
 def test_fails_open_on_malformed_stdin(tmp_path):
     (tmp_path / "graphify-out").mkdir()
-    (tmp_path / "graphify-out" / "graph.json").write_text("{}", encoding="utf-8")
+    _graph_write_text(tmp_path / "graphify-out" / "graph.grafeo", "{}", encoding="utf-8")
     r = subprocess.run(
         [sys.executable, "-m", "graphify", "hook-guard", "search"],
         input="not json", capture_output=True, text=True, cwd=tmp_path, env=_env(),
@@ -137,7 +139,7 @@ def test_honors_graphify_out_override(tmp_path):
     """The guard resolves the graph via GRAPHIFY_OUT, not a hardcoded path."""
     custom = tmp_path / "custom-out"
     custom.mkdir()
-    (custom / "graph.json").write_text("{}", encoding="utf-8")
+    _graph_write_text(custom / "graph.grafeo", "{}", encoding="utf-8")
     env = dict(os.environ, GRAPHIFY_OUT=str(custom))
     stdin = json.dumps({"tool_input": {"command": "grep -rn foo ."}})
     r = subprocess.run(
@@ -186,7 +188,7 @@ def test_bash_non_search_with_stray_pattern_key_does_not_nudge(tmp_path):
     """A Bash tool_input carries `command`; the Grep-shape detection must not
     fire when a command is present but is not a search."""
     (tmp_path / "graphify-out").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "graphify-out" / "graph.json").write_text("{}", encoding="utf-8")
+    _graph_write_text(tmp_path / "graphify-out" / "graph.grafeo", "{}", encoding="utf-8")
     stdin = json.dumps({"tool_input": {"command": "ls -la", "pattern": "x"}})
     r = subprocess.run(
         [sys.executable, "-m", "graphify", "hook-guard", "search"],

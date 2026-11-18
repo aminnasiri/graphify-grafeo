@@ -9,6 +9,8 @@ Namespace agreement is what keeps this from linking two classes that merely
 picked the same short name, so the cases below pin both halves of that rule.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import subprocess
@@ -38,21 +40,21 @@ def _type_node(node_id: str, label: str, namespace: str | None, source_file: str
 
 def _write(p: Path, nodes: list[dict]):
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({
+    _graph_write_text(p, json.dumps({
         "directed": True, "multigraph": False, "graph": {},
         "nodes": nodes, "links": [],
     }))
 
 
 def _merge(tmp_path, left: list[dict], right: list[dict]):
-    a = tmp_path / "svc_a" / "graphify-out" / "graph.json"
-    b = tmp_path / "svc_b" / "graphify-out" / "graph.json"
+    a = tmp_path / "svc_a" / "graphify-out" / "graph.grafeo"
+    b = tmp_path / "svc_b" / "graphify-out" / "graph.grafeo"
     _write(a, left)
     _write(b, right)
     out = tmp_path / "merged.json"
     r = _run(["merge-graphs", str(a), str(b), "--out", str(out)], tmp_path)
     assert r.returncode == 0, f"merge failed: {r.stderr}"
-    data = json.loads(out.read_text())
+    data = json.loads(_graph_read_text(out))
     links = [e for e in data["links"] if e.get("relation") == "same_type_as"]
     return links, data
 

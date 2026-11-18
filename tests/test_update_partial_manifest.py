@@ -12,6 +12,8 @@ queue. Hosts that render the same blocks share a case. Windows renders Step 9 fo
 it has no case in the Step 9 test; its ``update.md`` blocks are bash like every other host's.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import os
@@ -102,7 +104,7 @@ def _env() -> dict[str, str]:
     # keep an installed graphify off PATH so nothing it prints can reach the Python source. Pin
     # the output directory, and drop the startup files a non-interactive bash would source.
     path = os.pathsep.join(p for p in os.environ.get("PATH", "").split(os.pathsep)
-                           if not (Path(p) / "graphify").exists())
+                           if not _graph_exists(Path(p) / "graphify"))
     env = {k: v for k, v in os.environ.items() if k not in ("BASH_ENV", "ENV")}
     return {**env, "PATH": path, "PYTHONPATH": str(REPO_ROOT), "GRAPHIFY_OUT": "graphify-out"}
 
@@ -112,7 +114,7 @@ def _bash(block: str, proj: Path, root: str) -> str:
     # sidecar instead of a substituted literal; write it as Step 1 would.
     out = proj / "graphify-out"
     out.mkdir(parents=True, exist_ok=True)
-    (out / ".graphify_root").write_text(root, encoding="utf-8")
+    _graph_write_text(out / ".graphify_root", root, encoding="utf-8")
     block = block.replace("IS_DIRECTED", "False")
     # -e: a block that runs more commands after its Python (Step 9's cleanup) must not hide a
     # Python failure behind their exit status.
@@ -139,12 +141,12 @@ def _built_project(tmp_path: Path, root: str) -> Path:
     (proj / root / "guide").mkdir(parents=True)
     out = proj / "graphify-out"
     out.mkdir()
-    (proj / root / LONG).write_text(LONG_V1, encoding="utf-8")
-    (proj / root / "notes.md").write_text("# Notes\nGear\n", encoding="utf-8")
-    (proj / root / "short.md").write_text("# Short\nGadget uses Widget\n", encoding="utf-8")
-    (out / ".graphify_python").write_text(sys.executable, encoding="utf-8")
+    _graph_write_text(proj / root / LONG, LONG_V1, encoding="utf-8")
+    _graph_write_text(proj / root / "notes.md", "# Notes\nGear\n", encoding="utf-8")
+    _graph_write_text(proj / root / "short.md", "# Short\nGadget uses Widget\n", encoding="utf-8")
+    _graph_write_text(out / ".graphify_python", sys.executable, encoding="utf-8")
     _python(FULL_BUILD, proj, root)
-    (out / "graph.json").write_text(json.dumps({
+    _graph_write_text(out / "graph.grafeo", json.dumps({
         "nodes": [{"id": "long_widget", "label": "Widget", "source_file": LONG},
                   {"id": "notes_gear", "label": "Gear", "source_file": "notes.md"},
                   {"id": "short_gadget", "label": "Gadget", "source_file": "short.md"}],
@@ -161,16 +163,16 @@ def _update(proj: Path, root: str, detect: str, populate: str, merge: str, *,
     out = proj / "graphify-out"
     _bash(detect, proj, root)
     _bash(populate, proj, root)
-    (out / ".graphify_extract.json").write_text(json.dumps({
+    _graph_write_text(out / ".graphify_extract.json", json.dumps({
         "nodes": nodes, "edges": [], "hyperedges": [], "input_tokens": 0, "output_tokens": 0,
     }), encoding="utf-8")
     if partial is not None:
-        (out / ".graphify_partial.txt").write_text("\n".join(partial), encoding="utf-8")
+        _graph_write_text(out / ".graphify_partial.txt", "\n".join(partial), encoding="utf-8")
     _bash(merge, proj, root)
 
 
 def _edit_long(proj: Path, root: str) -> None:
-    (proj / root / LONG).write_text(LONG_V1 + "line 3000 about Sprocket\n", encoding="utf-8")
+    _graph_write_text(proj / root / LONG, LONG_V1 + "line 3000 about Sprocket\n", encoding="utf-8")
 
 
 LONG_NODE = {"id": "long_widget", "label": "Widget", "source_file": LONG}
@@ -184,8 +186,8 @@ def test_partly_read_doc_is_queued_again_by_the_next_update(
         detect, populate, merge, entry, root, tmp_path):
     proj = _built_project(tmp_path, root)
     _edit_long(proj, root)
-    (proj / root / "notes.md").write_text("# Notes\nGear and Pinion\n", encoding="utf-8")
-    (proj / root / "short.md").write_text("# Short\nGadget uses Sprocket\n", encoding="utf-8")
+    _graph_write_text(proj / root / "notes.md", "# Notes\nGear and Pinion\n", encoding="utf-8")
+    _graph_write_text(proj / root / "short.md", "# Short\nGadget uses Sprocket\n", encoding="utf-8")
 
     # All three docs changed. The subagents read short.md to its end, and long.md and notes.md
     # only partway. B3.5 lists both as the subagent reported them: the absolute path it was
@@ -202,7 +204,7 @@ def test_partly_read_doc_is_queued_again_by_the_next_update(
     # What this run read of each is kept until the retry replaces it.
     extract = proj / "graphify-out" / ".graphify_extract.json"
     merged = {(node.get("label"), node.get("source_file"))
-              for node in json.loads(extract.read_text(encoding="utf-8"))["nodes"]}
+              for node in json.loads(_graph_read_text(extract, encoding="utf-8"))["nodes"]}
     assert {("Long Head", LONG), ("Pinion", "notes.md")} <= merged
 
 
@@ -235,7 +237,7 @@ def test_a_list_from_an_earlier_run_does_not_hold_back_a_cache_hit(
     # long.md goes back to the content the full build read to its end, so the next run serves
     # it from the semantic cache and no subagent reports on it. A run that skips B3.5 writes
     # no list; the previous run's list must not hold the doc back, or it is never stamped.
-    (proj / root / LONG).write_text(LONG_V1, encoding="utf-8")
+    _graph_write_text(proj / root / LONG, LONG_V1, encoding="utf-8")
     _update(proj, root, detect, populate, merge, nodes=[LONG_NODE], partial=None)
 
     assert _queued(proj, root) == []

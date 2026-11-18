@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 """Excluding a corpus alias must not delete its target's graph (#5273)."""
 import json
 
@@ -13,10 +15,10 @@ from graphify.build import build_merge, merge_raw_extraction
 def test_prune_only_named_corpus_path(
     tmp_path, requires_symlinks, raw, absolute, deleted, pruned
 ):
-    (tmp_path / "b.py").write_text("def beta(): pass\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "b.py", "def beta(): pass\n", encoding="utf-8")
     (tmp_path / "link.py").symlink_to("b.py")
     if deleted:
-        (tmp_path / pruned).unlink()
+        _graph_unlink(tmp_path / pruned)
     kept = "b.py" if pruned == "link.py" else "link.py"
     # Three nodes per source keep hyperedges valid in the clustered path.
     nodes = [{"id": f"{stem}_{i}", "label": f"{stem} {i}",
@@ -29,9 +31,9 @@ def test_prune_only_named_corpus_path(
     hyperedges = [{"id": stem, "source_file": sf,
                    "nodes": [f"{stem}_{i}" for i in range(3)]}
                   for sf, stem in [("b.py", "b"), ("link.py", "link")]]
-    graph_path = tmp_path / "graphify-out" / "graph.json"
+    graph_path = tmp_path / "graphify-out" / "graph.grafeo"
     graph_path.parent.mkdir()
-    graph_path.write_text(json.dumps({"nodes": nodes, "edges": edges,
+    _graph_write_text(graph_path, json.dumps({"nodes": nodes, "edges": edges,
                                       "hyperedges": hyperedges}), encoding="utf-8")
     source = str(tmp_path / pruned) if absolute else pruned
     if raw:
@@ -54,9 +56,8 @@ def test_cli_exclusion_keeps_included_target(tmp_path, requires_symlinks):
     import subprocess
     import sys
 
-    (tmp_path / "b.py").write_text("def beta():\n    return 2\n", encoding="utf-8")
-    (tmp_path / "app.py").write_text(
-        "from b import beta\n\ndef main():\n    return beta()\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "b.py", "def beta():\n    return 2\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "app.py", "from b import beta\n\ndef main():\n    return beta()\n", encoding="utf-8")
 
     def run():
         subprocess.run([sys.executable, "-m", "graphify", "extract", str(tmp_path),
@@ -64,14 +65,14 @@ def test_cli_exclusion_keeps_included_target(tmp_path, requires_symlinks):
                        text=True, timeout=60)
 
     def ids():
-        data = json.loads((tmp_path / "graphify-out" / "graph.json").read_text())
+        data = json.loads(_graph_read_text(tmp_path / "graphify-out" / "graph.grafeo"))
         return {n["id"] for n in data["nodes"]}
 
     run()
     (tmp_path / "link.py").symlink_to("b.py")
     run()
     assert {"b", "b_beta", "link", "link_beta"} <= ids()
-    (tmp_path / ".graphifyignore").write_text("link.py\n", encoding="utf-8")
+    _graph_write_text(tmp_path / ".graphifyignore", "link.py\n", encoding="utf-8")
     run()
     assert {"b", "b_beta", "app", "app_main"} <= ids()
     assert not {"link", "link_beta"} & ids()

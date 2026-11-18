@@ -8,6 +8,8 @@ caught it — is deliberately skipped while dedup is on, because fuzzy merging
 shrinks the graph legitimately. There was no way to opt out from the CLI.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import graphify.__main__ as mainmod
 
@@ -15,7 +17,7 @@ import graphify.__main__ as mainmod
 def _corpus(tmp_path):
     corpus = tmp_path / "corpus"
     corpus.mkdir()
-    (corpus / "main.go").write_text("package main\nfunc main() {}\n")
+    _graph_write_text(corpus / "main.go", "package main\nfunc main() {}\n")
     return corpus
 
 
@@ -100,14 +102,14 @@ def test_dedup_is_on_by_default(monkeypatch, tmp_path):
 def test_no_dedup_reaches_the_incremental_merge(monkeypatch, tmp_path):
     corpus = _corpus(tmp_path)
     out = tmp_path / "out"
-    # First run establishes graph.json, so the second run takes the
+    # First run establishes graph.grafeo, so the second run takes the
     # build_merge (incremental) path rather than build().
     assert _run(monkeypatch, [
         "graphify", "extract", str(corpus), "--code-only",
         "--out", str(out),
     ]) == 0
 
-    (corpus / "other.go").write_text("package main\nfunc other() {}\n")
+    _graph_write_text(corpus / "other.go", "package main\nfunc other() {}\n")
     seen = _capture_dedup(monkeypatch)
     assert _run(monkeypatch, [
         "graphify", "extract", str(corpus), "--code-only",

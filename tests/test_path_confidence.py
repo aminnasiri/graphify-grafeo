@@ -6,6 +6,8 @@ among EXTRACTED ones read as a list of independent tags. The CLI and the MCP
 ranked by `_CONFIDENCE_RANK` and then by the lowest `confidence_score`.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import json
 
@@ -43,8 +45,8 @@ def _report_graph():
 
 
 def test_cli_path_prints_weakest_hop(monkeypatch, tmp_path, capsys):
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps(json_graph.node_link_data(_report_graph(), edges="links")))
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps(json_graph.node_link_data(_report_graph(), edges="links")))
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda _: None)
     monkeypatch.setattr(mainmod.sys, "argv", [
         "graphify", "path", "report_exporter_run", "report_pdfreport_build", "--graph", str(p)])

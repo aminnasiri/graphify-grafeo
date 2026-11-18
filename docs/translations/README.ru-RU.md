@@ -66,7 +66,7 @@ graphify install               # detects your assistant and registers the skill
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 Сохранённый граф включает `graph.schema_version`, чтобы интеграции могли
@@ -117,7 +117,7 @@ Shortest path (3 hops):
 | **Узлы-боги** | Наиболее связанные концепции, чтобы вы видели, через что всё проходит |
 | **Сообщества** | Граф, разбитый на подсистемы (Leiden), с метками без участия LLM |
 | **Межфайловые связи** | `calls` / `imports` / `inherits` / `mixes_in`, разрешённые для ~40 языков через AST tree-sitter |
-| **Query, path, explain** | Задайте вопрос, проследите путь между двумя сущностями или объясните одну концепцию: всё на основе `graph.json` |
+| **Query, path, explain** | Задайте вопрос, проследите путь между двумя сущностями или объясните одну концепцию: всё на основе `graph.grafeo` |
 | **Обоснование + ссылки на документацию** | Комментарии `# NOTE:` / `# WHY:` и цитаты ADR/RFC становятся полноценными узлами, связанными с кодом |
 | **За пределами кода** | Документация, PDF, изображения и видео/аудио: всё отображается в один и тот же граф |
 | **Локально в первую очередь** | Код разбирается локально с помощью tree-sitter (без LLM, ничего не покидает вашу машину); только семантический проход по документации/медиа обращается к бэкенду, и только если вы его настроите |
@@ -402,7 +402,7 @@ viz_node_limit=0
 
 ## Использование графа напрямую
 
-Помимо вашего ИИ-ассистента, запрашивайте `graph.json` прямо из CLI с помощью `graphify query`, `graphify path` и `graphify explain`. Имя, совпадающее с несколькими узлами, отклоняется с перечислением кандидатов, а не угадывается. Скрипты могут считать результат из кода выхода: `0` ответ, `3` неоднозначное имя, `4` нет подходящего узла. Смотрите **[Как задавать графу более качественные вопросы](https://docs.graphify.com/guides/querying)** и **[справочник по запросам](https://docs.graphify.com/reference/query)**.
+Помимо вашего ИИ-ассистента, запрашивайте `graph.grafeo` прямо из CLI с помощью `graphify query`, `graphify path` и `graphify explain`. Имя, совпадающее с несколькими узлами, отклоняется с перечислением кандидатов, а не угадывается. Скрипты могут считать результат из кода выхода: `0` ответ, `3` неоднозначное имя, `4` нет подходящего узла. Смотрите **[Как задавать графу более качественные вопросы](https://docs.graphify.com/guides/querying)** и **[справочник по запросам](https://docs.graphify.com/reference/query)**.
 
 ---
 

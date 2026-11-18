@@ -12,6 +12,8 @@ The guard is driven the way Claude Code drives it: a subprocess with the hook
 JSON on stdin.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import os
@@ -30,12 +32,12 @@ def _project(tmp_path):
     src = tmp_path / "src"
     src.mkdir()
     f = src / "mod.py"
-    f.write_text("def x():\n    return 1\n", encoding="utf-8")
+    _graph_write_text(f, "def x():\n    return 1\n", encoding="utf-8")
     out = tmp_path / "graphify-out"
     out.mkdir()
-    (out / "manifest.json").write_text(json.dumps({"src/mod.py": {"mtime": 1}}), encoding="utf-8")
+    _graph_write_text(out / "manifest.json", json.dumps({"src/mod.py": {"mtime": 1}}), encoding="utf-8")
     time.sleep(0.02)
-    (out / "graph.json").write_text('{"nodes":[],"links":[]}', encoding="utf-8")
+    _graph_write_text(out / "graph.grafeo", '{"nodes":[],"links":[]}', encoding="utf-8")
     return f
 
 
@@ -220,7 +222,7 @@ def test_compact_respects_graphify_out(tmp_path):
         run("read", read)
     assert run("read", read) == ""
     out = run("compact", {"session_id": SID, "hook_event_name": "SessionStart", "source": "compact"})
-    assert "alt-out/graph.json" in out
+    assert "alt-out/graph.grafeo" in out
     assert run("read", read) != ""
 
 
@@ -228,7 +230,7 @@ def test_compact_respects_graphify_out(tmp_path):
 
 
 def _settings(project):
-    return json.loads((project / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    return json.loads(_graph_read_text(project / ".claude" / "settings.json", encoding="utf-8"))
 
 
 def _ours(groups):
@@ -258,7 +260,7 @@ def test_install_and_uninstall_keep_the_users_session_start_hooks(tmp_path):
     settings_path.parent.mkdir(parents=True)
     user_group = {"matcher": "startup", "hooks": [{"type": "command", "command": "echo hello"}]}
     shared = {"matcher": "compact", "hooks": [{"type": "command", "command": "./notify.sh"}]}
-    settings_path.write_text(json.dumps({"hooks": {"SessionStart": [user_group, shared]}}), encoding="utf-8")
+    _graph_write_text(settings_path, json.dumps({"hooks": {"SessionStart": [user_group, shared]}}), encoding="utf-8")
 
     install_mod._install_claude_hook(tmp_path)
     groups = _settings(tmp_path)["hooks"]["SessionStart"]
@@ -281,7 +283,6 @@ def test_uninstall_removes_the_session_start_hook(tmp_path):
 def test_uninstall_cleans_session_start_from_settings_local(tmp_path):
     local = tmp_path / ".claude" / "settings.local.json"
     local.parent.mkdir(parents=True)
-    local.write_text(json.dumps({"hooks": {"SessionStart": install_mod._claude_sessionstart_hooks()}}),
-                     encoding="utf-8")
+    _graph_write_text(local, json.dumps({"hooks": {"SessionStart": install_mod._claude_sessionstart_hooks()}}), encoding="utf-8")
     install_mod._uninstall_claude_hook(tmp_path)
-    assert json.loads(local.read_text(encoding="utf-8"))["hooks"]["SessionStart"] == []
+    assert json.loads(_graph_read_text(local, encoding="utf-8"))["hooks"]["SessionStart"] == []

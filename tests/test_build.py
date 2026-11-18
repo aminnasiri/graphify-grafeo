@@ -1581,8 +1581,9 @@ def test_subfolder_build_from_parent_is_not_flagged_legacy(tmp_path, monkeypatch
     (proj / "main.py").write_text("from pkg.mod import a\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     assert _rebuild_code(Path("proj"), no_cluster=True)
-    gp = proj / "graphify-out" / "graph.json"
-    nodes = json.loads(gp.read_text(encoding="utf-8"))["nodes"]
+    gp = proj / "graphify-out" / "graph.grafeo"
+    from graphify.paths import read_graph_json
+    nodes = read_graph_json(gp)["nodes"]
     files = {n["source_file"] for n in nodes if n.get("source_location") == "L1"}
     assert "proj/pkg/mod.py" in files  # stored cwd-relative (#2603)
     assert legacy_id_source_prefix(gp) == "proj"

@@ -13,6 +13,8 @@ Regression shape: every assertion below fails on v8, where `resolve_seed`
 returns None for the qualified forms and the CLI always exits 0.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import json
 
@@ -97,8 +99,8 @@ def _write_graph(tmp_path, graph: nx.Graph) -> str:
 
     out_dir = tmp_path / "repo" / GRAPHIFY_OUT_NAME
     out_dir.mkdir(parents=True)
-    gp = out_dir / "graph.json"
-    gp.write_text(json.dumps(json_graph.node_link_data(graph, edges="links")), encoding="utf-8")
+    gp = out_dir / "graph.grafeo"
+    _graph_write_text(gp, json.dumps(json_graph.node_link_data(graph, edges="links")), encoding="utf-8")
     return str(gp)
 
 

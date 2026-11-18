@@ -9,6 +9,8 @@ long-lived process, so the order has to come from the walk itself.
 """
 
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import json
 import os
@@ -35,8 +37,8 @@ def _write_graph(tmp_path: Path) -> Path:
             leaf = f"leaf_{i}_{j}"
             G.add_node(leaf, label=f"leaf_{i}_{j}", source_file=f"h{i}.py", source_location=f"L{j + 2}")
             G.add_edge(mid, leaf, relation="contains", confidence="EXTRACTED")
-    path = tmp_path / "graph.json"
-    path.write_text(json.dumps(json_graph.node_link_data(G, edges="links")))
+    path = tmp_path / "graph.grafeo"
+    _graph_write_text(path, json.dumps(json_graph.node_link_data(G, edges="links")))
     return path
 
 

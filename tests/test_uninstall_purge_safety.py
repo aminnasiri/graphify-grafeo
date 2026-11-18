@@ -9,6 +9,8 @@ purge a target that would take the project, home or a filesystem root with it,
 even when an absolute ``GRAPHIFY_OUT`` bypasses the first layer.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, is_file as _graph_is_file, write_text as _graph_write_text
 
 import sys
 from pathlib import Path
@@ -44,9 +46,9 @@ def env(tmp_path, monkeypatch, _sandbox_home):
 
     project = tmp_path / "parent" / "project"
     (project / "src").mkdir(parents=True)
-    (project / "src" / "important.py").write_text("x = 1\n", encoding="utf-8")
+    _graph_write_text(project / "src" / "important.py", "x = 1\n", encoding="utf-8")
     (project / "graphify-out").mkdir()
-    (project / "graphify-out" / "graph.json").write_text("{}", encoding="utf-8")
+    _graph_write_text(project / "graphify-out" / "graph.grafeo", "{}", encoding="utf-8")
 
     calls: list[str] = []
     for name in _PLATFORM_UNINSTALLERS:
@@ -67,7 +69,7 @@ def _purge_with_env(monkeypatch, project, value):
 
 def _assert_project_intact(project):
     assert project.is_dir()
-    assert (project / "src" / "important.py").is_file()
+    assert _graph_is_file(project / "src" / "important.py")
 
 
 # -- Layer 1: paths._out_from_env -----------------------------------------
@@ -116,7 +118,7 @@ def test_purge_with_bad_graphify_out_only_removes_default_out(env, monkeypatch, 
     project = env["project"]
     _purge_with_env(monkeypatch, project, value)
     _assert_project_intact(project)
-    assert not (project / "graphify-out").exists()
+    assert not _graph_exists(project / "graphify-out")
     # ".." must not have reached the parent of the project either.
     assert project.parent.is_dir()
 
@@ -125,17 +127,17 @@ def test_purge_default_removes_only_graphify_out(env):
     project = env["project"]
     install_mod.uninstall_all(project_dir=project, purge=True)
     _assert_project_intact(project)
-    assert not (project / "graphify-out").exists()
+    assert not _graph_exists(project / "graphify-out")
 
 
 def test_purge_custom_relative_out(env, monkeypatch):
     project = env["project"]
     (project / "custom-out").mkdir()
-    (project / "custom-out" / "graph.json").write_text("{}", encoding="utf-8")
+    _graph_write_text(project / "custom-out" / "graph.grafeo", "{}", encoding="utf-8")
     _purge_with_env(monkeypatch, project, "custom-out")
     _assert_project_intact(project)
-    assert not (project / "custom-out").exists()
-    assert (project / "graphify-out").exists()  # not the configured dir
+    assert not _graph_exists(project / "custom-out")
+    assert _graph_exists(project / "graphify-out")  # not the configured dir
 
 
 def test_purge_custom_absolute_out_outside_project(env, monkeypatch):
@@ -143,10 +145,10 @@ def test_purge_custom_absolute_out_outside_project(env, monkeypatch):
     project = env["project"]
     shared = env["tmp"] / "shared-out"
     shared.mkdir()
-    (shared / "graph.json").write_text("{}", encoding="utf-8")
+    _graph_write_text(shared / "graph.grafeo", "{}", encoding="utf-8")
     _purge_with_env(monkeypatch, project, str(shared))
     _assert_project_intact(project)
-    assert not shared.exists()
+    assert not _graph_exists(shared)
 
 
 # -- Layer 2: unsafe targets are refused before anything changes ------------
@@ -156,7 +158,7 @@ def _assert_refused(env, capsys, excinfo):
     assert excinfo.value.code == 1
     assert "refusing --purge" in capsys.readouterr().err
     _assert_project_intact(env["project"])
-    assert (env["project"] / "graphify-out" / "graph.json").is_file()
+    assert _graph_is_file(env["project"] / "graphify-out" / "graph.grafeo")
     assert env["calls"] == [], "a refused purge must not run any uninstaller"
 
 
@@ -174,11 +176,11 @@ def test_purge_refuses_absolute_out_parent_of_project(env, monkeypatch, capsys):
 
 
 def test_purge_refuses_home(env, monkeypatch, capsys):
-    (env["home"] / "keep.txt").write_text("x", encoding="utf-8")
+    _graph_write_text(env["home"] / "keep.txt", "x", encoding="utf-8")
     with pytest.raises(SystemExit) as excinfo:
         _purge_with_env(monkeypatch, env["project"], str(env["home"]))
     _assert_refused(env, capsys, excinfo)
-    assert (env["home"] / "keep.txt").is_file()
+    assert _graph_is_file(env["home"] / "keep.txt")
 
 
 def test_unsafe_purge_reason_rejects_filesystem_roots(env):

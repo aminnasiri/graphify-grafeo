@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text
 """Tests for graphify.querylog."""
 import json
 import os
@@ -37,15 +39,15 @@ def test_log_query_writes_jsonl(tmp_path, monkeypatch):
     monkeypatch.setenv("GRAPHIFY_QUERY_LOG", str(log_file))
     monkeypatch.delenv("GRAPHIFY_QUERY_LOG_DISABLE", raising=False)
 
-    log_query(kind="query", question="what is X", corpus="/some/graph.json",
+    log_query(kind="query", question="what is X", corpus="/some/graph.grafeo",
               result="3 nodes found\nNODE a", duration_ms=12.5, mode="bfs", depth=2)
 
-    lines = log_file.read_text().splitlines()
+    lines = _graph_read_text(log_file).splitlines()
     assert len(lines) == 1
     rec = json.loads(lines[0])
     assert rec["kind"] == "query"
     assert rec["question"] == "what is X"
-    assert rec["corpus"] == "/some/graph.json"
+    assert rec["corpus"] == "/some/graph.grafeo"
     assert rec["nodes_returned"] == 3
     assert rec["result_chars"] > 0
     assert rec["duration_ms"] == pytest.approx(12.5, abs=0.01)
@@ -61,7 +63,7 @@ def test_log_query_appends(tmp_path, monkeypatch):
     log_query(kind="query", question="q1", corpus="/g.json")
     log_query(kind="query", question="q2", corpus="/g.json")
 
-    lines = log_file.read_text().splitlines()
+    lines = _graph_read_text(log_file).splitlines()
     assert len(lines) == 2
     assert json.loads(lines[0])["question"] == "q1"
     assert json.loads(lines[1])["question"] == "q2"
@@ -78,7 +80,7 @@ def test_disable_env(tmp_path, monkeypatch):
 
     log_query(kind="query", question="q", corpus="/g.json")
 
-    assert not log_file.exists()
+    assert not _graph_exists(log_file)
 
 
 def test_disable_env_true(tmp_path, monkeypatch):
@@ -88,7 +90,7 @@ def test_disable_env_true(tmp_path, monkeypatch):
 
     log_query(kind="query", question="q", corpus="/g.json")
 
-    assert not log_file.exists()
+    assert not _graph_exists(log_file)
 
 
 def test_responses_not_logged_by_default(tmp_path, monkeypatch):
@@ -99,7 +101,7 @@ def test_responses_not_logged_by_default(tmp_path, monkeypatch):
 
     log_query(kind="query", question="q", corpus="/g.json", result="NODE foo")
 
-    rec = json.loads(log_file.read_text())
+    rec = json.loads(_graph_read_text(log_file))
     assert "response" not in rec
 
 
@@ -111,7 +113,7 @@ def test_responses_optin(tmp_path, monkeypatch):
 
     log_query(kind="query", question="q", corpus="/g.json", result="NODE foo bar")
 
-    rec = json.loads(log_file.read_text())
+    rec = json.loads(_graph_read_text(log_file))
     assert rec["response"] == "NODE foo bar"
 
 
@@ -137,7 +139,7 @@ def test_log_creates_parent_dirs(tmp_path, monkeypatch):
 
     log_query(kind="query", question="q", corpus="/g.json")
 
-    assert log_file.exists()
+    assert _graph_exists(log_file)
 
 
 # ---------------------------------------------------------------------------
@@ -152,7 +154,7 @@ def test_nodes_returned_inferred_from_result(tmp_path, monkeypatch):
     log_query(kind="query", question="q", corpus="/g.json",
               result="5 nodes found\nNODE a\nNODE b")
 
-    rec = json.loads(log_file.read_text())
+    rec = json.loads(_graph_read_text(log_file))
     assert rec["nodes_returned"] == 5
 
 
@@ -163,7 +165,7 @@ def test_explicit_nodes_returned_takes_precedence(tmp_path, monkeypatch):
 
     log_query(kind="path", question="A -> B", corpus="/g.json", nodes_returned=3)
 
-    rec = json.loads(log_file.read_text())
+    rec = json.loads(_graph_read_text(log_file))
     assert rec["nodes_returned"] == 3
 
 
@@ -174,7 +176,7 @@ def test_kind_mcp_query(tmp_path, monkeypatch):
 
     log_query(kind="mcp_query", question="q", corpus="/g.json")
 
-    rec = json.loads(log_file.read_text())
+    rec = json.loads(_graph_read_text(log_file))
     assert rec["kind"] == "mcp_query"
 
 
@@ -220,4 +222,4 @@ def test_log_query_writes_nothing_by_default(monkeypatch, tmp_path):
     _clear_log_env(monkeypatch)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     log_query(kind="query", question="secret internal ticket TICKET-123", corpus=".", result="1 node found")
-    assert not (tmp_path / ".cache" / "graphify-queries.log").exists()
+    assert not _graph_exists(tmp_path / ".cache" / "graphify-queries.log")

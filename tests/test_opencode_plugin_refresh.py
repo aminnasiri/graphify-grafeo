@@ -8,6 +8,8 @@ run the install again in every project. The CLI now rewrites such a plugin on
 its next run.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text, write_text as _graph_write_text
 
 import contextlib
 import json
@@ -39,7 +41,7 @@ export const GraphifyPlugin = async ({ directory }) => {
   return {
     "tool.execute.before": async (input, output) => {
       if (reminded) return;
-      if (!existsSync(join(directory, "graphify-out", "graph.json"))) return;
+      if (!existsSync(join(directory, "graphify-out", "graph.grafeo"))) return;
 
       if (input.tool === "bash") {
         // ';' not '&&' — Windows PowerShell 5.1 rejects '&&' as a statement
@@ -72,10 +74,10 @@ def _old_install(directory: Path, body: str = V1_PLUGIN, entry: bool = True) -> 
     """Lay down the plugin and the config entry as an older release left them."""
     plugin = directory / ".opencode" / "plugins" / "graphify.js"
     plugin.parent.mkdir(parents=True, exist_ok=True)
-    plugin.write_text(body, encoding="utf-8")
+    _graph_write_text(plugin, body, encoding="utf-8")
     config = directory / ".opencode" / "opencode.json"
     settings = {"model": "some/model", **({"plugin": [ENTRY]} if entry else {})}
-    config.write_text(json.dumps(settings), encoding="utf-8")
+    _graph_write_text(config, json.dumps(settings), encoding="utf-8")
     return plugin, config
 
 
@@ -94,8 +96,8 @@ def test_a_v1_plugin_in_the_working_directory_is_rewritten(tmp_path, monkeypatch
 
     mainmod._refresh_v1_opencode_plugins()
 
-    assert plugin.read_text(encoding="utf-8") == _OPENCODE_PLUGIN_JS
-    assert json.loads(config.read_text(encoding="utf-8")) == {"model": "some/model"}
+    assert _graph_read_text(plugin, encoding="utf-8") == _OPENCODE_PLUGIN_JS
+    assert json.loads(_graph_read_text(config, encoding="utf-8")) == _canonical_expected({"model": "some/model"})
     out, err = capsys.readouterr()
     assert out == "", "stdout stays clean for --json and the MCP stdio server"
     assert f"graphify: refreshed {plugin.resolve()}" in err
@@ -110,8 +112,8 @@ def test_a_v1_plugin_in_the_home_directory_is_rewritten(tmp_path, monkeypatch, c
 
     mainmod._refresh_v1_opencode_plugins()
 
-    assert plugin.read_text(encoding="utf-8") == _OPENCODE_PLUGIN_JS
-    assert "plugin" not in json.loads(config.read_text(encoding="utf-8"))
+    assert _graph_read_text(plugin, encoding="utf-8") == _OPENCODE_PLUGIN_JS
+    assert "plugin" not in json.loads(_graph_read_text(config, encoding="utf-8"))
     assert "graphify: refreshed" in capsys.readouterr().err
 
 
@@ -132,7 +134,7 @@ def test_running_from_home_checks_it_once(monkeypatch, capsys):
 
     mainmod._refresh_v1_opencode_plugins()
 
-    assert plugin.read_text(encoding="utf-8") == _OPENCODE_PLUGIN_JS
+    assert _graph_read_text(plugin, encoding="utf-8") == _OPENCODE_PLUGIN_JS
     assert capsys.readouterr().err.count("graphify: refreshed") == 1
 
 
@@ -146,7 +148,7 @@ def test_a_stale_entry_beside_a_current_plugin_is_dropped(tmp_path, monkeypatch,
     mainmod._refresh_v1_opencode_plugins()
 
     assert plugin.stat().st_mtime_ns == stamp
-    assert json.loads(config.read_text(encoding="utf-8")) == {"model": "some/model"}
+    assert json.loads(_graph_read_text(config, encoding="utf-8")) == _canonical_expected({"model": "some/model"})
     out, err = capsys.readouterr()
     assert out == ""
     assert f"graphify: removed the stale graphify entry from {config.resolve()}" in err
@@ -158,13 +160,13 @@ def test_a_stale_entry_beside_a_current_plugin_is_dropped(tmp_path, monkeypatch,
 def test_a_config_with_comments_gets_the_hint_once(tmp_path, monkeypatch, capsys):
     plugin, config = _old_install(tmp_path)
     commented = '{ // mine\n  "plugin": ["' + ENTRY + '"]\n}'
-    config.write_text(commented, encoding="utf-8")
+    _graph_write_text(config, commented, encoding="utf-8")
     monkeypatch.chdir(tmp_path)
 
     mainmod._refresh_v1_opencode_plugins()
 
-    assert plugin.read_text(encoding="utf-8") == _OPENCODE_PLUGIN_JS
-    assert config.read_text(encoding="utf-8") == commented
+    assert _graph_read_text(plugin, encoding="utf-8") == _OPENCODE_PLUGIN_JS
+    assert _graph_read_text(config, encoding="utf-8") == commented
     out, err = capsys.readouterr()
     assert out == ""
     assert "graphify: refreshed" in err
@@ -176,27 +178,27 @@ def test_a_config_with_comments_gets_the_hint_once(tmp_path, monkeypatch, capsys
 
 def test_a_current_plugin_is_untouched_and_silent(tmp_path, monkeypatch, capsys):
     plugin, config = _old_install(tmp_path, _OPENCODE_PLUGIN_JS, entry=False)
-    before = config.read_text(encoding="utf-8")
+    before = _graph_read_text(config, encoding="utf-8")
     stamp = plugin.stat().st_mtime_ns
     monkeypatch.chdir(tmp_path)
 
     mainmod._refresh_v1_opencode_plugins()
 
     assert plugin.stat().st_mtime_ns == stamp
-    assert config.read_text(encoding="utf-8") == before
+    assert _graph_read_text(config, encoding="utf-8") == before
     assert capsys.readouterr().err == ""
 
 
 def test_a_plugin_graphify_did_not_write_is_left_alone(tmp_path, monkeypatch, capsys):
     mine = "// my own plugin\nexport const Mine = async () => ({});\n"
     plugin, config = _old_install(tmp_path, mine)
-    before = config.read_text(encoding="utf-8")
+    before = _graph_read_text(config, encoding="utf-8")
     monkeypatch.chdir(tmp_path)
 
     mainmod._refresh_v1_opencode_plugins()
 
-    assert plugin.read_text(encoding="utf-8") == mine
-    assert config.read_text(encoding="utf-8") == before
+    assert _graph_read_text(plugin, encoding="utf-8") == mine
+    assert _graph_read_text(config, encoding="utf-8") == before
     assert capsys.readouterr().err == ""
 
 
@@ -205,8 +207,8 @@ def test_no_plugin_means_nothing_is_created(tmp_path, monkeypatch, capsys):
 
     mainmod._refresh_v1_opencode_plugins()
 
-    assert not (tmp_path / ".opencode").exists()
-    assert not (Path.home() / ".opencode").exists()
+    assert not _graph_exists(tmp_path / ".opencode")
+    assert not _graph_exists(Path.home() / ".opencode")
     assert capsys.readouterr().err == ""
 
 
@@ -218,7 +220,7 @@ def test_the_env_opt_out_disables_it(tmp_path, monkeypatch, capsys, value):
 
     mainmod._refresh_v1_opencode_plugins()
 
-    assert plugin.read_text(encoding="utf-8") == V1_PLUGIN
+    assert _graph_read_text(plugin, encoding="utf-8") == V1_PLUGIN
     assert capsys.readouterr().err == ""
 
 
@@ -233,7 +235,7 @@ def test_a_failed_rewrite_never_breaks_the_command(tmp_path, monkeypatch, capsys
 
     mainmod._refresh_v1_opencode_plugins()
 
-    assert plugin.read_text(encoding="utf-8") == V1_PLUGIN
+    assert _graph_read_text(plugin, encoding="utf-8") == V1_PLUGIN
     err = capsys.readouterr().err
     assert f"graphify: could not refresh {plugin.resolve()}: read-only checkout" in err
     assert "graphify: refreshed" not in err
@@ -254,7 +256,7 @@ def test_an_interrupted_rewrite_leaves_the_old_plugin_whole(tmp_path, monkeypatc
 
     mainmod._refresh_v1_opencode_plugins()
 
-    assert plugin.read_text(encoding="utf-8") == V1_PLUGIN
+    assert _graph_read_text(plugin, encoding="utf-8") == V1_PLUGIN
     assert [p.name for p in plugin.parent.iterdir()] == ["graphify.js"], "no temp file left behind"
     assert "graphify: could not refresh" in capsys.readouterr().err
 
@@ -262,7 +264,7 @@ def test_an_interrupted_rewrite_leaves_the_old_plugin_whole(tmp_path, monkeypatc
 def test_a_symlinked_plugin_is_rewritten_through_the_link(tmp_path, monkeypatch, requires_symlinks):
     shared = tmp_path / "dotfiles" / "graphify.js"
     shared.parent.mkdir()
-    shared.write_text(V1_PLUGIN, encoding="utf-8")
+    _graph_write_text(shared, V1_PLUGIN, encoding="utf-8")
     project = tmp_path / "project"
     plugin = project / ".opencode" / "plugins" / "graphify.js"
     plugin.parent.mkdir(parents=True)
@@ -272,21 +274,21 @@ def test_a_symlinked_plugin_is_rewritten_through_the_link(tmp_path, monkeypatch,
     mainmod._refresh_v1_opencode_plugins()
 
     assert plugin.is_symlink()
-    assert shared.read_text(encoding="utf-8") == _OPENCODE_PLUGIN_JS
+    assert _graph_read_text(shared, encoding="utf-8") == _OPENCODE_PLUGIN_JS
 
 
 def test_an_opencode_too_old_for_the_new_plugin_keeps_its_plugin(tmp_path, monkeypatch, capsys):
     """OpenCode 1 before 1.3.4 calls every export as a function. The plugin it
     has works there and the new one would not, so the refresh leaves it."""
     plugin, config = _old_install(tmp_path)
-    before = config.read_text(encoding="utf-8")
+    before = _graph_read_text(config, encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(mainmod, "_opencode_loads_current_plugin", lambda: False)
 
     mainmod._refresh_v1_opencode_plugins()
 
-    assert plugin.read_text(encoding="utf-8") == V1_PLUGIN
-    assert config.read_text(encoding="utf-8") == before
+    assert _graph_read_text(plugin, encoding="utf-8") == V1_PLUGIN
+    assert _graph_read_text(config, encoding="utf-8") == before
     assert capsys.readouterr().err == ""
 
 
@@ -337,7 +339,7 @@ def test_opencode_is_only_asked_when_an_old_plugin_is_found(tmp_path, monkeypatc
     _plugin, config = _old_install(tmp_path, _OPENCODE_PLUGIN_JS)
     mainmod._refresh_v1_opencode_plugins()  # current plugin, stale entry
 
-    assert json.loads(config.read_text(encoding="utf-8")) == {"model": "some/model"}
+    assert json.loads(_graph_read_text(config, encoding="utf-8")) == _canonical_expected({"model": "some/model"})
     assert "removed the stale graphify entry" in capsys.readouterr().err
 
 
@@ -346,7 +348,7 @@ def test_a_directory_another_process_is_refreshing_is_skipped(tmp_path, monkeypa
     """Same rule as the skill refresh: without the lock (another graphify
     process has it, or locking is unavailable) leave the directory alone."""
     plugin, config = _old_install(tmp_path)
-    before = config.read_text(encoding="utf-8")
+    before = _graph_read_text(config, encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     locked = []
 
@@ -360,8 +362,8 @@ def test_a_directory_another_process_is_refreshing_is_skipped(tmp_path, monkeypa
     mainmod._refresh_v1_opencode_plugins()
 
     assert locked == [(plugin.resolve().parent, False)]
-    assert plugin.read_text(encoding="utf-8") == V1_PLUGIN
-    assert config.read_text(encoding="utf-8") == before
+    assert _graph_read_text(plugin, encoding="utf-8") == V1_PLUGIN
+    assert _graph_read_text(config, encoding="utf-8") == before
     assert capsys.readouterr().err == ""
 
 
@@ -371,7 +373,7 @@ def test_no_lock_file_is_made_where_there_is_nothing_to_refresh(tmp_path, monkey
 
     mainmod._refresh_v1_opencode_plugins()
 
-    assert not (Path.home() / ".cache" / "graphify").exists()
+    assert not _graph_exists(Path.home() / ".cache" / "graphify")
 
 
 def test_the_first_cli_run_after_an_upgrade_rewrites_it(tmp_path, monkeypatch, capsys):
@@ -383,7 +385,7 @@ def test_the_first_cli_run_after_an_upgrade_rewrites_it(tmp_path, monkeypatch, c
 
     mainmod._run_cli()
 
-    assert plugin.read_text(encoding="utf-8") == _OPENCODE_PLUGIN_JS
+    assert _graph_read_text(plugin, encoding="utf-8") == _OPENCODE_PLUGIN_JS
     assert "graphify: refreshed" in capsys.readouterr().err
 
 
@@ -396,7 +398,7 @@ def test_version_leaves_an_old_plugin_alone(tmp_path, monkeypatch, capsys):
     mainmod._run_cli()
 
     assert capsys.readouterr().out.strip() == f"graphify {__version__}"
-    assert plugin.read_text(encoding="utf-8") == V1_PLUGIN
+    assert _graph_read_text(plugin, encoding="utf-8") == V1_PLUGIN
 
 
 @pytest.mark.parametrize("cmd", ["install", "uninstall", "hook-check", "hook-guard"])
@@ -427,10 +429,10 @@ def test_a_v1_plugin_in_the_global_config_dir_is_rewritten(tmp_path, monkeypatch
     ~/.config/opencode/plugins (#3398), so the refresh looks there too."""
     plugin = Path.home() / ".config" / "opencode" / "plugins" / "graphify.js"
     plugin.parent.mkdir(parents=True)
-    plugin.write_text(V1_PLUGIN, encoding="utf-8")
+    _graph_write_text(plugin, V1_PLUGIN, encoding="utf-8")
     monkeypatch.chdir(tmp_path)
 
     mainmod._refresh_v1_opencode_plugins()
 
-    assert plugin.read_text(encoding="utf-8") == _OPENCODE_PLUGIN_JS
+    assert _graph_read_text(plugin, encoding="utf-8") == _OPENCODE_PLUGIN_JS
     assert "graphify: refreshed" in capsys.readouterr().err

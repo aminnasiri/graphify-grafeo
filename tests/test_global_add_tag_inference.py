@@ -1,12 +1,14 @@
 """`graphify global add` repo-tag inference, and addressing the tag it produces.
 
 The tag was `source.parent.parent.name`, which is empty whenever the graph is not two
-levels below a named directory — `graphify global add /tmp/graph.json`, or any relative
-path such as `graphify-out/graph.json`. The empty tag then prefixes every node with
+levels below a named directory — `graphify global add /tmp/graph.grafeo`, or any relative
+path such as `graphify-out/graph.grafeo`. The empty tag then prefixes every node with
 `::`, prunes by `""`, and registers a manifest entry the `remove` subcommand rejected
 as a missing argument, so the store could not be cleaned up again.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 
@@ -27,7 +29,7 @@ def _write_graph(path):
         data = jg.node_link_data(G, edges="links")
     except TypeError:
         data = jg.node_link_data(G)
-    path.write_text(json.dumps(data), encoding="utf-8")
+    _graph_write_text(path, json.dumps(data), encoding="utf-8")
 
 
 @pytest.fixture
@@ -35,7 +37,7 @@ def store(monkeypatch, tmp_path):
     """Point the global store at a scratch dir and yield its manifest reader."""
     where = tmp_path / "store"
     monkeypatch.setattr("graphify.global_graph._GLOBAL_DIR", where)
-    monkeypatch.setattr("graphify.global_graph._GLOBAL_GRAPH", where / "global-graph.json")
+    monkeypatch.setattr("graphify.global_graph._GLOBAL_GRAPH", where / "global-graph.grafeo")
     monkeypatch.setattr("graphify.global_graph._GLOBAL_MANIFEST", where / "global-manifest.json")
     return where
 
@@ -51,19 +53,19 @@ def _run(monkeypatch, argv):
 
 
 def _manifest(store):
-    return json.loads((store / "global-manifest.json").read_text(encoding="utf-8"))["repos"]
+    return json.loads(_graph_read_text(store / "global-manifest.json", encoding="utf-8"))["repos"]
 
 
 def _nodes(store):
-    return json.loads((store / "global-graph.json").read_text(encoding="utf-8"))["nodes"]
+    return json.loads(_graph_read_text(store / "global-graph.grafeo", encoding="utf-8"))["nodes"]
 
 
 def test_bare_graph_path_gets_a_non_empty_tag(monkeypatch, tmp_path, store):
     repo = tmp_path / "myrepo"
-    _write_graph(repo / "graph.json")
+    _write_graph(repo / "graph.grafeo")
     monkeypatch.chdir(repo)
 
-    assert _run(monkeypatch, ["graphify", "global", "add", "graph.json"]) == 0
+    assert _run(monkeypatch, ["graphify", "global", "add", "graph.grafeo"]) == 0
 
     tags = list(_manifest(store))
     assert tags == [tmp_path.name]
@@ -76,21 +78,21 @@ def test_a_nameless_repo_dir_degrades_to_repo():
 
     from graphify.build import distinct_repo_tags
 
-    assert distinct_repo_tags([Path("/graph.json")]) == ["repo"]
+    assert distinct_repo_tags([Path("/graph.grafeo")]) == ["repo"]
 
 
 def test_relative_path_infers_from_the_resolved_repo_dir(monkeypatch, tmp_path, store):
     repo = tmp_path / "myrepo"
-    _write_graph(repo / "graphify-out" / "graph.json")
+    _write_graph(repo / "graphify-out" / "graph.grafeo")
     monkeypatch.chdir(repo)
 
-    assert _run(monkeypatch, ["graphify", "global", "add", "graphify-out/graph.json"]) == 0
+    assert _run(monkeypatch, ["graphify", "global", "add", "graphify-out/graph.grafeo"]) == 0
 
     assert list(_manifest(store)) == ["myrepo"]
 
 
 def test_explicit_as_tag_still_wins(monkeypatch, tmp_path, store):
-    graph = tmp_path / "graph.json"
+    graph = tmp_path / "graph.grafeo"
     _write_graph(graph)
 
     assert _run(monkeypatch, ["graphify", "global", "add", str(graph), "--as", "chosen"]) == 0
@@ -103,7 +105,7 @@ def test_remove_without_a_tag_is_still_a_usage_error(monkeypatch, store):
 
 
 def test_remove_can_address_a_repo_registered_under_an_empty_tag(monkeypatch, tmp_path, store):
-    graph = tmp_path / "graph.json"
+    graph = tmp_path / "graph.grafeo"
     _write_graph(graph)
     from graphify.global_graph import global_add
 

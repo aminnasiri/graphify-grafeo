@@ -66,7 +66,7 @@ graphify install               # detects your assistant and registers the skill
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 กราฟที่ถูกบันทึกไว้มี `graph.schema_version` เพื่อให้การผสานรวมตรวจพบการเปลี่ยนแปลงรูปแบบที่เข้ากันไม่ได้ พร้อมด้วย `graph.graphify_version` ที่ระบุรุ่น Graphify ที่สร้างมันขึ้นมา
@@ -115,7 +115,7 @@ Shortest path (3 hops):
 | **God nodes** | แนวคิดที่เชื่อมต่อมากที่สุด เพื่อให้คุณเห็นว่าทุกอย่างไหลผ่านอะไร |
 | **Communities** | แบ่งกราฟออกเป็นระบบย่อย (Leiden) พร้อมป้ายกำกับที่ไม่ต้องใช้ LLM |
 | **Cross-file links** | `calls` / `imports` / `inherits` / `mixes_in` ตีความข้าม ~40 languages ผ่าน tree-sitter AST |
-| **Query, path, explain** | ถามคำถามหนึ่งข้อ ตามเส้นทางระหว่างสองสิ่ง หรืออธิบายแนวคิดหนึ่งอย่าง ทั้งหมดกระทำกับ `graph.json` |
+| **Query, path, explain** | ถามคำถามหนึ่งข้อ ตามเส้นทางระหว่างสองสิ่ง หรืออธิบายแนวคิดหนึ่งอย่าง ทั้งหมดกระทำกับ `graph.grafeo` |
 | **Rationale + doc refs** | คอมเมนต์ `# NOTE:` / `# WHY:` และการอ้างอิง ADR/RFC กลายเป็นโหนดชั้นหนึ่งที่เชื่อมโยงกับโค้ด |
 | **Beyond code** | เอกสาร, PDF, รูปภาพ และวิดีโอ/เสียง ล้วนแมปเข้าสู่กราฟเดียวกัน |
 | **Local-first** | โค้ดถูกแยกวิเคราะห์ในเครื่องด้วย tree-sitter (ไม่มี LLM ไม่มีอะไรออกจากเครื่องของคุณ) มีเพียงการประมวลผลเชิงความหมายกับเอกสาร/สื่อเท่านั้นที่เรียกใช้แบ็กเอนด์ และต่อเมื่อคุณกำหนดค่าไว้ |
@@ -394,7 +394,7 @@ viz_node_limit=0
 
 ## การใช้กราฟโดยตรง
 
-นอกเหนือจากผู้ช่วย AI ของคุณ ให้สืบค้น `graph.json` โดยตรงจาก CLI ด้วย `graphify query`, `graphify path` และ `graphify explain` ชื่อที่ตรงกับหลายโหนดจะถูกปฏิเสธโดยแสดงรายการตัวเลือก แทนการเดา สคริปต์สามารถอ่านผลลัพธ์ได้จากรหัสออก: `0` คือมีคำตอบ, `3` คือชื่อกำกวม, `4` คือไม่มีโหนดที่ตรงกัน ดู **[Ask better graph questions](https://docs.graphify.com/guides/querying)** และ **[query reference](https://docs.graphify.com/reference/query)**
+นอกเหนือจากผู้ช่วย AI ของคุณ ให้สืบค้น `graph.grafeo` โดยตรงจาก CLI ด้วย `graphify query`, `graphify path` และ `graphify explain` ชื่อที่ตรงกับหลายโหนดจะถูกปฏิเสธโดยแสดงรายการตัวเลือก แทนการเดา สคริปต์สามารถอ่านผลลัพธ์ได้จากรหัสออก: `0` คือมีคำตอบ, `3` คือชื่อกำกวม, `4` คือไม่มีโหนดที่ตรงกัน ดู **[Ask better graph questions](https://docs.graphify.com/guides/querying)** และ **[query reference](https://docs.graphify.com/reference/query)**
 
 ---
 

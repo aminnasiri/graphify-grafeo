@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 """A vault written before the ownership manifest must not end up with two generations.
 
 #1506 added `.graphify_obsidian_manifest.json` so a re-export can update its own
@@ -59,7 +61,7 @@ def pre_manifest_vault(tmp_path):
     """A vault as an older graphify would have left it: its notes, no manifest."""
     vault = tmp_path / "vault"
     _export(vault, ["Alpha", "Beta", "Gamma"])
-    (vault / MANIFEST).unlink()
+    _graph_unlink(vault / MANIFEST)
     return vault
 
 
@@ -89,7 +91,7 @@ def test_graphify_no_longer_claims_it_did_not_write_its_own_notes(pre_manifest_v
 
 def test_the_manifest_is_written_so_migration_happens_once(pre_manifest_vault):
     _export(pre_manifest_vault, ["Alpha", "Beta", "Gamma"])
-    owned = json.loads((pre_manifest_vault / MANIFEST).read_text(encoding="utf-8"))["files"]
+    owned = json.loads(_graph_read_text(pre_manifest_vault / MANIFEST, encoding="utf-8"))["files"]
     assert "Alpha.md" in owned
     assert any(f.startswith("_COMMUNITY_") for f in owned)
 
@@ -100,24 +102,24 @@ def test_the_manifest_is_written_so_migration_happens_once(pre_manifest_vault):
 
 def test_a_users_own_note_is_never_adopted(pre_manifest_vault):
     mine = pre_manifest_vault / "Alpha.md"
-    mine.write_text("# My own note about Alpha\n\nI wrote this.\n", encoding="utf-8")
+    _graph_write_text(mine, "# My own note about Alpha\n\nI wrote this.\n", encoding="utf-8")
     _export(pre_manifest_vault, ["Alpha", "Beta", "Gamma"])
-    assert "I wrote this." in mine.read_text(encoding="utf-8")
+    assert "I wrote this." in _graph_read_text(mine, encoding="utf-8")
 
 
 def test_a_note_merely_mentioning_graphify_is_not_adopted(pre_manifest_vault):
     mine = pre_manifest_vault / "Notes.md"
-    mine.write_text("# Notes\n\nI use graphify/document tags manually.\n", encoding="utf-8")
+    _graph_write_text(mine, "# Notes\n\nI use graphify/document tags manually.\n", encoding="utf-8")
     _export(pre_manifest_vault, ["Alpha", "Beta", "Gamma"])
-    assert "I use graphify" in mine.read_text(encoding="utf-8")
+    assert "I use graphify" in _graph_read_text(mine, encoding="utf-8")
 
 
 def test_a_user_community_named_file_needs_the_query_marker_too(pre_manifest_vault):
     """The filename prefix alone must not be enough to adopt a file."""
     mine = pre_manifest_vault / "_COMMUNITY_mine.md"
-    mine.write_text("# My own community summary\n\nhand written\n", encoding="utf-8")
+    _graph_write_text(mine, "# My own community summary\n\nhand written\n", encoding="utf-8")
     _export(pre_manifest_vault, ["Alpha", "Beta", "Gamma"])
-    assert "hand written" in mine.read_text(encoding="utf-8")
+    assert "hand written" in _graph_read_text(mine, encoding="utf-8")
 
 
 def test_obsidian_config_is_not_adopted(pre_manifest_vault):
@@ -125,9 +127,9 @@ def test_obsidian_config_is_not_adopted(pre_manifest_vault):
     manifest there is no way to tell, so it stays unowned."""
     cfg = pre_manifest_vault / ".obsidian" / "graph.json"
     cfg.parent.mkdir(exist_ok=True)
-    cfg.write_text('{"mine": true}', encoding="utf-8")
+    _graph_write_text(cfg, '{"mine": true}', encoding="utf-8")
     _export(pre_manifest_vault, ["Alpha", "Beta", "Gamma"])
-    assert json.loads(cfg.read_text(encoding="utf-8")) == {"mine": True}
+    assert json.loads(_graph_read_text(cfg, encoding="utf-8")) == _canonical_expected({"mine": True})
 
 
 # ---------------------------------------------------------------------------
@@ -137,9 +139,9 @@ def test_obsidian_config_is_not_adopted(pre_manifest_vault):
 def test_a_vault_with_a_manifest_is_untouched_by_the_migration(tmp_path):
     vault = tmp_path / "v"
     _export(vault, ["Alpha", "Beta"])
-    before = json.loads((vault / MANIFEST).read_text(encoding="utf-8"))["files"]
+    before = json.loads(_graph_read_text(vault / MANIFEST, encoding="utf-8"))["files"]
     _export(vault, ["Alpha", "Beta"])
-    after = json.loads((vault / MANIFEST).read_text(encoding="utf-8"))["files"]
+    after = json.loads(_graph_read_text(vault / MANIFEST, encoding="utf-8"))["files"]
     assert sorted(before) == sorted(after)
 
 
@@ -156,8 +158,7 @@ def test_a_fresh_directory_still_works(tmp_path):
 @pytest.mark.skipif(_is_graphify_note is None, reason="pre-fix tree")
 def test_detector_accepts_a_graphify_node_note(tmp_path):
     p = tmp_path / "n.md"
-    p.write_text('---\nsource_file: "a.md"\ntags:\n  - graphify/document\n---\n\n# N\n',
-                 encoding="utf-8")
+    _graph_write_text(p, '---\nsource_file: "a.md"\ntags:\n  - graphify/document\n---\n\n# N\n', encoding="utf-8")
     assert _is_graphify_note(p)
 
 
@@ -170,13 +171,12 @@ def test_detector_accepts_a_graphify_node_note(tmp_path):
 ])
 def test_detector_rejects_everything_else(tmp_path, body):
     p = tmp_path / "x.md"
-    p.write_text(body, encoding="utf-8")
+    _graph_write_text(p, body, encoding="utf-8")
     assert not _is_graphify_note(p)
 
 
 @pytest.mark.skipif(_adopt_pre_manifest_notes is None, reason="pre-fix tree")
 def test_adoption_only_looks_at_top_level_markdown(tmp_path):
     (tmp_path / "sub").mkdir()
-    (tmp_path / "sub" / "deep.md").write_text(
-        "---\ntags:\n  - graphify/document\n---\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "sub" / "deep.md", "---\ntags:\n  - graphify/document\n---\n", encoding="utf-8")
     assert _adopt_pre_manifest_notes(tmp_path) == set()

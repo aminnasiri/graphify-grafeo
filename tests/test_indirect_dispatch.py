@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 """Indirect dispatch edges.
 
 A function passed BY NAME as a call argument (`executor.submit(fn)`, `Thread(target=fn)`) is a
@@ -43,7 +45,7 @@ def via_map(xs):
 
 
 def _build(tmp_path):
-    (tmp_path / "dispatch.py").write_text(SRC)
+    _graph_write_text(tmp_path / "dispatch.py", SRC)
     r = extract_python(tmp_path / "dispatch.py")
     nid = {n["label"].rstrip("()"): n["id"] for n in r["nodes"]}   # labels are "handler()"
     return r, nid
@@ -92,7 +94,7 @@ def test_affected_includes_indirect_callers(tmp_path):
 # ── Soundness: the guards that kill the PR's false positives ──────────────────
 
 def _extract(tmp_path, src):
-    (tmp_path / "m.py").write_text(src)
+    _graph_write_text(tmp_path / "m.py", src)
     r = extract_python(tmp_path / "m.py")
     nid = {n["label"].rstrip("()"): n["id"] for n in r["nodes"]}
     return r, nid
@@ -187,7 +189,7 @@ def _extract_dir(tmp_path, files: dict[str, str]):
     base = tmp_path / "pkg"
     base.mkdir()
     for name, body in files.items():
-        (base / name).write_text(body)
+        _graph_write_text(base / name, body)
     old = os.getcwd()
     try:
         os.chdir(tmp_path)
@@ -210,10 +212,8 @@ def test_cross_file_indirect_survives_id_relativization(tmp_path):
     in-file ones survive). This is the exact shape the CLI hit."""
     base = tmp_path / "proj"
     (base / "handlers").mkdir(parents=True)
-    (base / "handlers" / "__init__.py").write_text("def on_event(x):\n    return x\n")
-    (base / "scheduler.py").write_text(
-        "from handlers import on_event\n\n\ndef schedule(pool):\n    pool.submit(on_event)\n"
-    )
+    _graph_write_text(base / "handlers" / "__init__.py", "def on_event(x):\n    return x\n")
+    _graph_write_text(base / "scheduler.py", "from handlers import on_event\n\n\ndef schedule(pool):\n    pool.submit(on_event)\n")
     old = os.getcwd()
     try:
         os.chdir(base)
@@ -224,7 +224,7 @@ def test_cross_file_indirect_survives_id_relativization(tmp_path):
         os.chdir(old)
     nid = {n["label"].rstrip("()"): n["id"] for n in r["nodes"]}
     assert (nid["schedule"], nid["on_event"]) in _rels(r, "indirect_call")
-    # the internal callable marker now persists to graph.json (#2438), so an
+    # the internal callable marker now persists to graph.grafeo (#2438), so an
     # incremental rebuild can resolve indirect_call edges into unchanged targets.
     assert any(n.get("_callable") for n in r["nodes"])
 
@@ -412,7 +412,7 @@ def _extract_js_dir(tmp_path, files: dict[str, str]):
     base = tmp_path / "src"
     base.mkdir()
     for name, body in files.items():
-        (base / name).write_text(body)
+        _graph_write_text(base / name, body)
     old = os.getcwd()
     try:
         os.chdir(tmp_path)
@@ -560,7 +560,7 @@ def test_class_ref_is_not_indirect_call(tmp_path):
         "def register(pool):\n"
         "    pool.submit(handler)            # real fn callback -> indirect_call\n"
     )
-    (tmp_path / "orm.py").write_text(src)
+    _graph_write_text(tmp_path / "orm.py", src)
     r = extract_python(tmp_path / "orm.py")
     nid = {n["label"].rstrip("()"): n["id"] for n in r["nodes"]}
     indirect = _rels(r, "indirect_call")

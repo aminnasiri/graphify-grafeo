@@ -66,7 +66,7 @@ Tamom. Siz **uchta fayl** olasiz:
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 Saqlangan graf `graph.schema_version` ni o'z ichiga oladi, shunday qilib integratsiyalar
@@ -117,7 +117,7 @@ Qutidan chiqib nima olasiz:
 | **Xudo tugunlar** | Eng ko'p bog'langan tushunchalar, shunday qilib hamma narsa nima orqali oqishini ko'rasiz |
 | **Jamoalar** | Graf quyi tizimlarga bo'lingan (Leiden), LLM-siz yorliqlar bilan |
 | **Fayllararo bog'lanishlar** | `calls` / `imports` / `inherits` / `mixes_in` ~40 tilda tree-sitter AST orqali aniqlanadi |
-| **Query, path, explain** | Savol bering, ikki narsa o'rtasidagi yo'lni kuzating yoki bitta tushunchani tushuntiring, barchasi `graph.json` ga nisbatan |
+| **Query, path, explain** | Savol bering, ikki narsa o'rtasidagi yo'lni kuzating yoki bitta tushunchani tushuntiring, barchasi `graph.grafeo` ga nisbatan |
 | **Asos + hujjat havolalari** | `# NOTE:` / `# WHY:` izohlari va ADR/RFC iqtiboslari kodga bog'langan birinchi darajali tugunlarga aylanadi |
 | **Koddan tashqari** | Hujjatlar, PDF-lar, rasmlar va video/audio, barchasi bir xil grafga xaritalanadi |
 | **Avval lokal** | Kod lokal tarzda tree-sitter bilan tahlil qilinadi (LLM yo'q, hech narsa qurilmangizdan chiqmaydi); faqat hujjatlar/media ustidagi semantik o'tish backendga murojaat qiladi, va faqat siz uni sozlasangiz |
@@ -402,7 +402,7 @@ Grafni kommit qiling yoki ulashing, shunda butun jamoangiz bir xil kontekstni so
 
 ## Grafdan to'g'ridan-to'g'ri foydalanish
 
-AI yordamchingizdan tashqari, `graph.json` ni CLI dan to'g'ridan-to'g'ri `graphify query`, `graphify path` va `graphify explain` bilan so'rov qiling. Bir nechta tugunga mos keladigan nom taxmin qilinmasdan nomzodlar ro'yxati bilan rad etiladi. Skriptlar natijani chiqish kodidan o'qiy oladi: `0` javob, `3` noaniq nom, `4` mos keladigan tugun yo'q. **[Yaxshiroq graf savollari bering](https://docs.graphify.com/guides/querying)** va **[so'rov ma'lumotnomasi](https://docs.graphify.com/reference/query)** ga qarang.
+AI yordamchingizdan tashqari, `graph.grafeo` ni CLI dan to'g'ridan-to'g'ri `graphify query`, `graphify path` va `graphify explain` bilan so'rov qiling. Bir nechta tugunga mos keladigan nom taxmin qilinmasdan nomzodlar ro'yxati bilan rad etiladi. Skriptlar natijani chiqish kodidan o'qiy oladi: `0` javob, `3` noaniq nom, `4` mos keladigan tugun yo'q. **[Yaxshiroq graf savollari bering](https://docs.graphify.com/guides/querying)** va **[so'rov ma'lumotnomasi](https://docs.graphify.com/reference/query)** ga qarang.
 
 ---
 

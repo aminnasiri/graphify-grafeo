@@ -1,5 +1,7 @@
 """Integration tests for incremental graphify extract behavior."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text, write_text as _graph_write_text
 import json
 import os
 import subprocess
@@ -35,8 +37,8 @@ def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
 def _make_docs_corpus(tmp_path: Path) -> Path:
     docs = tmp_path / "docs"
     docs.mkdir()
-    (docs / "intro.md").write_text("# Introduction\nThis doc introduces the system.")
-    (docs / "api.md").write_text("# API Reference\nThe API has endpoints.")
+    _graph_write_text(docs / "intro.md", "# Introduction\nThis doc introduces the system.")
+    _graph_write_text(docs / "api.md", "# API Reference\nThe API has endpoints.")
     return docs
 
 
@@ -48,16 +50,16 @@ def test_manifest_written_after_extract(tmp_path):
     assert "no LLM API key" in r.stderr or r.returncode != 0
     # manifest should NOT exist (run failed before writing)
     manifest = docs / "graphify-out" / "manifest.json"
-    assert not manifest.exists()
+    assert not _graph_exists(manifest)
 
 
 def test_incremental_mode_detected_via_manifest(tmp_path):
-    """If manifest.json + graph.json exist, incremental mode message is shown."""
+    """If manifest.json + graph.grafeo exist, incremental mode message is shown."""
     docs = _make_docs_corpus(tmp_path)
     out = docs / "graphify-out"
     out.mkdir()
-    (out / "graph.json").write_text(json.dumps({"nodes": [], "links": []}))
-    (out / "manifest.json").write_text(json.dumps({"document": [str(docs / "intro.md")]}))
+    _graph_write_text(out / "graph.grafeo", json.dumps({"nodes": [], "links": []}))
+    _graph_write_text(out / "manifest.json", json.dumps({"document": [str(docs / "intro.md")]}))
     r = _run(["extract", str(docs)], tmp_path)
     combined = r.stdout + r.stderr
     assert "incremental" in combined.lower() or r.returncode != 0
@@ -75,57 +77,50 @@ def test_no_incremental_without_manifest(tmp_path):
 
 
 def test_extract_no_cluster_incremental_noop_preserves_existing_graph(tmp_path):
-    """#1347: no-op incremental no-cluster extract must not overwrite graph.json."""
+    """#1347: no-op incremental no-cluster extract must not overwrite graph.grafeo."""
     project = tmp_path / "project"
     project.mkdir()
-    (project / "app.py").write_text(
-        "def alpha():\n    return 1\n", encoding="utf-8"
-    )
+    _graph_write_text(project / "app.py", "def alpha():\n    return 1\n", encoding="utf-8")
 
     first = _run(["extract", str(project), "--no-cluster"], tmp_path)
     assert first.returncode == 0, first.stderr
-    graph_path = project / "graphify-out" / "graph.json"
-    before_text = graph_path.read_text(encoding="utf-8")
+    graph_path = project / "graphify-out" / "graph.grafeo"
+    before_text = _graph_read_text(graph_path, encoding="utf-8")
     before = json.loads(before_text)
     assert before.get("nodes"), "first run should produce a non-empty code graph"
 
     second = _run(["extract", str(project), "--no-cluster"], tmp_path)
     assert second.returncode == 0, second.stderr
 
-    after_text = graph_path.read_text(encoding="utf-8")
+    after_text = _graph_read_text(graph_path, encoding="utf-8")
     after = json.loads(after_text)
     assert after.get("nodes"), "no-op incremental run must not empty the graph"
     assert after_text == before_text
 
 
 def _edges(graph_json: Path) -> list[dict]:
-    g = json.loads(graph_json.read_text())
+    g = json.loads(_graph_read_text(graph_json))
     return g.get("links", g.get("edges", []))
 
 
 def test_extract_no_cluster_incremental_changed_file_preserves_unchanged_files(tmp_path):
     """#2169: an incremental --no-cluster extract of ONE changed file must merge
-    into the existing graph, not overwrite graph.json with just that file's
+    into the existing graph, not overwrite graph.grafeo with just that file's
     chunk — and the changed file's cross-file import edges must keep pointing at
     the unchanged target file's canonical node ids, not dangling
     absolute-path-derived ones."""
     proj = tmp_path / "proj"
     (proj / "app" / "add").mkdir(parents=True)
     (proj / "src" / "components").mkdir(parents=True)
-    (proj / "src" / "components" / "ScanScreen.tsx").write_text(
-        "export function ScanScreen() {\n  return null;\n}\n", encoding="utf-8"
-    )
+    _graph_write_text(proj / "src" / "components" / "ScanScreen.tsx", "export function ScanScreen() {\n  return null;\n}\n", encoding="utf-8")
     scan_tsx = proj / "app" / "add" / "scan.tsx"
-    scan_tsx.write_text(
-        "import {ScanScreen} from '../../src/components/ScanScreen';\n"
-        "export default ScanScreen;\n",
-        encoding="utf-8",
-    )
+    _graph_write_text(scan_tsx, "import {ScanScreen} from '../../src/components/ScanScreen';\n"
+        "export default ScanScreen;\n", encoding="utf-8")
 
     first = _run(["extract", str(proj), "--code-only", "--no-cluster"], tmp_path)
     assert first.returncode == 0, first.stderr
-    gj = proj / "graphify-out" / "graph.json"
-    base = json.loads(gj.read_text(encoding="utf-8"))
+    gj = proj / "graphify-out" / "graph.grafeo"
+    base = json.loads(_graph_read_text(gj, encoding="utf-8"))
     base_ids = {n["id"] for n in base["nodes"]}
     # Sanity: importer file, target file, and target symbol all present.
     assert {
@@ -135,15 +130,13 @@ def test_extract_no_cluster_incremental_changed_file_preserves_unchanged_files(t
     } <= base_ids, base_ids
 
     # Change ONLY scan.tsx (harmless comment), then re-run the same command.
-    scan_tsx.write_text(
-        scan_tsx.read_text(encoding="utf-8") + "\n// touched\n", encoding="utf-8"
-    )
+    _graph_write_text(scan_tsx, scan_tsx.read_text(encoding="utf-8") + "\n// touched\n", encoding="utf-8")
     second = _run(["extract", str(proj), "--code-only", "--no-cluster"], tmp_path)
     assert second.returncode == 0, second.stderr
     # Guard against a silent full rescan masking the merge bug.
     assert "incremental scan" in second.stdout.lower(), second.stdout
 
-    after = json.loads(gj.read_text(encoding="utf-8"))
+    after = json.loads(_graph_read_text(gj, encoding="utf-8"))
     after_ids = {n["id"] for n in after["nodes"]}
     # The unchanged file's nodes must survive the incremental raw write.
     assert after_ids == base_ids, (
@@ -171,22 +164,14 @@ def test_update_preserves_generic_rust_self_call_to_unchanged_impl(tmp_path):
     """The CLI incremental context carries Rust impl-family identity."""
     proj = tmp_path / "proj"
     proj.mkdir()
-    (proj / "state.rs").write_text(
-        "pub struct Bucket<T> { value: T }\n", encoding="utf-8"
-    )
-    (proj / "method.rs").write_text(
-        "impl<T> Bucket<T> {\n"
+    _graph_write_text(proj / "state.rs", "pub struct Bucket<T> { value: T }\n", encoding="utf-8")
+    _graph_write_text(proj / "method.rs", "impl<T> Bucket<T> {\n"
         "    pub fn fetch_value(&self) {}\n"
-        "}\n",
-        encoding="utf-8",
-    )
+        "}\n", encoding="utf-8")
     caller = proj / "caller.rs"
-    caller.write_text(
-        "impl<U> Bucket<U> {\n"
+    _graph_write_text(caller, "impl<U> Bucket<U> {\n"
         "    pub fn run(&self) { self.fetch_value(); }\n"
-        "}\n",
-        encoding="utf-8",
-    )
+        "}\n", encoding="utf-8")
 
     first = _run(
         ["extract", str(proj), "--code-only", "--no-cluster"], tmp_path
@@ -195,7 +180,7 @@ def test_update_preserves_generic_rust_self_call_to_unchanged_impl(tmp_path):
 
     def has_call() -> bool:
         graph = json.loads(
-            (proj / "graphify-out" / "graph.json").read_text(encoding="utf-8")
+            _graph_read_text(proj / "graphify-out" / "graph.grafeo", encoding="utf-8")
         )
         nodes = {
             (node.get("label"), node.get("source_file")): node["id"]
@@ -212,12 +197,9 @@ def test_update_preserves_generic_rust_self_call_to_unchanged_impl(tmp_path):
         )
 
     assert has_call()
-    caller.write_text(
-        "impl<U> Bucket<U> {\n"
+    _graph_write_text(caller, "impl<U> Bucket<U> {\n"
         "    pub fn run(&self) { let marker = 1; self.fetch_value(); }\n"
-        "}\n",
-        encoding="utf-8",
-    )
+        "}\n", encoding="utf-8")
     second = _run(["update", str(proj), "--no-cluster"], tmp_path)
     assert second.returncode == 0, second.stderr
     assert has_call()
@@ -229,13 +211,13 @@ def test_extract_no_cluster_incremental_code_only_preserves_doc_nodes(tmp_path):
     proj = tmp_path / "proj"
     proj.mkdir()
     util = proj / "util.py"
-    util.write_text("def alpha():\n    return 1\n", encoding="utf-8")
-    (proj / "notes.md").write_text("# Notes\nSome prose.\n", encoding="utf-8")
+    _graph_write_text(util, "def alpha():\n    return 1\n", encoding="utf-8")
+    _graph_write_text(proj / "notes.md", "# Notes\nSome prose.\n", encoding="utf-8")
 
     first = _run(["extract", str(proj), "--code-only", "--no-cluster"], tmp_path)
     assert first.returncode == 0, first.stderr
-    gj = proj / "graphify-out" / "graph.json"
-    g = json.loads(gj.read_text(encoding="utf-8"))
+    gj = proj / "graphify-out" / "graph.grafeo"
+    g = json.loads(_graph_read_text(gj, encoding="utf-8"))
     assert g.get("nodes"), "first run should produce a non-empty code graph"
 
     # Seed a doc-sourced node, as a prior (LLM-backed) run would have written.
@@ -245,18 +227,15 @@ def test_extract_no_cluster_incremental_code_only_preserves_doc_nodes(tmp_path):
         "type": "document",
         "source_file": "notes.md",
     })
-    gj.write_text(json.dumps(g), encoding="utf-8")
+    _graph_write_text(gj, json.dumps(g), encoding="utf-8")
 
     # Change only the code file; the doc node must survive the incremental run.
-    util.write_text(
-        "def alpha():\n    return 1\n\ndef beta():\n    return 2\n",
-        encoding="utf-8",
-    )
+    _graph_write_text(util, "def alpha():\n    return 1\n\ndef beta():\n    return 2\n", encoding="utf-8")
     second = _run(["extract", str(proj), "--code-only", "--no-cluster"], tmp_path)
     assert second.returncode == 0, second.stderr
     assert "incremental scan" in second.stdout.lower(), second.stdout
 
-    after = json.loads(gj.read_text(encoding="utf-8"))
+    after = json.loads(_graph_read_text(gj, encoding="utf-8"))
     after_by_id = {n["id"]: n for n in after["nodes"]}
     assert "notes" in after_by_id, (
         f"doc node dropped by incremental --code-only --no-cluster: "
@@ -280,14 +259,9 @@ def test_incremental_python_relative_import_target_canonicalizes(tmp_path):
     tmp = Path(os.path.realpath(tmp_path))
     pkg = tmp / "pkg"
     pkg.mkdir()
-    (pkg / "b.py").write_text(
-        "class Thing:\n    def go(self):\n        return 1\n", encoding="utf-8"
-    )
+    _graph_write_text(pkg / "b.py", "class Thing:\n    def go(self):\n        return 1\n", encoding="utf-8")
     a = pkg / "a.py"
-    a.write_text(
-        "from .b import Thing\n\n\ndef use():\n    return Thing().go()\n",
-        encoding="utf-8",
-    )
+    _graph_write_text(a, "from .b import Thing\n\n\ndef use():\n    return Thing().go()\n", encoding="utf-8")
 
     full = extract([a, pkg / "b.py"], cache_root=tmp)
     full_imports = [
@@ -331,12 +305,9 @@ def test_incremental_md_reference_target_canonicalizes(tmp_path):
     docs = tmp / "docs"
     docs.mkdir()
     setup = docs / "setup.md"
-    setup.write_text("# Setup\nInstall the thing.\n", encoding="utf-8")
+    _graph_write_text(setup, "# Setup\nInstall the thing.\n", encoding="utf-8")
     claude = tmp / "CLAUDE.md"
-    claude.write_text(
-        "# Overview\nSee [setup](docs/setup.md) for install steps.\n",
-        encoding="utf-8",
-    )
+    _graph_write_text(claude, "# Overview\nSee [setup](docs/setup.md) for install steps.\n", encoding="utf-8")
 
     full = extract([claude, setup], cache_root=tmp)
     full_refs = [
@@ -371,20 +342,20 @@ def test_update_prunes_a_removed_imports_edge(tmp_path):
     proj = tmp_path / "proj"
     pkg = proj / "pkg"
     pkg.mkdir(parents=True)
-    (pkg / "b.py").write_text("def helper():\n    return 1\n")
-    (pkg / "a.py").write_text("from pkg.b import helper\ndef use():\n    return helper()\n")
+    _graph_write_text(pkg / "b.py", "def helper():\n    return 1\n")
+    _graph_write_text(pkg / "a.py", "from pkg.b import helper\ndef use():\n    return helper()\n")
 
     # initial extract -> the import edge a -> b exists
     r1 = _run(["extract", str(proj), "--no-cluster"], tmp_path)
     assert r1.returncode == 0, r1.stderr
-    gj = proj / "graphify-out" / "graph.json"
+    gj = proj / "graphify-out" / "graph.grafeo"
     before = _edges(gj)
     assert any(e.get("relation") in ("imports", "imports_from") and
                str(e.get("source_file", "")).endswith("a.py") for e in before), \
         f"expected an import edge from a.py initially: {before}"
 
     # remove the import, then update
-    (pkg / "a.py").write_text("def use():\n    return 1\n")
+    _graph_write_text(pkg / "a.py", "def use():\n    return 1\n")
     r2 = _run(["update", str(proj)], tmp_path)
     assert r2.returncode == 0, r2.stderr
     after = _edges(gj)
@@ -400,18 +371,15 @@ def test_update_preserves_cross_file_imports_and_calls_to_unchanged_file(tmp_pat
     """#3776: incremental update must resolve symbols defined in unchanged files."""
     proj = tmp_path / "proj"
     proj.mkdir()
-    (proj / "b.py").write_text("def helper():\n    return 1\n", encoding="utf-8")
+    _graph_write_text(proj / "b.py", "def helper():\n    return 1\n", encoding="utf-8")
     a = proj / "a.py"
-    a.write_text(
-        "from b import helper\n\n"
+    _graph_write_text(a, "from b import helper\n\n"
         "def use():\n"
-        "    return helper()\n",
-        encoding="utf-8",
-    )
+        "    return helper()\n", encoding="utf-8")
 
     r1 = _run(["extract", str(proj), "--no-cluster"], tmp_path)
     assert r1.returncode == 0, r1.stderr
-    gj = proj / "graphify-out" / "graph.json"
+    gj = proj / "graphify-out" / "graph.grafeo"
     before = _edges(gj)
 
     # Initial build must contain both the imports edge and the calls edge
@@ -432,13 +400,10 @@ def test_update_preserves_cross_file_imports_and_calls_to_unchanged_file(tmp_pat
     assert has_call_before, f"expected initial calls edge a_use -> b_helper: {before}"
 
     # Modify only a.py with an unrelated change
-    a.write_text(
-        "from b import helper\n\n"
+    _graph_write_text(a, "from b import helper\n\n"
         "def use():\n"
         "    # unrelated change\n"
-        "    return helper()\n",
-        encoding="utf-8",
-    )
+        "    return helper()\n", encoding="utf-8")
 
     r2 = _run(["extract", str(proj), "--code-only", "--no-cluster"], tmp_path)
     assert r2.returncode == 0, r2.stderr
@@ -471,18 +436,15 @@ def test_update_does_not_resurrect_a_dropped_cross_file_edge_via_context(tmp_pat
     still visible through the context index."""
     proj = tmp_path / "proj"
     proj.mkdir()
-    (proj / "b.py").write_text("def helper():\n    return 1\n", encoding="utf-8")
+    _graph_write_text(proj / "b.py", "def helper():\n    return 1\n", encoding="utf-8")
     a = proj / "a.py"
-    a.write_text(
-        "from b import helper\n\n"
+    _graph_write_text(a, "from b import helper\n\n"
         "def use():\n"
-        "    return helper()\n",
-        encoding="utf-8",
-    )
+        "    return helper()\n", encoding="utf-8")
 
     r1 = _run(["extract", str(proj), "--no-cluster"], tmp_path)
     assert r1.returncode == 0, r1.stderr
-    gj = proj / "graphify-out" / "graph.json"
+    gj = proj / "graphify-out" / "graph.grafeo"
     before = _edges(gj)
     assert any(
         e.get("relation") == "imports"
@@ -492,11 +454,8 @@ def test_update_does_not_resurrect_a_dropped_cross_file_edge_via_context(tmp_pat
     ), f"expected initial imports edge a -> b_helper: {before}"
 
     # Edit ONLY a.py to drop the import and the call; b.py (and b_helper) unchanged.
-    a.write_text(
-        "def use():\n"
-        "    return 1\n",
-        encoding="utf-8",
-    )
+    _graph_write_text(a, "def use():\n"
+        "    return 1\n", encoding="utf-8")
 
     r2 = _run(["extract", str(proj), "--code-only", "--no-cluster"], tmp_path)
     assert r2.returncode == 0, r2.stderr

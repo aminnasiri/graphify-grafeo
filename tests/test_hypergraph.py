@@ -1,5 +1,7 @@
 """Tests for hyperedge support in graphify."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text
 import json
 import tempfile
 from pathlib import Path
@@ -66,7 +68,7 @@ def test_build_from_json_relativizes_hyperedge_source_file(tmp_path):
     """build_from_json(root=...) must relativize hyperedge source_file like it
     already does for nodes and edges. to_json writes G.graph['hyperedges']
     verbatim and has no root parameter, so an absolute path emitted by a semantic
-    subagent would otherwise leak into graph.json (#1418)."""
+    subagent would otherwise leak into graph.grafeo (#1418)."""
     base = tmp_path.resolve()
     abs_doc = base / "docs" / "CLAUDE.md"
     extraction = {
@@ -139,7 +141,7 @@ def test_attach_hyperedges_skips_entry_without_id():
 
 def test_attach_hyperedges_tolerates_id_less_persisted():
     # Regression for #2775: the semantic extractor emits hyperedges with no `id`
-    # and build.py persists them verbatim, so a prior graph.json can carry id-less
+    # and build.py persists them verbatim, so a prior graph.grafeo can carry id-less
     # hyperedges. On the next (incremental) run, attach_hyperedges read that
     # persisted set with a hard `h["id"]` and died with `KeyError: 'id'`, writing
     # nothing. Reading the persisted set must tolerate missing ids.
@@ -181,7 +183,7 @@ def test_to_json_includes_hyperedges():
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         path = f.name
     to_json(G, communities, path)
-    data = json.loads(Path(path).read_text())
+    data = json.loads(_graph_read_text(Path(path)))
     assert "hyperedges" in data
     assert len(data["hyperedges"]) == 1
     assert data["hyperedges"][0]["id"] == "auth_flow"
@@ -194,17 +196,17 @@ def test_to_json_hyperedges_empty_when_none():
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         path = f.name
     to_json(G, communities, path)
-    data = json.loads(Path(path).read_text())
+    data = json.loads(_graph_read_text(Path(path)))
     assert "hyperedges" in data
     assert data["hyperedges"] == []
 
 
 # ---------------------------------------------------------------------------
-# 4. Hyperedges loaded from graph.json via build_from_json
+# 4. Hyperedges loaded from graph.grafeo via build_from_json
 # ---------------------------------------------------------------------------
 
 def test_hyperedges_roundtrip_via_json_file():
-    """Write graph.json then reload it - hyperedges must survive."""
+    """Write graph.grafeo then reload it - hyperedges must survive."""
     G = build_from_json(SAMPLE_EXTRACTION)
     communities = {0: list(G.nodes())}
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
@@ -212,7 +214,7 @@ def test_hyperedges_roundtrip_via_json_file():
     to_json(G, communities, path)
 
     # Reload the JSON as if build_from_json were called on it
-    data = json.loads(Path(path).read_text())
+    data = json.loads(_graph_read_text(Path(path)))
     G2 = build_from_json({
         "nodes": [{"id": n["id"], **{k: v for k, v in n.items() if k != "id"}} for n in data["nodes"]],
         "edges": [{"source": e["source"], "target": e["target"], **{k: v for k, v in e.items() if k not in ("source", "target")}} for e in data.get("links", [])],

@@ -66,7 +66,7 @@ graphify install               # detects your assistant and registers the skill
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 הגרף הנשמר כולל `graph.schema_version` כך שאינטגרציות יכולות לזהות שינויי פורמט לא תואמים, בתוספת `graph.graphify_version` המזהה את גרסת Graphify שיצרה אותו.
@@ -115,7 +115,7 @@ Shortest path (3 hops):
 | **צמתי על (God nodes)** | המושגים המחוברים ביותר, כך שאתם רואים דרך מה הכל זורם |
 | **קהילות** | הגרף מחולק לתת-מערכות (Leiden), עם תוויות ללא LLM |
 | **קישורים חוצי-קבצים** | `calls` / `imports` / `inherits` / `mixes_in` נפתרים על פני ~40 שפות באמצעות tree-sitter AST |
-| **Query, path, explain** | שאלו שאלה, עקבו אחר הנתיב בין שני דברים, או הסבירו מושג אחד, הכל מול `graph.json` |
+| **Query, path, explain** | שאלו שאלה, עקבו אחר הנתיב בין שני דברים, או הסבירו מושג אחד, הכל מול `graph.grafeo` |
 | **נימוקים + הפניות למסמכים** | הערות `# NOTE:` / `# WHY:` וציטוטי ADR/RFC הופכים לצמתים מהשורה הראשונה המקושרים לקוד |
 | **מעבר לקוד** | מסמכים, PDFs, תמונות, ווידאו/אודיו, כולם ממופים לאותו גרף |
 | **מקומי-ראשון** | הקוד מנותח מקומית עם tree-sitter (ללא LLM, שום דבר לא עוזב את המכונה שלכם); רק המעבר הסמנטי על מסמכים/מדיה פונה לשרת עורפי, ורק אם הגדרתם אחד |
@@ -394,7 +394,7 @@ viz_node_limit=0
 
 ## שימוש ישיר בגרף
 
-מעבר לעוזר ה-AI שלכם, תשאלו את `graph.json` ישירות מה-CLI עם `graphify query`, `graphify path`, ו-`graphify explain`. שם שתואם למספר צמתים נדחה עם רשימת המועמדים במקום לנחש. סקריפטים יכולים לקרוא את התוצאה מקוד היציאה: `0` תשובה, `3` שם דו-משמעי, `4` אין צומת תואם. ראו **[שאלו שאלות גרף טובות יותר](https://docs.graphify.com/guides/querying)** ואת **[תיעוד התשאול](https://docs.graphify.com/reference/query)**.
+מעבר לעוזר ה-AI שלכם, תשאלו את `graph.grafeo` ישירות מה-CLI עם `graphify query`, `graphify path`, ו-`graphify explain`. שם שתואם למספר צמתים נדחה עם רשימת המועמדים במקום לנחש. סקריפטים יכולים לקרוא את התוצאה מקוד היציאה: `0` תשובה, `3` שם דו-משמעי, `4` אין צומת תואם. ראו **[שאלו שאלות גרף טובות יותר](https://docs.graphify.com/guides/querying)** ואת **[תיעוד התשאול](https://docs.graphify.com/reference/query)**.
 
 ---
 

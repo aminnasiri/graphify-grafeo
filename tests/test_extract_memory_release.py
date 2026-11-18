@@ -1,10 +1,12 @@
 """`graphify extract` frees its whole-graph intermediates without changing output.
 
 to_json kept copies of the old and new graphs alive through the write.
-Releasing them early must not change a byte of graph.json. (Python parse trees
+Releasing them early must not change a byte of graph.grafeo. (Python parse trees
 are covered by test_python_parse_release.py.)
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text
 
 import json
 import shutil
@@ -47,19 +49,19 @@ def test_to_json_bytes_unchanged_on_forced_and_guarded_writes(tmp_path, monkeypa
     communities = {0: ["a", "b"], 1: ["c"]}
     forced = tmp_path / "forced.json"
     assert to_json(_graph(), communities, str(forced), force=True, built_at_commit="abc")
-    assert forced.read_text(encoding="utf-8") == EXPECTED_GRAPH_JSON
+    assert _graph_read_text(forced, encoding="utf-8") == EXPECTED_GRAPH_JSON
 
     # The guarded write parses the existing file and frees it before exporting.
     guarded = tmp_path / "guarded.json"
     shutil.copy(forced, guarded)
     assert to_json(_graph(), communities, str(guarded), force=False, built_at_commit="abc")
-    assert guarded.read_bytes() == forced.read_bytes()
+    assert _graph_read_bytes(guarded) == _graph_read_bytes(forced)
 
 
 def test_to_json_hyperedge_wipe_warning_still_reads_previous_graph(tmp_path, capsys):
-    out = tmp_path / "graph.json"
+    out = tmp_path / "graph.grafeo"
     to_json(_graph(), {0: ["a", "b", "c"]}, str(out), force=True, built_at_commit="abc")
     assert to_json(_graph(hyperedges=False), {0: ["a", "b", "c"]}, str(out),
                    force=True, built_at_commit="abc")
     assert "already holds 1 hyperedge(s)" in capsys.readouterr().err
-    assert json.loads(out.read_text(encoding="utf-8"))["hyperedges"] == []
+    assert json.loads(_graph_read_text(out, encoding="utf-8"))["hyperedges"] == []

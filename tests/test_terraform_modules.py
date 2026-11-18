@@ -1,5 +1,7 @@
 """Local Terraform module topology, including incremental graph reconciliation."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text, write_text as _graph_write_text
 
 import copy
 import json
@@ -19,7 +21,7 @@ from graphify.extract import extract, extract_terraform
 def _write(root, name, body):
     path = root / name
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(body, encoding="utf-8")
+    _graph_write_text(path, body, encoding="utf-8")
     return path
 
 
@@ -241,7 +243,7 @@ def test_terraform_cache_without_scope_is_reextracted(tmp_path, monkeypatch):
         old_dir = cache.cache_dir(tmp_path, "ast")
 
     assert cache.load_cached(path, root=tmp_path) is None
-    assert not old_dir.exists()
+    assert not _graph_exists(old_dir)
     assert cache.load_cached(path, root=tmp_path, kind="semantic") is not None
     fresh = _extract(tmp_path)
     cached = cache.load_cached(path, root=tmp_path)
@@ -384,7 +386,7 @@ def test_cache_recomputes_topology_and_ids_are_portable(tmp_path, monkeypatch):
     assert first["nodes"] == relative["nodes"]
     assert first["edges"] == relative["edges"]
     target = roots[0] / "app/main.tf"
-    target.unlink()
+    _graph_unlink(target)
     result = _extract(roots[0])
     assert _module_edges(result) == []
     assert not any(n["label"] == "Terraform module: app" for n in result["nodes"])
@@ -413,22 +415,22 @@ def test_incremental_source_change_target_addition_and_deletion(tmp_path, monkey
                 args.append("--no-cluster")
             p = subprocess.run(args, cwd=root, env=os.environ.copy(), capture_output=True, text=True)
             assert p.returncode == 0, p.stdout + p.stderr
-        result = json.loads((root / "graphify-out/graph.json").read_text())
+        result = json.loads(_graph_read_text(root / "graphify-out/graph.grafeo"))
         _assert_integrity(result)
         return result
 
     first = rebuild()
     anchor = _node(first, "Terraform module: app")["id"]
     assert _module_edges(first)[0]["target"] == anchor
-    a.unlink()  # Removing the anchor's provenance file must preserve the module.
+    _graph_unlink(a)  # Removing the anchor's provenance file must preserve the module.
     second = rebuild([a])
     assert _module_edges(second)[0]["target"] == anchor
     assert _node(second, "Terraform module: app")["source_file"] == "app/b.tf"
-    b.unlink()  # Removing the final file must also remove the incoming link.
+    _graph_unlink(b)  # Removing the final file must also remove the incoming link.
     assert _module_edges(rebuild([b])) == []
     c = _write(root, "app/c.tf", 'variable "new" {}')
     assert _module_edges(rebuild([c]))[0]["target"] == anchor
-    caller.write_text('module "app" { source = "../other" }')
+    _graph_write_text(caller, 'module "app" { source = "../other" }')
     final = rebuild([caller])
     assert len(_module_edges(final)) == 1
     assert _module_edges(final)[0]["target"] == _node(final, "Terraform module: other")["id"]
@@ -452,7 +454,7 @@ def test_incremental_exclusion_removes_incoming_module_links(tmp_path, monkeypat
                 capture_output=True, text=True,
             )
             assert p.returncode == 0, p.stdout + p.stderr
-        return json.loads((root / "graphify-out/graph.json").read_text())
+        return json.loads(_graph_read_text(root / "graphify-out/graph.grafeo"))
 
     assert len(_module_edges(rebuild())) == 1
     ignore = _write(root, ".graphifyignore", "app/\n")

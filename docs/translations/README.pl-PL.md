@@ -66,7 +66,7 @@ To wszystko. Otrzymujesz **trzy pliki**:
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 Utrwalony graf zawiera `graph.schema_version`, aby integracje mogły wykrywać
@@ -117,7 +117,7 @@ Co otrzymujesz od razu po instalacji:
 | **God nodes** | Najbardziej połączone koncepcje, dzięki czemu widzisz, przez co wszystko przepływa |
 | **Communities** | Graf podzielony na podsystemy (Leiden), z etykietami bez użycia LLM |
 | **Cross-file links** | `calls` / `imports` / `inherits` / `mixes_in` rozpoznane w około 40 językach dzięki drzewu AST tree-sitter |
-| **Query, path, explain** | Zadaj pytanie, prześledź ścieżkę między dwiema rzeczami lub wyjaśnij jedną koncepcję: wszystko względem `graph.json` |
+| **Query, path, explain** | Zadaj pytanie, prześledź ścieżkę między dwiema rzeczami lub wyjaśnij jedną koncepcję: wszystko względem `graph.grafeo` |
 | **Rationale + doc refs** | Komentarze `# NOTE:` / `# WHY:` oraz cytowania ADR/RFC stają się pełnoprawnymi węzłami powiązanymi z kodem |
 | **Beyond code** | Dokumentacja, pliki PDF, obrazy oraz pliki wideo/audio: wszystko mapuje się do tego samego grafu |
 | **Local-first** | Kod jest parsowany lokalnie przez tree-sitter (bez LLM, nic nie opuszcza Twojej maszyny); tylko przebieg semantyczny po dokumentacji/mediach wywołuje backend, i to wyłącznie, jeśli go skonfigurujesz |
@@ -402,7 +402,7 @@ Zatwierdź lub udostępnij graf, aby cały Twój zespół odpytywał ten sam kon
 
 ## Using the graph directly
 
-Poza Twoim asystentem AI możesz odpytywać `graph.json` bezpośrednio z CLI za pomocą `graphify query`, `graphify path` i `graphify explain`. Nazwa pasująca do kilku węzłów jest odrzucana z wypisaniem kandydatów, zamiast być zgadywana. Skrypty mogą odczytać wynik z kodu wyjścia: `0` odpowiedź, `3` niejednoznaczna nazwa, `4` brak pasującego węzła. Zobacz **[Ask better graph questions](https://docs.graphify.com/guides/querying)** oraz **[query reference](https://docs.graphify.com/reference/query)**.
+Poza Twoim asystentem AI możesz odpytywać `graph.grafeo` bezpośrednio z CLI za pomocą `graphify query`, `graphify path` i `graphify explain`. Nazwa pasująca do kilku węzłów jest odrzucana z wypisaniem kandydatów, zamiast być zgadywana. Skrypty mogą odczytać wynik z kodu wyjścia: `0` odpowiedź, `3` niejednoznaczna nazwa, `4` brak pasującego węzła. Zobacz **[Ask better graph questions](https://docs.graphify.com/guides/querying)** oraz **[query reference](https://docs.graphify.com/reference/query)**.
 
 ---
 

@@ -4,6 +4,13 @@ Full release notes with details on each version: [GitHub Releases](https://githu
 
 ## Unreleased
 
+- Grafeo integration: every graph consumer now uses the embedded database;
+  transactional updates preserve unchanged records and file hashes. Add verified
+  `migrate --to grafeo`, `import json`, `export json`, custom database paths,
+  short-lived concurrent access and revision-keyed MCP caching. JSON remains an
+  explicit interchange format. See `docs/graph-store.md` for measured performance.
+
+
 - Phase 2: apply reconciled graph deltas in one Grafeo transaction with
   per-file hash metadata, optimistic revision checks and stable native IDs.
   Reuse existing source/tier reconciliation and update community properties

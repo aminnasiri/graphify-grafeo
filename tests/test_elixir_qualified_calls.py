@@ -6,6 +6,8 @@ function name. Worse, `App.Repo.insert(x)` inside a module with its own
 `insert/1` was bound to that local function as EXTRACTED.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 from pathlib import Path
@@ -46,7 +48,7 @@ def _calls(tmp_path: Path, files: dict[str, str]) -> dict[tuple[str, str], str]:
     for rel, body in files.items():
         path = tmp_path / rel
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body, encoding="utf-8")
+        _graph_write_text(path, body, encoding="utf-8")
         paths.append(path)
     result = extract(paths, cache_root=tmp_path / "graphify-out")
     return _qualified(result["nodes"], result["edges"])
@@ -250,7 +252,7 @@ def test_qualified_call_survives_incremental_rebuild(tmp_path: Path):
 
     corpus = tmp_path / "corpus"
     corpus.mkdir()
-    (corpus / "accounts.ex").write_text(_ACCOUNTS, encoding="utf-8")
+    _graph_write_text(corpus / "accounts.ex", _ACCOUNTS, encoding="utf-8")
     caller = corpus / "web.ex"
 
     def _caller(extra: str = "") -> str:
@@ -263,17 +265,17 @@ def test_qualified_call_survives_incremental_rebuild(tmp_path: Path):
             f"{extra}"
         ))
 
-    caller.write_text(_caller(), encoding="utf-8")
-    graph_path = corpus / "graphify-out" / "graph.json"
+    _graph_write_text(caller, _caller(), encoding="utf-8")
+    graph_path = corpus / "graphify-out" / "graph.grafeo"
 
     def calls() -> dict[tuple[str, str], str]:
-        data = json.loads(graph_path.read_text(encoding="utf-8"))
+        data = json.loads(_graph_read_text(graph_path, encoding="utf-8"))
         return _qualified(data["nodes"], data["links"])
 
     assert _rebuild_code(corpus, no_cluster=True, acquire_lock=False) is True
     assert calls().get(("App.Web.show", "App.Accounts.get_user")) == "EXTRACTED"
 
-    caller.write_text(_caller("\n  def other, do: :ok\n"), encoding="utf-8")
+    _graph_write_text(caller, _caller("\n  def other, do: :ok\n"), encoding="utf-8")
     assert _rebuild_code(corpus, changed_paths=[caller], no_cluster=True,
                          acquire_lock=False) is True
     assert calls().get(("App.Web.show", "App.Accounts.get_user")) == "EXTRACTED"

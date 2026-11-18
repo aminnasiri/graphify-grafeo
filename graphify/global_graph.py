@@ -1,4 +1,6 @@
 from __future__ import annotations
+from graphify.store.io import state_exists as _state_exists
+from graphify.store.io import read_json as _read_graph_data
 import json
 import hashlib
 import sys
@@ -8,14 +10,14 @@ import networkx as nx
 from networkx.readwrite import json_graph as _jg
 
 _GLOBAL_DIR = Path.home() / ".graphify"
-_GLOBAL_GRAPH = _GLOBAL_DIR / "global-graph.json"
+_GLOBAL_GRAPH = _GLOBAL_DIR / "global-graph.grafeo"
 _GLOBAL_MANIFEST = _GLOBAL_DIR / "global-manifest.json"
 
 
 def _load_manifest() -> dict:
-    if _GLOBAL_MANIFEST.exists():
+    if _state_exists(_GLOBAL_MANIFEST):
         try:
-            manifest = json.loads(_GLOBAL_MANIFEST.read_text(encoding="utf-8"))
+            manifest = _read_graph_data(_GLOBAL_MANIFEST)
             repos = manifest.get("repos") if isinstance(manifest, dict) else None
             if not isinstance(repos, dict):
                 raise ValueError("expected a manifest object with a repos map")
@@ -68,7 +70,7 @@ def _load_global_graph() -> nx.Graph:
     if _GLOBAL_GRAPH.exists():
         from graphify.security import check_graph_file_size_cap
         check_graph_file_size_cap(_GLOBAL_GRAPH)
-        data = json.loads(_GLOBAL_GRAPH.read_text(encoding="utf-8"))
+        data = _read_graph_data(_GLOBAL_GRAPH)
         if "links" not in data and "edges" in data:
             data = dict(data, links=data["edges"])
         try:
@@ -90,7 +92,12 @@ def _save_global_graph(G: nx.Graph) -> None:
 
 def _file_hash(path: Path) -> str:
     h = hashlib.sha256()
-    h.update(path.read_bytes())
+    if path.suffix == ".grafeo":
+        data = _read_graph_data(path)
+        data.get("graph", {}).pop("_store_revision", None)
+        h.update(json.dumps(data, sort_keys=True).encode())
+    else:
+        h.update(path.read_bytes())
     return h.hexdigest()[:16]
 
 
@@ -125,7 +132,7 @@ def global_add(source_path: Path, repo_tag: str) -> dict:
     # Load source graph
     from graphify.security import check_graph_file_size_cap
     check_graph_file_size_cap(source_path)
-    data = json.loads(source_path.read_text(encoding="utf-8"))
+    data = _read_graph_data(source_path)
     if "links" not in data and "edges" in data:
         data = dict(data, links=data["edges"])
     from graphify.paths import restore_arc_direction

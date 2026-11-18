@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 r"""The read hook's out-of-project guard must not treat a rooted-but-driveless
 path as cwd-relative.
 
@@ -115,13 +117,12 @@ def _project(tmp_path):
     src = tmp_path / "src"
     src.mkdir()
     f = src / "mod.py"
-    f.write_text("def x():\n    return 1\n", encoding="utf-8")
+    _graph_write_text(f, "def x():\n    return 1\n", encoding="utf-8")
     out = tmp_path / "graphify-out"
     out.mkdir()
-    (out / "manifest.json").write_text(
-        json.dumps({"src/mod.py": {"mtime": 1}}), encoding="utf-8")
+    _graph_write_text(out / "manifest.json", json.dumps({"src/mod.py": {"mtime": 1}}), encoding="utf-8")
     time.sleep(0.02)
-    (out / "graph.json").write_text('{"nodes":[],"links":[]}', encoding="utf-8")
+    _graph_write_text(out / "graph.grafeo", '{"nodes":[],"links":[]}', encoding="utf-8")
     return f
 
 
@@ -165,5 +166,5 @@ def test_absolute_path_outside_the_project_is_still_silent(tmp_path, monkeypatch
     _project(tmp_path)
     other = tmp_path.parent / "elsewhere_project" / "z.py"
     other.parent.mkdir(parents=True, exist_ok=True)
-    other.write_text("x = 1\n", encoding="utf-8")
+    _graph_write_text(other, "x = 1\n", encoding="utf-8")
     assert _invoke(tmp_path, monkeypatch, other).strip() == ""

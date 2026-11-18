@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text
 """Tests for confidence_score on edges."""
 import json
 import tempfile
@@ -84,13 +86,13 @@ def test_confidence_score_round_trip():
     communities = cluster(G)
 
     with tempfile.TemporaryDirectory() as tmp:
-        out = Path(tmp) / "graph.json"
+        out = Path(tmp) / "graph.grafeo"
         to_json(G, communities, str(out))
-        data = json.loads(out.read_text())
+        data = json.loads(_graph_read_text(out))
 
     # to_json uses node_link_data which puts edges in "links"
     links = data.get("links", [])
-    assert links, "No links found in exported graph.json"
+    assert links, "No links found in exported graph.grafeo"
     for link in links:
         assert "confidence_score" in link, f"Link missing confidence_score: {link}"
         score = link["confidence_score"]
@@ -120,9 +122,9 @@ def test_to_json_defaults_missing_confidence_score():
     communities = cluster(G)
 
     with tempfile.TemporaryDirectory() as tmp:
-        out = Path(tmp) / "graph.json"
+        out = Path(tmp) / "graph.grafeo"
         to_json(G, communities, str(out))
-        data = json.loads(out.read_text())
+        data = json.loads(_graph_read_text(out))
 
     links_by_conf = {}
     for link in data.get("links", []):

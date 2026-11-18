@@ -14,6 +14,7 @@ Usage:
 """
 
 from __future__ import annotations
+from graphify.store.io import read_json as _read_graph_data
 
 import json
 import os
@@ -73,7 +74,7 @@ class PRInfo:
     updated_at: datetime
     expected_base: str = "main"  # set by fetch_prs via _detect_default_branch
     worktree_path: str | None = None
-    # Graph impact — populated when graph.json exists
+    # Graph impact — populated when graph.grafeo exists
     communities_touched: list[int] = field(default_factory=list)
     nodes_affected: int = 0
     files_changed: list[str] = field(default_factory=list)
@@ -382,7 +383,7 @@ def _load_graph_json(graph_path: Path) -> dict | None:
     from graphify.security import check_graph_file_size_cap
     try:
         check_graph_file_size_cap(graph_path)
-        return json.loads(graph_path.read_text(encoding="utf-8"))
+        return _read_graph_data(graph_path)
     except (json.JSONDecodeError, OSError, ValueError):
         return None
 
@@ -549,7 +550,7 @@ def render_conflicts(
 ) -> None:
     actionable = [p for p in prs if p.base_branch == base and p.communities_touched]
     if not actionable:
-        print(dim("\n  No graph impact data - run with a valid graph.json to detect conflicts.\n"))
+        print(dim("\n  No graph impact data - run with a valid graph.grafeo to detect conflicts.\n"))
         return
 
     # Build community → [PRs] map

@@ -66,7 +66,7 @@ Hepsi bu kadar. **Üç dosya** elde edersiniz:
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 Kalıcı grafik, entegrasyonların uyumsuz biçim değişikliklerini
@@ -117,7 +117,7 @@ Kutudan çıktığı haliyle elde ettikleriniz:
 | **Tanrı düğümleri** | En çok bağlantılı kavramlar; böylece her şeyin neyin üzerinden aktığını görürsünüz |
 | **Topluluklar** | Grafiğin alt sistemlere ayrılmış hali (Leiden), LLM gerektirmeyen etiketlerle |
 | **Dosyalar arası bağlantılar** | `calls` / `imports` / `inherits` / `mixes_in`, tree-sitter AST aracılığıyla ~40 dilde çözümlenir |
-| **Sorgula, yol, açıkla** | Bir soru sorun, iki şey arasındaki yolu izleyin veya tek bir kavramı açıklayın; tümü `graph.json` üzerinde |
+| **Sorgula, yol, açıkla** | Bir soru sorun, iki şey arasındaki yolu izleyin veya tek bir kavramı açıklayın; tümü `graph.grafeo` üzerinde |
 | **Gerekçe + belge atıfları** | `# NOTE:` / `# WHY:` yorumları ve ADR/RFC atıfları, koda bağlı birinci sınıf düğümler haline gelir |
 | **Kodun ötesinde** | Belgeler, PDF'ler, görseller ve video/ses hepsi aynı grafiğe eşlenir |
 | **Önce yerel** | Kod yerel olarak tree-sitter ile ayrıştırılır (LLM yok, hiçbir şey makinenizden çıkmaz); yalnızca belgeler/medya üzerindeki anlamsal geçiş bir arka uca çağrı yapar ve yalnızca bir tane yapılandırırsanız |
@@ -402,7 +402,7 @@ Tüm ekibinizin aynı bağlamı sorgulaması için grafiği işleyin veya payla�
 
 ## Grafiği doğrudan kullanma
 
-Yapay zeka asistanınızın ötesinde, `graph.json` dosyasını CLI'den doğrudan `graphify query`, `graphify path` ve `graphify explain` ile sorgulayın. Birden fazla düğümle eşleşen bir ad, tahmin edilmek yerine adaylar listelenerek reddedilir. Komut dosyaları sonucu çıkış kodundan okuyabilir: `0` bir yanıt, `3` belirsiz bir ad, `4` eşleşen düğüm yok. Bkz. **[Daha iyi grafik soruları sorun](https://docs.graphify.com/guides/querying)** ve **[sorgu başvurusu](https://docs.graphify.com/reference/query)**.
+Yapay zeka asistanınızın ötesinde, `graph.grafeo` dosyasını CLI'den doğrudan `graphify query`, `graphify path` ve `graphify explain` ile sorgulayın. Birden fazla düğümle eşleşen bir ad, tahmin edilmek yerine adaylar listelenerek reddedilir. Komut dosyaları sonucu çıkış kodundan okuyabilir: `0` bir yanıt, `3` belirsiz bir ad, `4` eşleşen düğüm yok. Bkz. **[Daha iyi grafik soruları sorun](https://docs.graphify.com/guides/querying)** ve **[sorgu başvurusu](https://docs.graphify.com/reference/query)**.
 
 ---
 

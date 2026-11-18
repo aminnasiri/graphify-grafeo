@@ -10,6 +10,8 @@ reporter's 21-document corpus: 8 files, 133 nodes, 236 edges lost on a
 commit that touched one file.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import re
@@ -66,7 +68,7 @@ def test_stamping_marks_nodes_and_edges_and_keeps_existing_marks():
 def _part_c_python(fragment: Path) -> str:
     """The python passed to `-c` in the fragment's Part C block, unescaped the
     way the shell would hand it to the interpreter."""
-    text = fragment.read_text(encoding="utf-8")
+    text = _graph_read_text(fragment, encoding="utf-8")
     start = text.index("#### Part C - Merge AST + semantic into final extraction")
     block = text[start:]
     m = re.search(r'-c "\n(.*?)\n"\n```', block, re.S)
@@ -92,11 +94,11 @@ def test_part_c_stamps_the_semantic_side(fragment, tmp_path):
                       "relation": "references", "source_file": "docs/guide.md",
                       "source_location": "L12", "confidence": "EXTRACTED"}],
            "hyperedges": [], "input_tokens": 0, "output_tokens": 0}
-    (tmp_path / ast_path).write_text(json.dumps(ast), encoding="utf-8")
-    (tmp_path / sem_path).write_text(json.dumps(sem), encoding="utf-8")
+    _graph_write_text(tmp_path / ast_path, json.dumps(ast), encoding="utf-8")
+    _graph_write_text(tmp_path / sem_path, json.dumps(sem), encoding="utf-8")
     r = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
-    merged = json.loads((tmp_path / out_path).read_text(encoding="utf-8"))
+    merged = json.loads(_graph_read_text(tmp_path / out_path, encoding="utf-8"))
     by_id = {n["id"]: n for n in merged["nodes"]}
     assert by_id["src_app_main"]["_origin"] == "ast"
     assert by_id["docs_guide_deploy"]["_origin"] == "semantic"
@@ -146,12 +148,12 @@ def test_a_stamped_document_survives_the_code_files_re_extraction(tmp_path):
 def test_update_keeps_semantic_evidence_when_an_ast_id_collides(tmp_path, no_cluster):
     from graphify.watch import _rebuild_code
 
-    (tmp_path / "sample.py").write_text("def answer():\n    return 42\n", encoding="utf-8")
-    (tmp_path / "design.md").write_text("# Design\nA stable protocol.\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "sample.py", "def answer():\n    return 42\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "design.md", "# Design\nA stable protocol.\n", encoding="utf-8")
     out = tmp_path / "graphify-out"
     out.mkdir()
-    graph = out / "graph.json"
-    graph.write_text(json.dumps({
+    graph = out / "graph.grafeo"
+    _graph_write_text(graph, json.dumps({
         "nodes": [
             {"id": "sample", "label": "Sample protocol", "file_type": "concept",
              "source_file": "design.md", "source_location": None, "_origin": "semantic"},
@@ -166,7 +168,7 @@ def test_update_keeps_semantic_evidence_when_an_ast_id_collides(tmp_path, no_clu
     }), encoding="utf-8")
 
     assert _rebuild_code(tmp_path, no_cluster=no_cluster)
-    rebuilt = json.loads(graph.read_text(encoding="utf-8"))
+    rebuilt = json.loads(_graph_read_text(graph, encoding="utf-8"))
     evidence = next(n for n in rebuilt["nodes"] if n["label"] == "Sample protocol")
     assert evidence["_origin"] == "semantic"
     assert evidence["source_file"] == "design.md"
@@ -177,7 +179,7 @@ def test_update_keeps_semantic_evidence_when_an_ast_id_collides(tmp_path, no_clu
                for e in rebuilt["links"])
 
     assert _rebuild_code(tmp_path, no_cluster=no_cluster)
-    assert json.loads(graph.read_text(encoding="utf-8")) == rebuilt
+    assert json.loads(_graph_read_text(graph, encoding="utf-8")) == _canonical_expected(rebuilt)
 
 
 @pytest.mark.parametrize("no_cluster", [False, True])
@@ -191,18 +193,19 @@ def test_update_keeps_semantic_evidence_when_an_ast_id_collides(tmp_path, no_clu
 def test_unattributed_semantics_never_replace_a_fresh_ast_definition(tmp_path, no_cluster, prior):
     from graphify.watch import _rebuild_code
 
-    (tmp_path / "sample.py").write_text("def answer():\n    return 42\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "sample.py", "def answer():\n    return 42\n", encoding="utf-8")
     out = tmp_path / "graphify-out"
     out.mkdir()
-    graph = out / "graph.json"
-    graph.write_text(json.dumps({
-        "nodes": [prior],
+    graph = out / "graph.grafeo"
+    _graph_write_text(graph, json.dumps({
+        # A native edge needs both endpoints; legacy JSON implicitly supplied stubs.
+        "nodes": [prior] + [{"id": ident} for ident in ("sample", "sample_answer") if ident != prior["id"]],
         "links": [{"source": "sample_answer", "target": "sample", "relation": "imports",
                    "source_file": "sample.py", "_origin": "ast", "confidence": "EXTRACTED"}],
     }), encoding="utf-8")
 
     assert _rebuild_code(tmp_path, no_cluster=no_cluster)
-    rebuilt = json.loads(graph.read_text(encoding="utf-8"))
+    rebuilt = json.loads(_graph_read_text(graph, encoding="utf-8"))
     node = next(n for n in rebuilt["nodes"] if n["id"] == prior["id"])
     assert node["_origin"] == "ast"
     assert node["source_file"] == "sample.py"
@@ -214,13 +217,13 @@ def test_unattributed_semantics_never_replace_a_fresh_ast_definition(tmp_path, n
 def test_update_keeps_both_semantic_nodes_when_the_reference_namespace_is_taken(tmp_path, no_cluster):
     from graphify.watch import _rebuild_code
 
-    (tmp_path / "sample.py").write_text("def answer():\n    return 42\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "sample.py", "def answer():\n    return 42\n", encoding="utf-8")
     for name in ("design.md", "notes.md"):
-        (tmp_path / name).write_text("# Evidence\nA stable protocol.\n", encoding="utf-8")
+        _graph_write_text(tmp_path / name, "# Evidence\nA stable protocol.\n", encoding="utf-8")
     out = tmp_path / "graphify-out"
     out.mkdir()
-    graph = out / "graph.json"
-    graph.write_text(json.dumps({
+    graph = out / "graph.grafeo"
+    _graph_write_text(graph, json.dumps({
         "nodes": [
             {"id": "sample", "label": "Sample protocol", "file_type": "concept",
              "source_file": "design.md", "_origin": "semantic"},
@@ -235,7 +238,7 @@ def test_update_keeps_both_semantic_nodes_when_the_reference_namespace_is_taken(
     }), encoding="utf-8")
 
     assert _rebuild_code(tmp_path, no_cluster=no_cluster)
-    rebuilt = json.loads(graph.read_text(encoding="utf-8"))
+    rebuilt = json.loads(_graph_read_text(graph, encoding="utf-8"))
     protocol = next(n for n in rebuilt["nodes"] if n["label"] == "Sample protocol")
     note = next(n for n in rebuilt["nodes"] if n["label"] == "Independent note")
     assert protocol["id"] != note["id"]
@@ -250,12 +253,12 @@ def test_update_keeps_both_semantic_nodes_when_the_reference_namespace_is_taken(
 def test_semantic_alias_keeps_authored_ast_links_and_document_provenance(tmp_path, no_cluster):
     from graphify.watch import _rebuild_code
 
-    (tmp_path / "sample.py").write_text("def answer():\n    return 42\n", encoding="utf-8")
-    (tmp_path / "design.md").write_text("# Design\nA stable protocol.\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "sample.py", "def answer():\n    return 42\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "design.md", "# Design\nA stable protocol.\n", encoding="utf-8")
     out = tmp_path / "graphify-out"
     out.mkdir()
-    graph = out / "graph.json"
-    graph.write_text(json.dumps({
+    graph = out / "graph.grafeo"
+    _graph_write_text(graph, json.dumps({
         "nodes": [
             {"id": "sample", "label": "Sample protocol", "file_type": "concept",
              "source_file": "design.md", "_origin": "semantic",
@@ -277,7 +280,7 @@ def test_semantic_alias_keeps_authored_ast_links_and_document_provenance(tmp_pat
     }), encoding="utf-8")
 
     assert _rebuild_code(tmp_path, no_cluster=no_cluster)
-    rebuilt = json.loads(graph.read_text(encoding="utf-8"))
+    rebuilt = json.loads(_graph_read_text(graph, encoding="utf-8"))
     protocol = next(n for n in rebuilt["nodes"] if n["label"] == "Sample protocol")
     assert protocol["attributes"]["document_version"] == "v1"
     assert any(e["source"] == "design" and e["target"] == "sample"

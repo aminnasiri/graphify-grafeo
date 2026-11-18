@@ -9,6 +9,8 @@ in ANY other file was silently dropped as dangling at build time. On a real
 the entire internal module dependency graph.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 from pathlib import Path
@@ -21,7 +23,7 @@ def _extract(tmp_path: Path, files: dict[str, str]):
     for name, body in files.items():
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body, encoding="utf-8")
+        _graph_write_text(path, body, encoding="utf-8")
         paths.append(path)
     return extract(paths, cache_root=tmp_path / "graphify-out")
 
@@ -207,20 +209,18 @@ def test_resolution_survives_incremental_rebuild(tmp_path: Path):
 
     corpus = tmp_path / "corpus"
     corpus.mkdir()
-    (corpus / "accounts.ex").write_text(
-        "defmodule Demo.Accounts do\n  def list_users, do: []\nend\n", encoding="utf-8"
-    )
+    _graph_write_text(corpus / "accounts.ex", "defmodule Demo.Accounts do\n  def list_users, do: []\nend\n", encoding="utf-8")
     caller = corpus / "web.ex"
 
     def _caller(extra: str = "") -> str:
         body = "  def index, do: Accounts.list_users()\n" + extra
         return f"defmodule Demo.Web do\n  alias Demo.Accounts\n{body}end\n"
 
-    caller.write_text(_caller(), encoding="utf-8")
-    graph_path = corpus / "graphify-out" / "graph.json"
+    _graph_write_text(caller, _caller(), encoding="utf-8")
+    graph_path = corpus / "graphify-out" / "graph.grafeo"
 
     def resolves() -> bool:
-        data = json.loads(graph_path.read_text(encoding="utf-8"))
+        data = json.loads(_graph_read_text(graph_path, encoding="utf-8"))
         accounts = next(
             (n["id"] for n in data["nodes"] if n.get("label") == "Demo.Accounts"), None
         )
@@ -236,7 +236,7 @@ def test_resolution_survives_incremental_rebuild(tmp_path: Path):
 
     # Change ONLY the caller: accounts.ex is unchanged, so its top-level module
     # node is fed back as a resolution-context node. The alias must still resolve.
-    caller.write_text(_caller("  def dup, do: Accounts.list_users()\n"), encoding="utf-8")
+    _graph_write_text(caller, _caller("  def dup, do: Accounts.list_users()\n"), encoding="utf-8")
     assert _rebuild_code(corpus, changed_paths=[caller], no_cluster=True,
                          acquire_lock=False) is True
     assert resolves(), "alias stays resolved after an incremental rebuild"

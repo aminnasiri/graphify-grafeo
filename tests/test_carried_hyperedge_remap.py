@@ -4,9 +4,11 @@ build_merge() carries hyperedges from unchanged files across an incremental
 rebuild (#1574). They used to be attached to G AFTER build() and entity
 dedup had finished, so while every edge endpoint was rewired onto the dedup
 survivor (#2805), a carried hyperedge kept naming the merged-away node — a
-dangling member in graph.json with no backing node.
+dangling member in graph.grafeo with no backing node.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text
 
 import json
 from pathlib import Path
@@ -48,7 +50,7 @@ def _baseline(tmp_path: Path) -> Path:
     """A graph written WITHOUT dedup, so the pair is still two nodes on disk
     and the hyperedge names the variant — the shape an older build leaves."""
     G = build_from_json({"nodes": NODES, "edges": EDGES, "hyperedges": [HYPEREDGE]})
-    p = tmp_path / "graph.json"
+    p = tmp_path / "graph.grafeo"
     to_json(G, {0: list(G.nodes)}, str(p))
     return p
 
@@ -71,7 +73,7 @@ def test_the_written_graph_has_no_dangling_hyperedge_member(tmp_path):
     G = build_merge([RE_EXTRACTED_CHUNK], _baseline(tmp_path))
     out = tmp_path / "merged.json"
     to_json(G, {0: list(G.nodes)}, str(out), force=True)
-    data = json.loads(out.read_text(encoding="utf-8"))
+    data = json.loads(_graph_read_text(out, encoding="utf-8"))
     ids = {n["id"] for n in data["nodes"]}
     for he in data.get("hyperedges", []):
         assert set(he["nodes"]) <= ids, f"{he['id']} names a node that is not in the graph"

@@ -6,6 +6,8 @@ node set the query returns. The most visible casualty is an edge between two
 seed nodes: both endpoints render, the edge between them does not.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import json
 
@@ -226,8 +228,8 @@ def _write_two_seed_graph(tmp_path):
         source_file="app.py",
         source_location="L5",
     )
-    graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(json_graph.node_link_data(G, edges="links")))
+    graph_path = tmp_path / "graph.grafeo"
+    _graph_write_text(graph_path, json.dumps(json_graph.node_link_data(G, edges="links")))
     return graph_path
 
 

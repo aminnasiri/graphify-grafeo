@@ -1,5 +1,8 @@
 # MCP stdio server - exposes graph query tools to Claude and other agents
 from __future__ import annotations
+from graphify.paths import database_path as _database_path
+from graphify.store.io import state_exists as _state_exists
+from graphify.store.io import read_json as _read_graph_data
 import json
 import math
 import os
@@ -43,12 +46,12 @@ class ToolError(Exception):
 
 
 def _read_graph(graph_path: str) -> nx.Graph:
-    """Load graph.json exactly as the MCP server does, raising on a bad path
+    """Load graph.grafeo exactly as the MCP server does, raising on a bad path
     or file (ValueError, FileNotFoundError, json.JSONDecodeError) so a library
     caller such as the benchmark can handle it."""
     resolved = Path(graph_path).resolve()
-    if resolved.suffix != ".json":
-        raise ValueError(f"Graph path must be a .json file, got: {graph_path!r}")
+    if resolved.suffix not in {".json", ".grafeo"}:
+        raise ValueError(f"Graph path must be a .json file (interchange) or .grafeo database, got: {graph_path!r}")
     if not resolved.exists():
         raise FileNotFoundError(f"Graph file not found: {resolved}")
     check_graph_file_size_cap(resolved)
@@ -89,7 +92,7 @@ def _read_graph(graph_path: str) -> nx.Graph:
     _commit = data.get("built_at_commit")
     if isinstance(_commit, str) and _commit.strip():
         G.graph["_built_at_commit"] = _commit.strip()
-    # Attach the work-memory overlay (derived sidecar next to graph.json) so
+    # Attach the work-memory overlay (derived sidecar next to graph.grafeo) so
     # the query/MCP read surface can annotate NODE lines display-only. Empty
     # when no sidecar exists, leaving un-annotated output byte-identical.
     try:
@@ -104,7 +107,7 @@ def _load_graph(graph_path: str) -> nx.Graph:
     try:
         return _read_graph(graph_path)
     except json.JSONDecodeError as exc:
-        print(f"error: graph.json is corrupted ({exc}). Re-run /graphify to rebuild.", file=sys.stderr)
+        print(f"error: {Path(graph_path).name} is corrupted ({exc}). Re-run /graphify to rebuild.", file=sys.stderr)
         sys.exit(1)
     except (ValueError, FileNotFoundError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -161,7 +164,7 @@ class _GraphContextCache:
         try:
             graph = _load_graph(resolved_path)
         except SystemExit as exc:
-            raise RuntimeError(f"could not load graph.json at {resolved_path}") from exc
+            raise RuntimeError(f"could not load graph.grafeo at {resolved_path}") from exc
         # Warm the index before exposing the graph so its first query does not
         # pay the expensive build cost.
         _get_trigram_index(graph)
@@ -182,7 +185,7 @@ class _GraphContextCache:
         ``pinned=True`` is reserved for the server's configured default graph;
         it remains warm without consuming a project-cache slot.
 
-        The actual rebuild (``_load_entry``, which parses graph.json and builds
+        The actual rebuild (``_load_entry``, which parses graph.grafeo and builds
         its trigram index) runs outside ``_lock`` so a slow reload of one path
         never blocks a request for another (#5177). While a rebuild for THIS
         path is already in flight, a caller that still has an old entry for it
@@ -193,12 +196,19 @@ class _GraphContextCache:
         """
         entries = self._pinned if pinned else self._entries
         loading_key = (resolved_path, pinned)
-        with self._lock:
+        from graphify.store.io import is_database, revision
+        if is_database(resolved_path):
             try:
-                stat_result = Path(resolved_path).stat()
-            except FileNotFoundError:
-                raise FileNotFoundError(f"graph.json not found: {resolved_path}") from None
+                version = revision(resolved_path)
+            except (ValueError, OSError) as exc:
+                raise RuntimeError(f"could not load graph.grafeo at {resolved_path}: {exc}") from exc
+            if version is None:
+                raise FileNotFoundError(f"graph database not found: {resolved_path}")
+            key = (version, 0)
+        else:
+            stat_result = Path(resolved_path).stat()
             key = (stat_result.st_mtime_ns, stat_result.st_size)
+        with self._lock:
             entry = entries.get(resolved_path)
             if entry is not None and entry["key"] == key:
                 if not pinned:
@@ -1484,7 +1494,7 @@ def _subgraph_to_text(G: nx.Graph, nodes: set[str], edges: list[tuple], token_bu
                 src = d.get("_src", u)
                 tgt = d.get("_tgt", v)
                 # Guard against a stray/dangling _src/_tgt (hand-edited or adversarial
-                # graph.json): only trust them when they name exactly this edge's
+                # graph.grafeo): only trust them when they name exactly this edge's
                 # endpoints, else fall back to (u, v). Without this, G.nodes[src]
                 # would KeyError on an unknown id (#2080 review).
                 if {src, tgt} != {u, v}:
@@ -1601,7 +1611,7 @@ def _cut_lines_to_budget(lines: list[str], token_budget: int, narrow_hint: str) 
 def _display_graph_path(graph_path: str) -> str:
     """Render a graph path for the query header.
 
-    Relative to the CWD when it sits underneath it — `graphify-out/graph.json`,
+    Relative to the CWD when it sits underneath it — `graphify-out/graph.grafeo`,
     which is the ordinary case and stays short. Absolute otherwise, because a
     graph outside the directory you are standing in is precisely the situation
     the header exists to make visible (#2789). Always POSIX separators so the
@@ -2891,7 +2901,7 @@ def _build_server(graph_path: str):
 
     All graph query tools and resources are registered here over a single
     ``mcp.server.Server`` instance; the caller picks the transport (stdio or
-    Streamable HTTP) and runs it. Hot-reload of graph.json works the same way
+    Streamable HTTP) and runs it. Hot-reload of graph.grafeo works the same way
     regardless of transport, since reloads happen inside the tool handlers.
     """
     try:
@@ -2925,13 +2935,13 @@ def _build_server(graph_path: str):
         return _ctx_cache.load(resolved_path, pinned=resolved_path == _default_graph_path)
 
     def _resolve_graph_path(project_path) -> str:
-        """Map an optional project_path to a concrete graph.json path. ``None``
+        """Map an optional project_path to a concrete graph.grafeo path. ``None``
         keeps the server's default graph (backward-compatible); a project_path
-        resolves to ``<project_path>/<GRAPHIFY_OUT>/graph.json``, honouring the
+        resolves to ``<project_path>/<GRAPHIFY_OUT>/graph.grafeo``, honouring the
         GRAPHIFY_OUT override so worktree/shared-output setups keep working."""
         if not project_path:
             return _default_graph_path
-        return str(Path(project_path) / _paths.GRAPHIFY_OUT / "graph.json")
+        return str(_database_path(Path(project_path) / _paths.GRAPHIFY_OUT))
 
     # Active per-request context, rebound by _select_graph() and read by the tool
     # handlers below. No lock needed on the hot path: _select_graph and the
@@ -3134,7 +3144,7 @@ def _build_server(graph_path: str):
                 "type": "string",
                 "description": (
                     "Absolute path to a project directory containing "
-                    "graphify-out/graph.json. Optional — defaults to the graph "
+                    "graphify-out/graph.grafeo. Optional — defaults to the graph "
                     "this server was started with."
                 ),
             }
@@ -3295,7 +3305,7 @@ def _build_server(graph_path: str):
     def _build_commit_line() -> str:
         """Which commit the graph was built from, and whether HEAD has moved on.
 
-        An MCP client cannot stat graph.json, so this is its only staleness
+        An MCP client cannot stat graph.grafeo, so this is its only staleness
         signal (#3354). HEAD is read at query time from the repo holding the
         graph (the same anchor export.to_json stamps from); no git or no repo
         just drops the HEAD comparison. Empty when the graph has no commit.
@@ -3418,9 +3428,9 @@ def _build_server(graph_path: str):
 
     def _load_community_labels() -> dict[int, str]:
         labels_path = Path(active_graph_path).parent / ".graphify_labels.json"
-        if labels_path.exists():
+        if _state_exists(labels_path):
             try:
-                return {int(k): v for k, v in json.loads(labels_path.read_text(encoding="utf-8")).items()}
+                return {int(k): v for k, v in _read_graph_data(labels_path).items()}
             except Exception:
                 pass
         return {cid: f"Community {cid}" for cid in communities}
@@ -3787,14 +3797,14 @@ def _main(argv: list[str] | None = None) -> None:
         "graph_path",
         nargs="?",
         default=None,
-        help="Path to graph.json (default: graphify-out/graph.json)",
+        help="Path to graph.grafeo (default: graphify-out/graph.grafeo)",
     )
     parser.add_argument(
         "--graph",
         dest="graph_flag",
         default=None,
         metavar="PATH",
-        help="Path to graph.json — alias for the positional argument",
+        help="Path to graph.grafeo — alias for the positional argument",
     )
     parser.add_argument(
         "--transport",

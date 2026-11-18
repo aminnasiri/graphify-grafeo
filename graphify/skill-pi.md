@@ -55,7 +55,7 @@ If a graph already exists, query it. With no graph, one targeted lookup ("where 
 
 If the user invoked `/graphify --help` or `/graphify -h` (with no other arguments), print the contents of the `## Usage` section above verbatim and stop. Do not run any commands, do not detect files, do not default the path to `.`. Just print the Usage block and return.
 
-**Fast path — existing graph:** Before doing anything else, check whether `graphify-out/graph.json` exists. The expected location is `graphify-out/graph.json` relative to the **current working directory** (i.e. the project root where you are running commands). If it exists AND the user's request is a natural-language question about the codebase (e.g. "How does X work?", "What calls Y?", "Trace the data flow through Z") and NOT an explicit rebuild command (`--update`, `--cluster-only`, or a bare path/URL that implies fresh extraction): **skip Steps 1–5 entirely and jump straight to `## For /graphify query`.** Run `graphify query "<question>"` immediately. Do not run detect. Do not check corpus size. Do not ask the user to narrow. The graph is already built — use it.
+**Fast path — existing graph:** Before doing anything else, check whether `graphify-out/graph.grafeo` exists. The expected location is `graphify-out/graph.grafeo` relative to the **current working directory** (i.e. the project root where you are running commands). If it exists AND the user's request is a natural-language question about the codebase (e.g. "How does X work?", "What calls Y?", "Trace the data flow through Z") and NOT an explicit rebuild command (`--update`, `--cluster-only`, or a bare path/URL that implies fresh extraction): **skip Steps 1–5 entirely and jump straight to `## For /graphify query`.** Run `graphify query "<question>"` immediately. Do not run detect. Do not check corpus size. Do not ask the user to narrow. The graph is already built — use it.
 
 If no path was given, use `.` (current directory). Do not ask the user for a path.
 
@@ -492,7 +492,7 @@ INPUT_PATH = Path('graphify-out/.graphify_root').read_text(encoding=\"utf-8-sig\
 # root= mirrors the --update runbook (#1361): relativize source_file to the same
 # base so the full build and incremental --update never drift apart on re-extract.
 G = build_from_json(extraction, root=INPUT_PATH, directed=IS_DIRECTED)
-# Guard BEFORE any write: an empty extraction must not clobber a good graph.json /
+# Guard BEFORE any write: an empty extraction must not clobber a good graph.grafeo /
 # GRAPH_REPORT.md / analysis sidecar. Check immediately after build (#1392).
 if G.number_of_nodes() == 0:
     print('ERROR: Graph is empty - extraction produced no nodes.')
@@ -508,12 +508,12 @@ labels = {cid: 'Community ' + str(cid) for cid in communities}
 questions = suggest_questions(G, communities, labels)
 
 # Export FIRST and honor the #479 shrink-guard: to_json returns False (writing
-# nothing) when the new graph is smaller than the existing graph.json. Only write
+# nothing) when the new graph is smaller than the existing graph.grafeo. Only write
 # GRAPH_REPORT.md + the analysis sidecar when the graph was actually written, so
-# they never describe a graph that graph.json doesn't contain (#1392).
-wrote = to_json(G, communities, 'graphify-out/graph.json', force=IS_FORCE)
+# they never describe a graph that graph.grafeo doesn't contain (#1392).
+wrote = to_json(G, communities, 'graphify-out/graph.grafeo', force=IS_FORCE)
 if not wrote:
-    print('ERROR: refused to shrink graphify-out/graph.json (existing graph has more nodes; #479).')
+    print('ERROR: refused to shrink graphify-out/graph.grafeo (existing graph has more nodes; #479).')
     print('If this shrink is intentional (you deleted files), re-run a full build with --force.')
     raise SystemExit(1)
 report = generate(G, communities, cohesion, labels, gods, surprises, detection, tokens, INPUT_PATH, suggested_questions=questions)
@@ -525,7 +525,7 @@ analysis = {
     'surprises': surprises,
     'questions': questions,
 }
-Path('graphify-out/.graphify_analysis.json').write_text(json.dumps(analysis, indent=2, ensure_ascii=False), encoding=\"utf-8\")
+__import__('graphify.store.io', fromlist=['write_state_text']).write_state_text(Path('graphify-out/.graphify_analysis.json'), json.dumps(analysis, indent=2, ensure_ascii=False), encoding=\"utf-8\")
 print(f'Graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges, {len(communities)} communities')
 "
 ```
@@ -579,7 +579,7 @@ from pathlib import Path
 
 extraction = json.loads(Path('graphify-out/.graphify_extract.json').read_text(encoding=\"utf-8\"))
 detection  = json.loads(Path('graphify-out/.graphify_detect.json').read_text(encoding=\"utf-8\"))
-analysis   = json.loads(Path('graphify-out/.graphify_analysis.json').read_text(encoding=\"utf-8\"))
+analysis   = __import__('graphify.store.io', fromlist=['read_json']).read_json(Path('graphify-out/.graphify_analysis.json'))
 INPUT_PATH = Path('graphify-out/.graphify_root').read_text(encoding=\"utf-8-sig\").strip()
 
 # root= as in Step 4 / the --update runbook (#1361) — same base for node-key parity.
@@ -596,13 +596,13 @@ questions = suggest_questions(G, communities, labels)
 
 report = generate(G, communities, cohesion, labels, analysis['gods'], analysis['surprises'], detection, tokens, INPUT_PATH, suggested_questions=questions)
 Path('graphify-out/GRAPH_REPORT.md').write_text(report, encoding=\"utf-8\")
-Path('graphify-out/.graphify_labels.json').write_text(json.dumps({str(k): v for k, v in labels.items()}, ensure_ascii=False), encoding=\"utf-8\")
-# Re-export so graph.json nodes carry the curated community_name (#2490).
+__import__('graphify.store.io', fromlist=['write_state_text']).write_state_text(Path('graphify-out/.graphify_labels.json'), json.dumps({str(k): v for k, v in labels.items()}, ensure_ascii=False), encoding=\"utf-8\")
+# Re-export so graph.grafeo nodes carry the curated community_name (#2490).
 # Same extraction as Step 4, so the #479 shrink-guard passes on node count;
 # if it still refuses, surface the guard message - do not force past it.
-wrote = to_json(G, communities, 'graphify-out/graph.json', community_labels=labels)
+wrote = to_json(G, communities, 'graphify-out/graph.grafeo', community_labels=labels)
 if not wrote:
-    print('ERROR: refused to shrink graphify-out/graph.json (existing graph has more nodes; #479).')
+    print('ERROR: refused to shrink graphify-out/graph.grafeo (existing graph has more nodes; #479).')
     print('If this shrink is intentional (you deleted files), re-run a full build with --force.')
 print('Report updated with community labels')
 "
@@ -721,7 +721,7 @@ Graph complete. Outputs in PATH_TO_DIR/graphify-out/
 
   graph.html            - interactive graph, open in browser
   GRAPH_REPORT.md       - audit report
-  graph.json            - raw graph data
+  graph.grafeo            - raw graph data
   obsidian/             - Obsidian vault (only if --obsidian was given)
 ```
 
@@ -774,13 +774,13 @@ Both are non-default subcommands. `--update` re-extracts only new or changed fil
 
 ## For /graphify query
 
-When `graphify-out/graph.json` already exists and the user asks a question about the corpus, answer from the graph rather than rebuilding it:
+When `graphify-out/graph.grafeo` already exists and the user asks a question about the corpus, answer from the graph rather than rebuilding it:
 
 ```bash
 graphify query "<question>"
 ```
 
-Before traversal, expand the question against the graph's own vocabulary so a wording mismatch does not collapse the answer to noise. If the `graphify query` CLI is unavailable, fall back to an inline NetworkX traversal of `graphify-out/graph.json`. Answer using only what the graph output contains, and quote `source_location` when citing a specific fact. For that vocab-expansion step, the BFS/DFS traversal modes, the `--budget` cap, the NetworkX fallback, `save-result` feedback, and the `/graphify path` and `/graphify explain` flows, see `references/query.md`.
+Before traversal, expand the question against the graph's own vocabulary so a wording mismatch does not collapse the answer to noise. If the `graphify query` CLI is unavailable, fall back to an inline NetworkX traversal of `graphify-out/graph.grafeo`. Answer using only what the graph output contains, and quote `source_location` when citing a specific fact. For that vocab-expansion step, the BFS/DFS traversal modes, the `--budget` cap, the NetworkX fallback, `save-result` feedback, and the `/graphify path` and `/graphify explain` flows, see `references/query.md`.
 
 ---
 

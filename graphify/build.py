@@ -21,6 +21,7 @@
 #    before any graph construction happens.
 #
 from __future__ import annotations
+from graphify.store.io import read_json as _read_graph_data
 import json
 import math
 import os
@@ -243,7 +244,7 @@ _GENERIC_RELATIONS: frozenset[str] = frozenset({"references", "uses", "mentions"
 # with a `calls` edge in the opposite direction when a member calls or constructs
 # its owner (`static Report Fault() { return new Report(); }`). Last-write kept
 # `calls` whenever the member id sorted after the owner id, so the membership
-# edge never reached graph.json and the member disappeared from type walks
+# edge never reached graph.grafeo and the member disappeared from type walks
 # (member lookup, explain, call resolution into the type). The membership edge
 # wins; the call is what this collapse drops. Directed graphs keep both, because
 # the two directions are different arcs. Same-direction `contains`/`method` vs
@@ -298,7 +299,7 @@ def _fold_also_seen(winner: dict, loser: dict) -> None:
     """Record ``loser``'s provenance on ``winner`` when the two collapse (#4881).
 
     Entries that repeat the winner's own provenance, or each other, are dropped,
-    so re-feeding a written graph.json through the build is idempotent.
+    so re-feeding a written graph.grafeo through the build is idempotent.
     """
     own = _evidence(winner)
     kept: list[dict] = []
@@ -314,7 +315,7 @@ def _fold_also_seen(winner: dict, loser: dict) -> None:
 # Import-family relations whose target may legitimately be a module OUTSIDE the
 # graph (stdlib, a third-party dependency, another repo). Historically the edge
 # to such a target was dropped, which left the in-memory graph clean but let the
-# on-disk graph.json (written by the incremental update path) keep the edge with
+# on-disk graph.grafeo (written by the incremental update path) keep the edge with
 # no matching node — an undeclared endpoint every loader materialises as an
 # attribute-less phantom (#2873). For these relations we instead mint a typed
 # external stub node so every edge endpoint resolves. `calls` is intentionally
@@ -370,7 +371,7 @@ def mint_external_stubs_in_data(data: dict) -> None:
 
     The ``--no-cluster`` / incremental write path serializes the raw merged
     extraction directly rather than going through :func:`build_from_json`, so it
-    needs the same stubbing to keep the on-disk graph.json free of undeclared
+    needs the same stubbing to keep the on-disk graph.grafeo free of undeclared
     edge endpoints (#2873). Idempotent: a graph already carrying its stubs (from
     a prior run or the clustered path) is left unchanged.
     """
@@ -410,7 +411,7 @@ def finalize_raw_graph_endpoints(data: dict) -> None:
     a typed stub for an import of an external module (#2873) and drops every
     other edge it cannot attach to two declared nodes, after re-pointing an
     endpoint that differs from a declared id only by normalization. The raw
-    write paths skip build_from_json, so graph.json kept those edges: a loader
+    write paths skip build_from_json, so graph.grafeo kept those edges: a loader
     turns each missing endpoint into an attribute-less phantom node, and a link
     to a missing markdown document kept the target id the extractor built from
     the absolute checkout path.
@@ -436,7 +437,7 @@ def finalize_raw_graph_endpoints(data: dict) -> None:
         return
     # Match build_from_json's pre-validation alias folding before applying the
     # raw-path persistence rules. An edge that still has no relation afterwards
-    # has no trustworthy semantic default and must not reach graph.json (#4809).
+    # has no trustworthy semantic default and must not reach graph.grafeo (#4809).
     for edge in links:
         if isinstance(edge, dict):
             _fold_edge_aliases(edge)
@@ -487,7 +488,7 @@ def finalize_raw_graph_endpoints(data: dict) -> None:
                 e[field] = canonical
 
     # Whatever still names an undeclared node is genuinely external: mint the
-    # typed stub for it so the on-disk graph.json has no undeclared endpoint
+    # typed stub for it so the on-disk graph.grafeo has no undeclared endpoint
     # (#2873), then drop the edges that still cannot attach to two declared
     # nodes.
     mint_external_stubs_in_data(data)
@@ -598,7 +599,7 @@ _FILE_TYPE_SYNONYMS = {
 
 
 # Hyperedge member lists are canonically keyed `nodes` (see graphify/llm.py
-# extraction spec), but LLM/subagent drift and externally-supplied graph.json
+# extraction spec), but LLM/subagent drift and externally-supplied graph.grafeo
 # sometimes emit `members` or `node_ids`. _normalize_hyperedge_members folds
 # those aliases into `nodes` at ingest so every downstream consumer reads one
 # canonical key — mirroring the `from`/`to` edge-endpoint tolerance below.
@@ -1070,11 +1071,11 @@ def _infer_merge_root(graph_path: Path) -> str | None:
 
     Prefers the committed ``graphify-out/.graphify_root`` marker — the authoritative
     scan root graphify records at build/watch time (#686/#1423) — then falls back to
-    the directory that contains the output dir (``graph.json``'s grandparent, i.e.
-    ``<root>/graphify-out/graph.json`` -> ``<root>``). The grandparent heuristic is
-    applied only when ``graph.json``'s own directory actually looks like a graphify
+    the directory that contains the output dir (``graph.grafeo``'s grandparent, i.e.
+    ``<root>/graphify-out/graph.grafeo`` -> ``<root>``). The grandparent heuristic is
+    applied only when ``graph.grafeo``'s own directory actually looks like a graphify
     out-dir (named like one, or holding the marker/manifest); for arbitrary layouts
-    (``<root>/graph.json``, #2446) the grandparent is NOT the scan root, and guessing
+    (``<root>/graph.grafeo``, #2446) the grandparent is NOT the scan root, and guessing
     it made absolute prune_sources silently no-op. Returns None if neither resolves,
     in which case normalization is a no-op (prior behavior) and prune matching can
     still recover via :func:`_derive_prune_root`.
@@ -1141,7 +1142,7 @@ def _derive_prune_root(prune_sources: "list[str]", stored_sfs: "set[str]") -> "s
 
     When build_merge/merge_raw_extraction receive absolute prune_sources but no
     ``root``, :func:`_infer_merge_root`'s guess can be wrong for non-standard
-    layouts (``graph.json`` not under ``<root>/graphify-out/``), so every prune
+    layouts (``graph.grafeo`` not under ``<root>/graphify-out/``), so every prune
     entry silently no-ops. Each absolute prune path ``P`` that ends with a
     stored RELATIVE source_file ``S`` implies the candidate root
     ``P[:-len(S)-1]``. Within one graph all relative source_files share a single
@@ -1701,7 +1702,7 @@ def build_from_json(extraction: dict, *, directed: bool = False, root: str | Pat
         # semantic-rekey / ghost-merge passes below, all of which key on
         # label/source_file and would otherwise skip the node entirely.
         _fold_node_aliases(node)
-        # Default missing/None file_type to "concept" so legacy graph.json
+        # Default missing/None file_type to "concept" so legacy graph.grafeo
         # entries (and stub nodes preserved by `_rebuild_code` from older
         # graphify versions that didn't always populate file_type) don't
         # trigger spurious "invalid file_type 'None'" validator warnings (#660).
@@ -1848,7 +1849,7 @@ def build_from_json(extraction: dict, *, directed: bool = False, root: str | Pat
             # source_file (the #2990 decl/def merge stamps it from the impl's
             # source_file BEFORE this normalization runs), so it must be made
             # portable the same way - it used to ship absolute, leaking the
-            # build host's layout into graph.json and MCP get_node (#3223).
+            # build host's layout into graph.grafeo and MCP get_node (#3223).
             if "definition_file" in node:
                 node["definition_file"] = _norm_source_file(node["definition_file"], _root)
         G.add_node(node["id"], **{k: v for k, v in node.items() if k != "id"})
@@ -2125,7 +2126,7 @@ def build_from_json(extraction: dict, *, directed: bool = False, root: str | Pat
         if src not in node_set or tgt not in node_set:
             # An import/re-export whose target is not a declared node points at
             # an external module (stdlib / third-party / another repo). Mint a
-            # typed external stub so the on-disk graph.json has no undeclared
+            # typed external stub so the on-disk graph.grafeo has no undeclared
             # endpoint (#2873), rather than dropping the edge and leaving loaders
             # to materialise an attribute-less phantom. Only the missing *target*
             # of an import-family edge is stubbed; a dangling source, or a
@@ -2158,7 +2159,7 @@ def build_from_json(extraction: dict, *, directed: bool = False, root: str | Pat
         # even panics on NaN). Coerce to float and fall back to the schema default
         # of 1.0 for anything the clustering backends reject — None, non-numeric
         # strings, NaN/inf, negatives — while numeric strings coerce cleanly.
-        # Repair (not drop) the key so graph.json round-trips a clean value and a
+        # Repair (not drop) the key so graph.grafeo round-trips a clean value and a
         # cluster-only/--update reload never re-ingests the null.
         attrs = {k: v for k, v in edge.items() if k not in ("source", "target", "target_file", "local_alias")}
         for _num_key in ("weight", "confidence_score"):
@@ -2348,7 +2349,7 @@ def build_from_json(extraction: dict, *, directed: bool = False, root: str | Pat
                 he["source_file"] = _norm_source_file(he["source_file"], _root)
             # Validate members against the built node set (#1916): a hyperedge
             # member absent from the graph used to be copied into
-            # G.graph["hyperedges"] verbatim and reach graph.json dangling,
+            # G.graph["hyperedges"] verbatim and reach graph.grafeo dangling,
             # even from a live (non-cache) extraction. Mirror the pairwise-edge
             # handling above: remap mismatched ids via normalization first,
             # then drop members that still don't resolve; drop the hyperedge
@@ -2388,7 +2389,7 @@ def build_from_json(extraction: dict, *, directed: bool = False, root: str | Pat
             G.graph["hyperedges"] = []
             print(
                 f"[graphify] WARNING: all {len(hyperedges)} hyperedge(s) were "
-                f"dropped by member revalidation; graph.json's hyperedge set "
+                f"dropped by member revalidation; graph.grafeo's hyperedge set "
                 f"will be emptied on the next export.",
                 file=sys.stderr,
             )
@@ -2400,6 +2401,8 @@ def build_from_json(extraction: dict, *, directed: bool = False, root: str | Pat
     # Also last, after the method-ghost passes above: C# methods display with
     # their owning type (#4883).
     _qualify_csharp_method_labels(G)
+    if isinstance(extraction.get("graph"), dict) and "_store_revision" in extraction["graph"]:
+        G.graph["_store_revision"] = extraction["graph"]["_store_revision"]
     return G
 
 
@@ -2448,7 +2451,7 @@ def build(
         # Fold legacy node field aliases before dedup (#2194): dedup runs BEFORE
         # build_from_json and keys on `label`, so a `name`/`file`/`path` alias node
         # would be invisible to it and only label-dedup one build later, after
-        # build_from_json's own fold has healed the persisted graph.json.
+        # build_from_json's own fold has healed the persisted graph.grafeo.
         for n in combined["nodes"]:
             if isinstance(n, dict):
                 _fold_node_aliases(n)
@@ -2474,11 +2477,11 @@ def build(
         _dedup_collapsed = _before_dedup - len(combined["nodes"])
     G = build_from_json(combined, directed=directed, root=_root, dedup=dedup)
     # CLI reads this to tell a dedup shrink from a file deletion (#3774).
-    # Popped before to_json so it is not stored in graph.json.
+    # Popped before to_json so it is not stored in graph.grafeo.
     if _dedup_collapsed:
         G.graph["_dedup_collapsed"] = _dedup_collapsed
     # Which ids dedup folded into which survivor, for the #479 write guard
-    # (#4940). Popped by to_json, so it is not stored in graph.json.
+    # (#4940). Popped by to_json, so it is not stored in graph.grafeo.
     if _dedup_remap:
         G.graph.setdefault("_dedup_remap", {}).update(_dedup_remap)
     return G
@@ -2489,7 +2492,7 @@ def take_shrink_accounting(G) -> tuple[int, int]:
 
     ``build`` / ``build_merge`` stash these on ``G.graph`` for the extract
     CLI. ``to_json`` also removes them so any other writer cannot persist
-    them into graph.json.
+    them into graph.grafeo.
     """
     attrs = getattr(G, "graph", None)
     if not isinstance(attrs, dict):
@@ -2504,7 +2507,7 @@ def take_dedup_remap(G) -> dict[str, str]:
 
     ``build`` stashes it on ``G.graph`` when entity dedup merged nodes.
     ``to_json`` calls this to excuse a saved id the merge folded into a twin,
-    and it also drops the key so it is never persisted into graph.json.
+    and it also drops the key so it is never persisted into graph.grafeo.
     """
     attrs = getattr(G, "graph", None)
     if not isinstance(attrs, dict):
@@ -2576,7 +2579,7 @@ def deduplicate_by_label(nodes: list[dict], edges: list[dict]) -> tuple[list[dic
 
 
 def _load_existing_graph(graph_path: Path, *, data: dict | None = None) -> "tuple[list, list, list, bool] | None":
-    """Load (nodes, edges, hyperedges, directed) from an existing graph.json for
+    """Load (nodes, edges, hyperedges, directed) from an existing graph.grafeo for
     an incremental merge, accepting both the ``links`` and ``edges`` spellings
     and either hyperedge persistence slot (top-level or ``graph.hyperedges``).
 
@@ -2598,12 +2601,13 @@ def _load_existing_graph(graph_path: Path, *, data: dict | None = None) -> "tupl
         from graphify.security import check_graph_file_size_cap
         check_graph_file_size_cap(graph_path)
         try:
-            data = json.loads(graph_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as exc:
+            data = _read_graph_data(graph_path)
+        except (ValueError, OSError) as exc:
             raise RuntimeError(
                 f"Cannot read {graph_path} for incremental merge: {exc}. "
                 "Delete the file and run a full rebuild."
             ) from exc
+    assert data is not None
     links_key = "links" if "links" in data else "edges"
     nodes = list(data.get("nodes", []))
     edges = list(data.get(links_key, []))
@@ -2731,7 +2735,7 @@ def merge_raw_extraction(
     ast_sources: "Iterable[str | Path] | None" = None,
     existing_data: dict | None = None,
 ) -> dict:
-    """Merge the existing raw graph.json forward into a fresh raw extraction
+    """Merge the existing raw graph.grafeo forward into a fresh raw extraction
     (the ``extract --no-cluster`` incremental path, #2169).
 
     Replace/prune semantics mirror :func:`build_merge` exactly, so the raw and
@@ -2761,6 +2765,12 @@ def merge_raw_extraction(
     overwrite it. No-op when ``graph_path`` does not exist.
     """
     graph_path = Path(graph_path)
+    if existing_data is None and graph_path.suffix == ".grafeo" and graph_path.exists():
+        try:
+            existing_data = _read_graph_data(graph_path)
+        except (ValueError, OSError) as exc:
+            raise RuntimeError(f"Cannot read {graph_path} for incremental merge; rebuild: {exc}") from exc
+    baseline_revision = (existing_data or {}).get("graph", {}).get("_store_revision")
     loaded = _load_existing_graph(graph_path, data=existing_data)
     if loaded is None:
         return new
@@ -2861,6 +2871,8 @@ def merge_raw_extraction(
         new["hyperedges"] = carried_hyper + list(new.get("hyperedges", []))
     if unverified_semantic_shrink:
         new["_unverified_semantic_shrink"] = unverified_semantic_shrink
+    if baseline_revision is not None:
+        new.setdefault("graph", {})["_store_revision"] = baseline_revision
     return new
 
 
@@ -2876,7 +2888,7 @@ def build_merge(
     ast_sources: "Iterable[str | Path] | None" = None,
     existing_data: dict | None = None,
 ) -> nx.Graph:
-    """Load existing graph.json and return it merged with ``new_chunks``.
+    """Load existing graph.grafeo and return it merged with ``new_chunks``.
 
     Does NOT write to disk — the caller persists the result, e.g. via
     ``export.to_json(G, communities, graph_path, force=True)`` after
@@ -2903,6 +2915,12 @@ def build_merge(
     # build itself), so a one-shot iterator must be materialised first.
     new_chunks = list(new_chunks)
     graph_path = Path(graph_path if graph_path is not None else _default_graph_json())
+    if existing_data is None and graph_path.suffix == ".grafeo" and graph_path.exists():
+        try:
+            existing_data = _read_graph_data(graph_path)
+        except (ValueError, OSError) as exc:
+            raise RuntimeError(f"Cannot read {graph_path} for incremental merge; rebuild: {exc}") from exc
+    baseline_revision = (existing_data or {}).get("graph", {}).get("_store_revision")
     _loaded = _load_existing_graph(graph_path, data=existing_data)
     if _loaded is not None:
         existing_nodes, existing_edges, existing_hyperedges, existing_directed = _loaded
@@ -3252,7 +3270,7 @@ def build_merge(
         orphaned = _sweep_orphans()
         n_nodes += len(orphaned)
         # Excuse only saved nodes this prune removed (#3774). A stub minted
-        # in this run and then orphaned was never in graph.json, so counting
+        # in this run and then orphaned was never in graph.grafeo, so counting
         # it would hide a dedup shrink. The print below still uses n_nodes,
         # which includes that stub.
         _disk_ids = {
@@ -3412,6 +3430,8 @@ def build_merge(
     if _replaced_sources:
         G.graph["_replaced_sources"] = sorted(_replaced_sources)
 
+    if baseline_revision is not None:
+        G.graph["_store_revision"] = baseline_revision
     return G
 
 

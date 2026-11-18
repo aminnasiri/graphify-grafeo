@@ -66,7 +66,7 @@ Ayan na. Makakakuha ka ng **tatlong file**:
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 Ang napanatiling graph ay may kasamang `graph.schema_version` upang matukoy ng mga integrasyon ang
@@ -117,7 +117,7 @@ Ang makukuha mo nang out of the box:
 | **God nodes** | Ang pinaka-nakakonektang mga konsepto, para makita mo kung saan dumadaloy ang lahat |
 | **Communities** | Ang graph na hinati sa mga subsystem (Leiden), na may mga label na walang LLM |
 | **Cross-file links** | `calls` / `imports` / `inherits` / `mixes_in` na nireresolba sa ~40 na wika sa pamamagitan ng tree-sitter AST |
-| **Query, path, explain** | Magtanong, subaybayan ang landas sa pagitan ng dalawang bagay, o ipaliwanag ang isang konsepto, lahat laban sa `graph.json` |
+| **Query, path, explain** | Magtanong, subaybayan ang landas sa pagitan ng dalawang bagay, o ipaliwanag ang isang konsepto, lahat laban sa `graph.grafeo` |
 | **Rationale + doc refs** | Ang mga komentong `# NOTE:` / `# WHY:` at mga sitas na ADR/RFC ay nagiging first-class na node na naka-link sa code |
 | **Lampas sa code** | Ang docs, PDF, mga larawan, at video/audio ay lahat nag-mamapa sa iisang graph |
 | **Local-first** | Ang code ay pini-parse nang lokal gamit ang tree-sitter (walang LLM, walang umaalis sa iyong makina); tanging ang semantikong pass sa docs/media ang tumatawag ng backend, at tanging kung mag-configure ka ng isa |
@@ -402,7 +402,7 @@ I-commit o ibahagi ang graph upang ang buong team mo ay nag-query ng parehong ko
 
 ## Paggamit ng graph nang direkta
 
-Lampas sa iyong AI assistant, i-query ang `graph.json` nang diretso mula sa CLI gamit ang `graphify query`, `graphify path`, at `graphify explain`. Ang isang pangalan na tumutugma sa ilang node ay tinatanggihan kasama ang nakalistang mga kandidato sa halip na hulaan. Mababasa ng mga script ang resulta mula sa exit code: `0` isang sagot, `3` isang malabong pangalan, `4` walang tumutugmang node. Tingnan ang **[Magtanong ng mas mahusay na mga tanong sa graph](https://docs.graphify.com/guides/querying)** at ang **[query reference](https://docs.graphify.com/reference/query)**.
+Lampas sa iyong AI assistant, i-query ang `graph.grafeo` nang diretso mula sa CLI gamit ang `graphify query`, `graphify path`, at `graphify explain`. Ang isang pangalan na tumutugma sa ilang node ay tinatanggihan kasama ang nakalistang mga kandidato sa halip na hulaan. Mababasa ng mga script ang resulta mula sa exit code: `0` isang sagot, `3` isang malabong pangalan, `4` walang tumutugmang node. Tingnan ang **[Magtanong ng mas mahusay na mga tanong sa graph](https://docs.graphify.com/guides/querying)** at ang **[query reference](https://docs.graphify.com/reference/query)**.
 
 ---
 

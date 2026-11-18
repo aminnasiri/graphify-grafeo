@@ -1,9 +1,9 @@
-"""The raw --no-cluster graph.json follows build_from_json's endpoint rules (#2873).
+"""The raw --no-cluster graph.grafeo follows build_from_json's endpoint rules (#2873).
 
 build_from_json drops every edge it cannot attach to two declared nodes and
 mints a typed stub for an import of an external module. The raw --no-cluster
 write paths skip build_from_json: `graphify update --no-cluster` only minted the
-stubs, and `graphify extract --no-cluster` did neither. Their graph.json kept
+stubs, and `graphify extract --no-cluster` did neither. Their graph.grafeo kept
 edges to undeclared nodes, and a link to a missing markdown document kept a
 target id built from the absolute checkout path.
 
@@ -14,6 +14,8 @@ raw path minted an external stub for a file that was in the corpus all along
 while the clustered path re-pointed the edge at the real header (#4670).
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import subprocess
@@ -27,15 +29,13 @@ PYTHON = sys.executable
 
 def _write_corpus(root: Path) -> Path:
     root.mkdir(parents=True)
-    (root / "app.py").write_text("import os\n\n\ndef home():\n    return os.getcwd()\n", encoding="utf-8")
-    (root / "README.md").write_text(
-        "# Demo\n\nSee [the guide](docs/guide.md) and [[Roadmap]].\n", encoding="utf-8"
-    )
+    _graph_write_text(root / "app.py", "import os\n\n\ndef home():\n    return os.getcwd()\n", encoding="utf-8")
+    _graph_write_text(root / "README.md", "# Demo\n\nSee [the guide](docs/guide.md) and [[Roadmap]].\n", encoding="utf-8")
     return root
 
 
 def _graph(root: Path) -> tuple[set[str], list[dict]]:
-    data = json.loads((root / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+    data = json.loads(_graph_read_text(root / "graphify-out" / "graph.grafeo", encoding="utf-8"))
     return {n["id"] for n in data["nodes"]}, data.get("links", data.get("edges", []))
 
 
@@ -202,14 +202,8 @@ def test_extract_no_cluster_resolves_a_framework_import_like_the_clustered_path(
 
     root = tmp_path / "r"
     (root / "Kit" / "Event").mkdir(parents=True)
-    (root / "Kit" / "Event" / "ToolEvent.h").write_text(
-        "#import <Foundation/Foundation.h>\n@interface ToolEvent : NSObject\n@end\n",
-        encoding="utf-8",
-    )
-    (root / "Kit" / "Holder.h").write_text(
-        "#import <Kit/ToolEvent.h>\n@interface Holder : NSObject\n@end\n",
-        encoding="utf-8",
-    )
+    _graph_write_text(root / "Kit" / "Event" / "ToolEvent.h", "#import <Foundation/Foundation.h>\n@interface ToolEvent : NSObject\n@end\n", encoding="utf-8")
+    _graph_write_text(root / "Kit" / "Holder.h", "#import <Kit/ToolEvent.h>\n@interface Holder : NSObject\n@end\n", encoding="utf-8")
 
     raw = tmp_path / "raw"
     clustered = tmp_path / "clustered"
@@ -279,9 +273,7 @@ def test_extract_no_cluster_writes_no_undeclared_endpoint(tmp_path: Path):
 def test_extract_no_cluster_drops_stub_of_a_removed_import(tmp_path: Path):
     root = tmp_path / "proj"
     root.mkdir()
-    (root / "app.py").write_text(
-        "import os\nimport json\n\n\ndef home():\n    return os.getcwd()\n", encoding="utf-8"
-    )
+    _graph_write_text(root / "app.py", "import os\nimport json\n\n\ndef home():\n    return os.getcwd()\n", encoding="utf-8")
 
     def extract() -> tuple[set[str], list[dict]]:
         r = subprocess.run(
@@ -293,7 +285,7 @@ def test_extract_no_cluster_drops_stub_of_a_removed_import(tmp_path: Path):
 
     ids, _ = extract()
     assert "os" in ids
-    (root / "app.py").write_text("import json\n\n\ndef home():\n    return '.'\n", encoding="utf-8")
+    _graph_write_text(root / "app.py", "import json\n\n\ndef home():\n    return '.'\n", encoding="utf-8")
     ids, links = extract()
     assert "os" not in ids
     assert "json" in ids

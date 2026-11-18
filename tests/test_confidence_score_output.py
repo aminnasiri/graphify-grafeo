@@ -1,12 +1,14 @@
 """Edge confidence scores in `path`, `explain` and neighbor output (#4882).
 
-graph.json stores `confidence_score` next to `confidence` (interface dispatch
+graph.grafeo stores `confidence_score` next to `confidence` (interface dispatch
 writes 0.85 / 0.75 / 0.65 by implementer count), but the text renderers only
 printed the bare tag, so `[INFERRED]` hid whether an edge was a strong or a
 weak inference. A scored non-EXTRACTED edge now renders as `[INFERRED 0.75]`;
 EXTRACTED and unscored edges keep the bare tag.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import os
@@ -53,8 +55,8 @@ def test_confidence_tag(edge, expected):
 
 @pytest.fixture
 def report_graph(tmp_path):
-    """The issue's Report.cs repro, extracted and written as graph.json."""
-    (tmp_path / "Report.cs").write_text(_REPORT_CS)
+    """The issue's Report.cs repro, extracted and written as graph.grafeo."""
+    _graph_write_text(tmp_path / "Report.cs", _REPORT_CS)
     old = os.getcwd()
     try:
         os.chdir(tmp_path)
@@ -69,7 +71,7 @@ def report_graph(tmp_path):
         ("report_ireport_build", "dispatches_to", "report_csvreport_build"): 0.75,
     }
     G = build_from_json(extraction, root=tmp_path)
-    out = tmp_path / "graph.json"
+    out = tmp_path / "graph.grafeo"
     to_json(G, {0: list(G.nodes)}, str(out))
     return out
 
@@ -82,7 +84,7 @@ def _cli(monkeypatch, capsys, *argv):
 
 
 def _load(graph_path):
-    raw = json.loads(graph_path.read_text())
+    raw = json.loads(_graph_read_text(graph_path))
     return json_graph.node_link_graph({**raw, "directed": True}, edges="links")
 
 

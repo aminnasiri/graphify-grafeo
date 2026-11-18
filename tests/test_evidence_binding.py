@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 """Tests for semantic evidence-binding in graphify.llm.
 
 A code node the model returns whose symbol name has no evidence in the dispatched
@@ -42,7 +44,7 @@ def _by_label(out):
 
 def test_fabricated_code_symbol_is_downgraded(tmp_path):
     src = tmp_path / "mod.py"
-    src.write_text(_SOURCE, encoding="utf-8")
+    _graph_write_text(src, _SOURCE, encoding="utf-8")
     nodes = [
         {"id": "a", "label": "real_function()", "file_type": "code", "source_file": "mod.py"},
         {"id": "b", "label": "totally_fabricated_symbol()", "file_type": "code", "source_file": "mod.py"},
@@ -59,7 +61,7 @@ def test_fabricated_code_symbol_is_downgraded(tmp_path):
 
 def test_qualified_and_prettified_labels_do_not_false_positive(tmp_path):
     src = tmp_path / "mod.py"
-    src.write_text(_SOURCE, encoding="utf-8")
+    _graph_write_text(src, _SOURCE, encoding="utf-8")
     nodes = [
         {"id": "a", "label": "PaymentProcessor.charge_card()", "file_type": "code", "source_file": "mod.py"},
         {"id": "b", "label": "charge_card(amount, token)", "file_type": "code", "source_file": "mod.py"},
@@ -72,7 +74,7 @@ def test_qualified_and_prettified_labels_do_not_false_positive(tmp_path):
 
 def test_document_and_sourceless_nodes_are_never_flagged(tmp_path):
     src = tmp_path / "mod.py"
-    src.write_text(_SOURCE, encoding="utf-8")
+    _graph_write_text(src, _SOURCE, encoding="utf-8")
     nodes = [
         {"id": "a", "label": "Nonexistent Heading", "file_type": "document", "source_file": "mod.py"},
         {"id": "b", "label": "orphan_symbol()", "file_type": "code"},  # no source_file
@@ -84,9 +86,9 @@ def test_document_and_sourceless_nodes_are_never_flagged(tmp_path):
 
 def test_node_attributed_to_undispatched_file_is_left_to_out_of_scope(tmp_path):
     src = tmp_path / "mod.py"
-    src.write_text(_SOURCE, encoding="utf-8")
+    _graph_write_text(src, _SOURCE, encoding="utf-8")
     # other.py exists on disk but is NOT dispatched in this call.
-    (tmp_path / "other.py").write_text("def elsewhere():\n    pass\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "other.py", "def elsewhere():\n    pass\n", encoding="utf-8")
     nodes = [
         {"id": "a", "label": "ghost_func()", "file_type": "code", "source_file": "other.py"},
     ]
@@ -97,7 +99,7 @@ def test_node_attributed_to_undispatched_file_is_left_to_out_of_scope(tmp_path):
 
 def test_uncheckable_short_label_is_not_flagged(tmp_path):
     src = tmp_path / "mod.py"
-    src.write_text(_SOURCE, encoding="utf-8")
+    _graph_write_text(src, _SOURCE, encoding="utf-8")
     nodes = [
         {"id": "a", "label": "id()", "file_type": "code", "source_file": "mod.py"},
     ]
@@ -108,7 +110,7 @@ def test_uncheckable_short_label_is_not_flagged(tmp_path):
 
 def test_existing_lower_confidence_is_not_overwritten(tmp_path):
     src = tmp_path / "mod.py"
-    src.write_text(_SOURCE, encoding="utf-8")
+    _graph_write_text(src, _SOURCE, encoding="utf-8")
     nodes = [
         {"id": "a", "label": "made_up()", "file_type": "code", "source_file": "mod.py", "confidence": "INFERRED"},
     ]
@@ -121,10 +123,10 @@ def test_existing_lower_confidence_is_not_overwritten(tmp_path):
 
 def test_case_variant_extracted_confidence_is_still_evidence_checked(tmp_path):
     src = tmp_path / "mod.py"
-    src.write_text(_SOURCE, encoding="utf-8")
+    _graph_write_text(src, _SOURCE, encoding="utf-8")
     # build._fold_confidence (#4529) treats a mis-cased enum value as THE enum
     # value and corrects its spelling, so `"extracted"` and `"Extracted"` reach
-    # graph.json as EXTRACTED — exactly as solid a claim as the uppercase form.
+    # graph.grafeo as EXTRACTED — exactly as solid a claim as the uppercase form.
     # Evidence-binding must therefore check them too; a case-sensitive
     # comparison let a fabricated symbol keep an unqualified EXTRACTED node.
     nodes = [
@@ -143,7 +145,7 @@ def test_hedged_confidence_is_left_alone_in_any_case(tmp_path):
     # hold for the mis-cased spellings of the hedging values too — widening the
     # EXTRACTED match must not start flagging INFERRED/AMBIGUOUS nodes.
     src = tmp_path / "mod.py"
-    src.write_text(_SOURCE, encoding="utf-8")
+    _graph_write_text(src, _SOURCE, encoding="utf-8")
     nodes = [
         {"id": "a", "label": "hedged_lower()", "file_type": "code",
          "source_file": "mod.py", "confidence": "inferred"},
@@ -164,7 +166,7 @@ def test_label_identifiers_helper():
 
 def test_bind_node_evidence_returns_downgrade_count(tmp_path):
     src = tmp_path / "mod.py"
-    src.write_text(_SOURCE, encoding="utf-8")
+    _graph_write_text(src, _SOURCE, encoding="utf-8")
     result = {
         "nodes": [
             {"id": "a", "label": "real_function()", "file_type": "code", "source_file": "mod.py"},
@@ -182,8 +184,8 @@ def test_evidence_binding_handles_file_slice(tmp_path):
     from graphify.file_slice import FileSlice
 
     src = tmp_path / "big.md"
-    src.write_text("intro\n" + _SOURCE + "\ntail\n", encoding="utf-8")
-    text = src.read_text()
+    _graph_write_text(src, "intro\n" + _SOURCE + "\ntail\n", encoding="utf-8")
+    text = _graph_read_text(src)
     fs = FileSlice(path=src, start=0, end=len(text), index=0, total=1)
     result = {
         "nodes": [
@@ -200,7 +202,7 @@ def test_evidence_binding_handles_file_slice(tmp_path):
 
 def test_evidence_binding_handles_absolute_source_file(tmp_path):
     src = tmp_path / "mod.py"
-    src.write_text(_SOURCE, encoding="utf-8")
+    _graph_write_text(src, _SOURCE, encoding="utf-8")
     # Model returns an absolute source_file rather than a root-relative one.
     result = {"nodes": [
         {"id": "a", "label": "ghost_symbol()", "file_type": "code", "source_file": str(src)},
@@ -212,7 +214,7 @@ def test_evidence_binding_handles_absolute_source_file(tmp_path):
 
 def test_downgrade_emits_stderr_summary(tmp_path, capsys):
     src = tmp_path / "mod.py"
-    src.write_text(_SOURCE, encoding="utf-8")
+    _graph_write_text(src, _SOURCE, encoding="utf-8")
     nodes = [{"id": "b", "label": "totally_made_up_symbol()", "file_type": "code", "source_file": "mod.py"}]
     _run([src], nodes, tmp_path)
     err = capsys.readouterr().err

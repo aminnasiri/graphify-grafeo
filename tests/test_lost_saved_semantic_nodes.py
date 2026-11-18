@@ -1,6 +1,8 @@
 """_lost_saved_semantic_nodes: a semantic ghost deduplicated into its AST twin
 (#1145 extended) is preserved, not lost."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 from pathlib import Path
@@ -110,9 +112,9 @@ def test_malformed_non_string_source_file_does_not_crash():
 
 
 def _saved_graph(tmp_path: Path, sem: dict) -> tuple[Path, dict]:
-    out = tmp_path / "graph.json"
+    out = tmp_path / "graph.grafeo"
     assert to_json(build_from_json({"nodes": [sem], "edges": []}), {}, str(out), force=True)
-    return out, json.loads(out.read_text(encoding="utf-8"))
+    return out, json.loads(_graph_read_text(out, encoding="utf-8"))
 
 
 def _node_data(G) -> dict:
@@ -198,14 +200,14 @@ def test_rich_semantics_survive_repeated_build_and_serialization(tmp_path):
     bare = _mention("bare_mention", "config.php", "README.md")
     ast = _ast_file("src_config", "src/config.php")
     graph = build_from_json({"nodes": [ast, rich_a, rich_b, bare], "edges": []})
-    output = tmp_path / "graph.json"
+    output = tmp_path / "graph.grafeo"
     for _ in range(2):
         assert {"src_config", "sem_a", "sem_b"} <= set(graph.nodes)
         assert "bare_mention" not in graph.nodes
         assert graph.nodes["sem_a"]["rationale"] == rich_a["rationale"]
         assert graph.nodes["sem_b"]["rationale"] == rich_b["rationale"]
         assert to_json(graph, {}, str(output))
-        graph = build_from_json(json.loads(output.read_text(encoding="utf-8")))
+        graph = build_from_json(json.loads(_graph_read_text(output, encoding="utf-8")))
 
 
 def test_file_mention_matching_two_ast_files_is_still_lost():
@@ -219,8 +221,8 @@ def test_file_mention_matching_two_ast_files_is_still_lost():
 def _mixed_saved_graph(tmp_path: Path) -> Path:
     # A saved graph that still holds the mention beside its AST file node,
     # as reported on #4389 for graphifyy 0.9.95.
-    out = tmp_path / "graph.json"
-    out.write_text(json.dumps({
+    out = tmp_path / "graph.grafeo"
+    _graph_write_text(out, json.dumps({
         "directed": False,
         "multigraph": False,
         "graph": {},
@@ -238,7 +240,7 @@ def _mixed_saved_graph(tmp_path: Path) -> Path:
 
 def test_to_json_writes_recluster_that_folds_file_mention(tmp_path):
     out = _mixed_saved_graph(tmp_path)
-    G = build_from_json(json.loads(out.read_text(encoding="utf-8")))
+    G = build_from_json(json.loads(_graph_read_text(out, encoding="utf-8")))
     assert sorted(G.nodes) == ["readme", "src_config"]
     assert G.has_edge("readme", "src_config")  # the edge follows the fold
     assert to_json(G, {}, str(out)) is True
@@ -247,8 +249,8 @@ def test_to_json_writes_recluster_that_folds_file_mention(tmp_path):
 def test_to_json_new_twin_does_not_offset_another_loss(tmp_path, capsys):
     # The twin is new in this run, so the fold is not a saved duplicate going
     # away: losing src_other must still refuse the write.
-    out = tmp_path / "graph.json"
-    out.write_text(json.dumps({"nodes": [
+    out = tmp_path / "graph.grafeo"
+    _graph_write_text(out, json.dumps({"nodes": [
         _mention("readme_config", "src/config.php", "README.md"),
         _ast_file("src_other", "src/other.php"),
     ], "links": []}), encoding="utf-8")
@@ -274,9 +276,9 @@ def test_same_source_yaml_semantic_evidence_survives_new_ast_full_build(tmp_path
     assert "canonical_yaml_ast" in g and "legacy_yaml_id" in g
     assert g.nodes["legacy_yaml_id"]["rationale"] == rich["rationale"]
     assert g.has_edge("docs_review", "legacy_yaml_id")
-    out = tmp_path / "graph.json"
+    out = tmp_path / "graph.grafeo"
     assert to_json(g, {}, str(out)) is True
-    reloaded = build_from_json(json.loads(out.read_text()))
+    reloaded = build_from_json(json.loads(_graph_read_text(out)))
     assert "legacy_yaml_id" in reloaded
     assert reloaded.nodes["legacy_yaml_id"]["rationale"] == rich["rationale"]
     assert _lost_saved_semantic_nodes([rich], [

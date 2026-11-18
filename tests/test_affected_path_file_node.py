@@ -16,6 +16,8 @@ L1, resolves today. The graph-level tests pin the resolver against the exact nod
 shapes; the CLI tests run the repro from the issue end to end.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import os
@@ -144,20 +146,17 @@ def _write_repro(root: Path, *, head: str) -> None:
     """
     (root / "app" / "alpha").mkdir(parents=True)
     (root / "app" / "beta").mkdir(parents=True)
-    (root / "app" / "__init__.py").write_text("", encoding="utf-8")
-    (root / "app" / "alpha" / "__init__.py").write_text("", encoding="utf-8")
-    (root / "app" / "beta" / "__init__.py").write_text("", encoding="utf-8")
-    (root / "app" / "main.py").write_text(
-        "from app.alpha.hooks import check\n"
+    _graph_write_text(root / "app" / "__init__.py", "", encoding="utf-8")
+    _graph_write_text(root / "app" / "alpha" / "__init__.py", "", encoding="utf-8")
+    _graph_write_text(root / "app" / "beta" / "__init__.py", "", encoding="utf-8")
+    _graph_write_text(root / "app" / "main.py", "from app.alpha.hooks import check\n"
         "\n"
         "\n"
         "def handle(request):\n"
-        "    return check(request)\n",
-        encoding="utf-8",
-    )
+        "    return check(request)\n", encoding="utf-8")
     body = head + "def check(request):\n    return bool(request)\n"
     for crate in ("alpha", "beta"):
-        (root / "app" / crate / "hooks.py").write_text(body, encoding="utf-8")
+        _graph_write_text(root / "app" / crate / "hooks.py", body, encoding="utf-8")
 
 
 def _build(root: Path) -> dict:
@@ -166,7 +165,7 @@ def _build(root: Path) -> dict:
     )
     assert result.returncode == 0, result.stderr[-2000:]
     return json.loads(
-        (root / "graphify-out" / "graph.json").read_text(encoding="utf-8")
+        _graph_read_text(root / "graphify-out" / "graph.grafeo", encoding="utf-8")
     )
 
 
@@ -190,7 +189,7 @@ def test_affected_cli_resolves_shared_basename_with_docstring(tmp_path):
 
     file_node = _file_node_id(graph, "app/alpha/hooks.py")
     assert graph["nodes"] and resolve_seed(
-        load_graph(tmp_path / "graphify-out" / "graph.json"),
+        load_graph(tmp_path / "graphify-out" / "graph.grafeo"),
         "app/alpha/hooks.py",
         root=tmp_path,
     ) == file_node
@@ -211,7 +210,7 @@ def test_affected_cli_resolves_shared_basename_without_docstring(tmp_path):
 
     file_node = _file_node_id(graph, "app/alpha/hooks.py")
     assert resolve_seed(
-        load_graph(tmp_path / "graphify-out" / "graph.json"),
+        load_graph(tmp_path / "graphify-out" / "graph.grafeo"),
         "app/alpha/hooks.py",
         root=tmp_path,
     ) == file_node

@@ -1,5 +1,7 @@
 """#4475: JS/TS class members that differ only by `_`, `$` or `#` stay separate nodes."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import warnings
 from pathlib import Path
@@ -11,7 +13,7 @@ from graphify.extract import extract
 
 def _extract(tmp_path: Path, files: dict[str, str]) -> dict:
     for name, src in files.items():
-        (tmp_path / name).write_text(src, encoding="utf-8")
+        _graph_write_text(tmp_path / name, src, encoding="utf-8")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return extract([tmp_path / n for n in files], cache_root=tmp_path, parallel=False)
@@ -136,8 +138,8 @@ def test_dedup_build_and_merge_keep_both(tmp_path):
     G = build([r], dedup=True, root=str(tmp_path))
     labels = {G.nodes[n]["label"] for n in G.nodes}
     assert {".close()", ".#close()"} <= labels
-    to_json(G, cluster(G), str(tmp_path / "graph.json"))
-    G2 = build_merge([_extract(tmp_path, src)], graph_path=str(tmp_path / "graph.json"), root=str(tmp_path))
+    to_json(G, cluster(G), str(tmp_path / "graph.grafeo"))
+    G2 = build_merge([_extract(tmp_path, src)], graph_path=str(tmp_path / "graph.grafeo"), root=str(tmp_path))
     assert set(G2.nodes) == set(G.nodes)
 
 
@@ -147,7 +149,7 @@ def test_pre_fix_ast_cache_entry_is_never_served_for_js(tmp_path):
     from graphify.cache import save_cached
     from graphify.extract import cache_salt, extract_js
     src = tmp_path / "a.js"
-    src.write_text("export class A {\n  updateHash() { return 1; }\n  _updateHash() { return 2; }\n}\n", encoding="utf-8")
+    _graph_write_text(src, "export class A {\n  updateHash() { return 1; }\n  _updateHash() { return 2; }\n}\n", encoding="utf-8")
     stale = extract_js(src)
     stale["nodes"] = [n for n in stale["nodes"] if n.get("label") != "._updateHash()"]
     save_cached(src, stale, root=tmp_path, cache_root=tmp_path, kind="ast", salt=cache_salt(src))

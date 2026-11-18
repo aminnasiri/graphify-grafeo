@@ -1,6 +1,7 @@
 """Tests for graphify.paths — the shared test-path classifier (#1553)."""
 
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
 
 import pytest
 
@@ -101,7 +102,7 @@ def test_disambiguate_path_proximity_same_dir() -> None:
 
 # --- cross-platform absoluteness for STORED paths ---------------------------
 # Path.is_absolute()/os.path.isabs() answer for the host OS, which is the wrong
-# question for a path read out of graph.json: graphs are built in Docker/CI and
+# question for a path read out of graph.grafeo: graphs are built in Docker/CI and
 # updated on Windows (and vice versa), so the string in hand may follow the
 # other platform's rules. Getting this wrong bakes an on-disk path into node IDs
 # (#2197, #1789) or joins an absolute path under the scan root.

@@ -14,6 +14,8 @@ a group is dropped only when nothing is left in it, other tools' commands
 survive, and uninstall keeps a rolling backup.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 
@@ -66,7 +68,7 @@ def test_uninstall_keeps_user_commands_and_unrelated_groups(tmp_path, name):
 
     install(project)
     settings_path = project / rel
-    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    settings = json.loads(_graph_read_text(settings_path, encoding="utf-8"))
     groups = _groups(settings, section)
     assert any(
         _has_graphify(e) for g in groups if isinstance(g, dict) for e in g.get("hooks", [])
@@ -84,18 +86,18 @@ def test_uninstall_keeps_user_commands_and_unrelated_groups(tmp_path, name):
             "hooks": [{"type": "command", "command": "python /tools/graphify-notes/check.py"}],
         }
     )
-    settings_path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+    _graph_write_text(settings_path, json.dumps(settings, indent=2), encoding="utf-8")
 
     uninstall(project)
 
-    after = settings_path.read_text(encoding="utf-8")
+    after = _graph_read_text(settings_path, encoding="utf-8")
     assert "my-linter" in after, f"{name}: the user's command in graphify's group was removed"
     assert "graphify-notes" in after, f"{name}: the unrelated group was removed"
     assert "hook-guard" not in after and "hook-check" not in after, (
         f"{name}: graphify's own hook commands were not removed"
     )
     backup = settings_path.with_name(settings_path.name + ".graphify-bak")
-    assert backup.exists(), f"{name}: uninstall wrote no backup"
+    assert _graph_exists(backup), f"{name}: uninstall wrote no backup"
 
 
 @pytest.mark.parametrize("name", sorted(_INSTALLERS))
@@ -108,13 +110,13 @@ def test_uninstall_survives_a_non_dict_entry(tmp_path, name):
 
     install(project)
     settings_path = project / rel
-    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    settings = json.loads(_graph_read_text(settings_path, encoding="utf-8"))
     _groups(settings, section).append("a-legacy-string-entry")
-    settings_path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+    _graph_write_text(settings_path, json.dumps(settings, indent=2), encoding="utf-8")
 
     uninstall(project)  # must not raise
 
-    after = json.loads(settings_path.read_text(encoding="utf-8"))
+    after = json.loads(_graph_read_text(settings_path, encoding="utf-8"))
     assert "a-legacy-string-entry" in _groups(after, section)
 
 
@@ -124,8 +126,7 @@ def test_install_removes_legacy_bash_hook_and_stays_idempotent(tmp_path):
     project = tmp_path / "proj"
     settings_path = project / ".claude" / "settings.json"
     settings_path.parent.mkdir(parents=True)
-    settings_path.write_text(
-        json.dumps(
+    _graph_write_text(settings_path, json.dumps(
             {
                 "hooks": {
                     "PreToolUse": [
@@ -134,22 +135,20 @@ def test_install_removes_legacy_bash_hook_and_stays_idempotent(tmp_path):
                             "hooks": [
                                 {
                                     "type": "command",
-                                    "command": "[ -f graphify-out/graph.json ] && echo x || true",
+                                    "command": "[ -f graphify-out/graph.grafeo ] && echo x || true",
                                 }
                             ],
                         }
                     ]
                 }
             }
-        ),
-        encoding="utf-8",
-    )
+        ), encoding="utf-8")
 
     install_mod._install_claude_hook(project)
     install_mod._install_claude_hook(project)
 
-    groups = json.loads(settings_path.read_text(encoding="utf-8"))["hooks"]["PreToolUse"]
-    assert "graphify-out/graph.json" not in json.dumps(groups), "legacy bash guard survived"
+    groups = json.loads(_graph_read_text(settings_path, encoding="utf-8"))["hooks"]["PreToolUse"]
+    assert "graphify-out/graph.grafeo" not in json.dumps(groups), "legacy bash guard survived"
     assert len([g for g in groups if "graphify" in json.dumps(g)]) == 2, "not idempotent"
 
 
@@ -160,7 +159,7 @@ def test_install_removes_legacy_bash_hook_and_stays_idempotent(tmp_path):
         '"C:/tools/graphify.EXE" hook-guard read --strict',
         "graphify hook-guard gemini",
         "graphify hook-check",
-        "[ -f graphify-out/graph.json ] && echo x || true",
+        "[ -f graphify-out/graph.grafeo ] && echo x || true",
     ],
 )
 def test_graphify_commands_are_recognised(command):

@@ -1,5 +1,7 @@
 """Regression tests for relationships in the generated query fallback."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import io
 import json
@@ -22,7 +24,7 @@ FALLBACK_END = '\n"\n```'
 
 
 def _fallback_script() -> str:
-    fragment = QUERY_FRAGMENT.read_text(encoding="utf-8")
+    fragment = _graph_read_text(QUERY_FRAGMENT, encoding="utf-8")
     start = fragment.index(FALLBACK_LOCATOR) + len(FALLBACK_OPEN)
     end = fragment.index(FALLBACK_END, start)
     return fragment[start:end]
@@ -43,7 +45,7 @@ def _run_fallback(
         data = json_graph.node_link_data(graph)
     output_dir = tmp_path / "graphify-out"
     output_dir.mkdir()
-    (output_dir / "graph.json").write_text(json.dumps(data), encoding="utf-8")
+    _graph_write_text(output_dir / "graph.grafeo", json.dumps(data), encoding="utf-8")
 
     script = _fallback_script()
     # The payload is embedded in a double-quoted shell argument. Unescape the

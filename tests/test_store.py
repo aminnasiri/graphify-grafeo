@@ -275,3 +275,17 @@ def test_snapshot_does_not_expose_mutable_store_state(store):
 def test_invalid_lock_deadlines_are_rejected(tmp_path, timeout):
     with pytest.raises(ValueError, match="finite and non-negative"):
         GrafeoStore(tmp_path / "graph.grafeo", timeout=timeout)
+
+
+def test_missing_legacy_flags_infer_parallel_arcs_without_collapse(tmp_path):
+    from graphify.store.io import write_graph, connection
+    from graphify.affected import load_graph
+    db = tmp_path / "raw.grafeo"
+    data = {"nodes": [{"id": "a"}, {"id": "b"}], "links": [
+        {"source": "a", "target": "b", "relation": "calls"},
+        {"source": "a", "target": "b", "relation": "imports"},
+    ]}
+    write_graph(db, data)
+    with connection(db) as store:
+        assert store.snapshot().to_node_link()["multigraph"] is True
+    assert load_graph(db).number_of_edges() == 2

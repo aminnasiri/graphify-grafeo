@@ -13,7 +13,7 @@ First check the graph exists:
 ```bash
 $(cat graphify-out/.graphify_python) -c "
 from pathlib import Path
-if not Path('graphify-out/graph.json').exists():
+if not Path('graphify-out/graph.grafeo').exists():
     print('ERROR: No graph found. Run /graphify <path> first to build the graph.')
     raise SystemExit(1)
 "
@@ -31,7 +31,7 @@ Fix this **without inventing tokens** by expanding the query against the actual 
 $(cat graphify-out/.graphify_python) -c "
 import json, re
 from pathlib import Path
-data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
+data = __import__('graphify.store.io', fromlist=['read_json']).read_json(Path('graphify-out/graph.grafeo'))
 vocab = set()
 for n in data['nodes']:
     for c in re.findall(r'[^\W\d_]+', n.get('label','') or '', re.UNICODE):
@@ -68,7 +68,7 @@ graphify query "QUESTION"
 # or: graphify query "QUESTION" --dfs --budget 3000
 ```
 
-If the CLI is unavailable, load `graphify-out/graph.json` and run the traversal inline:
+If the CLI is unavailable, load `graphify-out/graph.grafeo` and run the traversal inline:
 
 1. Find the 1-3 nodes whose label best matches the expanded tokens.
 2. Run the appropriate traversal from each starting node.
@@ -82,7 +82,7 @@ import sys, json
 from networkx.readwrite import json_graph
 from pathlib import Path
 
-data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
+data = __import__('graphify.store.io', fromlist=['read_json']).read_json(Path('graphify-out/graph.grafeo'))
 G = json_graph.node_link_graph(data, edges='links')
 
 question = 'QUESTION'
@@ -208,7 +208,7 @@ import networkx as nx
 from networkx.readwrite import json_graph
 from pathlib import Path
 
-data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
+data = __import__('graphify.store.io', fromlist=['read_json']).read_json(Path('graphify-out/graph.grafeo'))
 G = json_graph.node_link_graph(data, edges='links')
 
 a_term = 'NODE_A'
@@ -276,7 +276,7 @@ import networkx as nx
 from networkx.readwrite import json_graph
 from pathlib import Path
 
-data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
+data = __import__('graphify.store.io', fromlist=['read_json']).read_json(Path('graphify-out/graph.grafeo'))
 G = json_graph.node_link_graph(data, edges='links')
 
 term = 'NODE_NAME'

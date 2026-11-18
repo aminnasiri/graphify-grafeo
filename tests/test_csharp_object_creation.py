@@ -13,6 +13,8 @@ Only the explicit form is claimed. Target-typed `new()` parses as
 type to name anything, so it stays out.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import os
 import tempfile
@@ -26,7 +28,7 @@ def _extract(tmp_path, files: dict[str, str]):
     for name, body in files.items():
         p = tmp_path / name
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(body)
+        _graph_write_text(p, body)
     old = os.getcwd()
     try:
         os.chdir(tmp_path)
@@ -507,12 +509,12 @@ def test_constructor_in_an_unchanged_file_resolves_on_an_incremental_rebuild(tmp
         "User.cs": "public class User { public void Go() { var r = new Repo(1, 2); } }\n",
     }
     for name, body in files.items():
-        (tmp_path / name).write_text(body)
+        _graph_write_text(tmp_path / name, body)
     assert _rebuild_code(tmp_path, no_cluster=True, acquire_lock=False, force=True)
     user = tmp_path / "User.cs"
-    user.write_text(user.read_text() + "// touched\n")
+    _graph_write_text(user, user.read_text() + "// touched\n")
     assert _rebuild_code(tmp_path, changed_paths=[user], no_cluster=True, acquire_lock=False)
-    graph = json.loads((tmp_path / "graphify-out" / "graph.json").read_text())
+    graph = json.loads(_graph_read_text(tmp_path / "graphify-out" / "graph.grafeo"))
     ctor = next(n["id"] for n in graph["nodes"]
                 if (n.get("metadata") or {}).get("signature") == "int,int")
     go = next(n["id"] for n in graph["nodes"] if n["label"].endswith("Go()"))

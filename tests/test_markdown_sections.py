@@ -5,6 +5,8 @@ read time from the current file, so an agent gets the section body instead of a
 line number it then has to open the file for.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import subprocess
@@ -50,7 +52,7 @@ def _node(path: Path, label: str) -> dict:
 @pytest.fixture()
 def doc(tmp_path: Path) -> Path:
     p = tmp_path / "design.md"
-    p.write_text(DOC, encoding="utf-8")
+    _graph_write_text(p, DOC, encoding="utf-8")
     return p
 
 
@@ -83,8 +85,7 @@ def test_page_is_the_body_without_frontmatter(doc: Path) -> None:
 
 def test_edit_inside_a_section_after_indexing_is_returned_whole(doc: Path) -> None:
     node = _node(doc, "Retry policy")
-    doc.write_text(DOC.replace("Max 30s.", "Max 30s.\nJitter 10%.\nCap 5 retries."),
-                   encoding="utf-8")
+    _graph_write_text(doc, DOC.replace("Max 30s.", "Max 30s.\nJitter 10%.\nCap 5 retries."), encoding="utf-8")
     section, _ = read_section(node, doc.parent)
     assert section is not None and not section.moved
     assert section.text.splitlines()[-1] == "Cap 5 retries."
@@ -92,7 +93,7 @@ def test_edit_inside_a_section_after_indexing_is_returned_whole(doc: Path) -> No
 
 def test_heading_moved_by_an_edit_above_it_is_still_found(doc: Path) -> None:
     node = _node(doc, "Refunds")
-    doc.write_text(DOC.replace("Intro text.", "Intro text.\nmore\nmore"), encoding="utf-8")
+    _graph_write_text(doc, DOC.replace("Intro text.", "Intro text.\nmore\nmore"), encoding="utf-8")
     section, _ = read_section(node, doc.parent)
     assert section is not None and section.moved
     assert section.text.startswith("## Refunds") and section.start == 20
@@ -100,7 +101,7 @@ def test_heading_moved_by_an_edit_above_it_is_still_found(doc: Path) -> None:
 
 def test_removed_heading_is_refused(doc: Path) -> None:
     node = _node(doc, "Refunds")
-    doc.write_text("# Payments\n", encoding="utf-8")
+    _graph_write_text(doc, "# Payments\n", encoding="utf-8")
     section, reason = read_section(node, doc.parent)
     assert section is None and "graphify update" in reason
 
@@ -111,14 +112,13 @@ def test_truncates_at_max_chars(doc: Path) -> None:
 
 
 def test_secrets_in_a_section_are_redacted(tmp_path: Path) -> None:
-    (tmp_path / "x.md").write_text(
-        "# Setup\nexport GH=ghp_abcdefghijklmnopqrstuvwxyz0123456789\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "x.md", "# Setup\nexport GH=ghp_abcdefghijklmnopqrstuvwxyz0123456789\n", encoding="utf-8")
     s = _read(tmp_path / "x.md", "Setup")
     assert "ghp_abcdefghijklmnopqrstuvwxyz0123456789" not in s.text
 
 
 def test_control_characters_are_stripped_but_tabs_kept(tmp_path: Path) -> None:
-    (tmp_path / "x.md").write_text("# T\nok\x1b[31mred\tkept\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "x.md", "# T\nok\x1b[31mred\tkept\n", encoding="utf-8")
     s = _read(tmp_path / "x.md", "T")
     assert "\x1b" not in s.text and "\tkept" in s.text
 
@@ -126,7 +126,7 @@ def test_control_characters_are_stripped_but_tabs_kept(tmp_path: Path) -> None:
 def test_path_outside_the_project_is_refused(tmp_path: Path) -> None:
     root = tmp_path / "proj"
     root.mkdir()
-    (tmp_path / "secret.md").write_text("# s\nkey\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "secret.md", "# s\nkey\n", encoding="utf-8")
     node = {"label": "s", "node_kind": "heading", "source_file": "../secret.md",
             "source_location": "L1"}
     section, reason = read_section(node, root)
@@ -171,10 +171,10 @@ def test_heading_wins_over_a_code_symbol_of_the_same_name() -> None:
 
 def test_same_titled_headings_after_an_edit_above_are_refused_not_guessed(tmp_path: Path) -> None:
     p = tmp_path / "api.md"
-    p.write_text("# A\n### Example\none\n# B\n### Example\ntwo\n", encoding="utf-8")
+    _graph_write_text(p, "# A\n### Example\none\n# B\n### Example\ntwo\n", encoding="utf-8")
     second = [n for n in extract_markdown(p)["nodes"] if n["label"] == "Example"][1]
     second = {**second, "source_file": p.name}
-    p.write_text("new\nlines\n" + p.read_text(encoding="utf-8"), encoding="utf-8")
+    _graph_write_text(p, "new\nlines\n" + p.read_text(encoding="utf-8"), encoding="utf-8")
     section, reason = read_section(second, tmp_path)
     assert section is None and "graphify update" in reason
 
@@ -195,7 +195,7 @@ def test_skill_files_are_sections_like_the_extractor_says() -> None:
 ])
 def test_every_extracted_heading_is_readable(tmp_path: Path, text: str) -> None:
     p = tmp_path / "d.md"
-    p.write_text(text, encoding="utf-8")
+    _graph_write_text(p, text, encoding="utf-8")
     for n in extract_markdown(p)["nodes"]:
         section, reason = read_section({**n, "source_file": p.name}, tmp_path)
         assert section is not None and not section.moved, reason
@@ -211,15 +211,15 @@ def test_out_of_project_root_marker_is_not_trusted(tmp_path: Path) -> None:
     from graphify.sections import section_root
     out = tmp_path / "proj" / "graphify-out"
     out.mkdir(parents=True)
-    (out / ".graphify_root").write_text(str(tmp_path.anchor), encoding="utf-8")
-    root = section_root(out / "graph.json")
+    _graph_write_text(out / ".graphify_root", str(tmp_path.anchor), encoding="utf-8")
+    root = section_root(out / "graph.grafeo")
     assert root.resolve() in ((tmp_path / "proj").resolve(), out.resolve())
 
 
 def _project(tmp_path: Path) -> Path:
     root = tmp_path / "proj"
     root.mkdir()
-    (root / "design.md").write_text(DOC, encoding="utf-8")
+    _graph_write_text(root / "design.md", DOC, encoding="utf-8")
     assert _rebuild_code(root, acquire_lock=False, no_cluster=True) is True
     return root
 
@@ -227,7 +227,7 @@ def _project(tmp_path: Path) -> Path:
 def test_graph_json_is_unchanged_by_the_feature(tmp_path: Path) -> None:
     """Nothing is stored: the extractor output a graph was built from is enough."""
     root = _project(tmp_path)
-    graph = json.loads((root / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+    graph = json.loads(_graph_read_text(root / "graphify-out" / "graph.grafeo", encoding="utf-8"))
     assert not any("end_location" in n for n in graph["nodes"])
 
 
@@ -256,7 +256,7 @@ def test_mcp_get_section_and_get_node_hint(tmp_path: Path) -> None:
     import graphify.serve as serve_mod
 
     root = _project(tmp_path)
-    app = serve_mod._build_http_app(str(root / "graphify-out" / "graph.json"),
+    app = serve_mod._build_http_app(str(root / "graphify-out" / "graph.grafeo"),
                                     json_response=True)
     with _client(app) as client:
         headers = _init_session(client)

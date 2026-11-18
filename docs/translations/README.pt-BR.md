@@ -66,7 +66,7 @@ Pronto. Você recebe **três arquivos**:
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 O grafo persistido inclui `graph.schema_version` para que integrações possam detectar
@@ -117,7 +117,7 @@ O que você obtém de imediato:
 | **God nodes** | Os conceitos mais conectados, para você ver por onde tudo flui |
 | **Comunidades** | O grafo dividido em subsistemas (Leiden), com rótulos sem LLM |
 | **Links entre arquivos** | `calls` / `imports` / `inherits` / `mixes_in` resolvidos em ~40 linguagens via AST do tree-sitter |
-| **Query, path, explain** | Faça uma pergunta, trace o caminho entre duas coisas ou explique um conceito, tudo contra `graph.json` |
+| **Query, path, explain** | Faça uma pergunta, trace o caminho entre duas coisas ou explique um conceito, tudo contra `graph.grafeo` |
 | **Justificativa + refs de docs** | Comentários `# NOTE:` / `# WHY:` e citações de ADR/RFC se tornam nós de primeira classe ligados ao código |
 | **Além do código** | Documentos, PDFs, imagens e vídeo/áudio mapeiam todos no mesmo grafo |
 | **Local em primeiro lugar** | O código é analisado localmente com tree-sitter (sem LLM, nada sai da sua máquina); apenas a passagem semântica sobre docs/mídia chama um backend, e só se você configurar um |
@@ -402,7 +402,7 @@ Faça commit ou compartilhe o grafo para que toda a sua equipe consulte o mesmo 
 
 ## Usando o grafo diretamente
 
-Além do seu assistente de IA, consulte `graph.json` diretamente da CLI com `graphify query`, `graphify path` e `graphify explain`. Um nome que corresponde a vários nós é recusado com os candidatos listados em vez de adivinhado. Scripts podem ler o resultado pelo código de saída: `0` uma resposta, `3` um nome ambíguo, `4` nenhum nó correspondente. Veja **[Faça melhores perguntas ao grafo](https://docs.graphify.com/guides/querying)** e a **[referência de query](https://docs.graphify.com/reference/query)**.
+Além do seu assistente de IA, consulte `graph.grafeo` diretamente da CLI com `graphify query`, `graphify path` e `graphify explain`. Um nome que corresponde a vários nós é recusado com os candidatos listados em vez de adivinhado. Scripts podem ler o resultado pelo código de saída: `0` uma resposta, `3` um nome ambíguo, `4` nenhum nó correspondente. Veja **[Faça melhores perguntas ao grafo](https://docs.graphify.com/guides/querying)** e a **[referência de query](https://docs.graphify.com/reference/query)**.
 
 ---
 

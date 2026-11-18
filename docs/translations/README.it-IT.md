@@ -66,7 +66,7 @@ Ecco fatto. Ottieni **tre file**:
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 Il grafo persistito include `graph.schema_version` così che le integrazioni possano rilevare
@@ -117,7 +117,7 @@ Ciò che ottieni da subito:
 | **God nodes** | I concetti più connessi, così vedi attraverso cosa passa tutto |
 | **Communities** | Il grafo suddiviso in sottosistemi (Leiden), con etichette senza LLM |
 | **Collegamenti tra file** | `calls` / `imports` / `inherits` / `mixes_in` risolti attraverso ~40 linguaggi tramite l'AST di tree-sitter |
-| **Query, path, explain** | Fai una domanda, traccia il percorso tra due cose o spiega un concetto, il tutto su `graph.json` |
+| **Query, path, explain** | Fai una domanda, traccia il percorso tra due cose o spiega un concetto, il tutto su `graph.grafeo` |
 | **Motivazioni + rif. doc** | I commenti `# NOTE:` / `# WHY:` e le citazioni ADR/RFC diventano nodi di prima classe collegati al codice |
 | **Oltre il codice** | Documenti, PDF, immagini e video/audio vengono mappati tutti nello stesso grafo |
 | **Local-first** | Il codice viene analizzato localmente con tree-sitter (nessun LLM, nulla lascia la tua macchina); solo la passata semantica su documenti/media chiama un backend, e solo se ne configuri uno |
@@ -402,7 +402,7 @@ Esegui il commit o condividi il grafo in modo che tutto il tuo team interroghi l
 
 ## Using the graph directly
 
-Oltre al tuo assistente IA, interroga `graph.json` direttamente dalla CLI con `graphify query`, `graphify path` e `graphify explain`. Un nome che corrisponde a più nodi viene rifiutato con l'elenco dei candidati anziché indovinato. Gli script possono leggere l'esito dal codice di uscita: `0` una risposta, `3` un nome ambiguo, `4` nessun nodo corrispondente. Vedi **[Ask better graph questions](https://docs.graphify.com/guides/querying)** e il **[query reference](https://docs.graphify.com/reference/query)**.
+Oltre al tuo assistente IA, interroga `graph.grafeo` direttamente dalla CLI con `graphify query`, `graphify path` e `graphify explain`. Un nome che corrisponde a più nodi viene rifiutato con l'elenco dei candidati anziché indovinato. Gli script possono leggere l'esito dal codice di uscita: `0` una risposta, `3` un nome ambiguo, `4` nessun nodo corrispondente. Vedi **[Ask better graph questions](https://docs.graphify.com/guides/querying)** e il **[query reference](https://docs.graphify.com/reference/query)**.
 
 ---
 

@@ -23,7 +23,7 @@ _MAX_TEXT_BYTES  = 10_485_760   # 10 MB hard cap for HTML / text
 
 # Graph-load memory-bomb cap: reject .json files larger than this before
 # JSON-parsing them into a dict. Without this, a multi-gigabyte (or
-# specifically crafted) graph.json can exhaust process memory during
+# specifically crafted) graph.grafeo can exhaust process memory during
 # json.loads + node_link_graph rehydration.
 # Default fallback cap. Kept as a module-level constant so the value is
 # discoverable and so existing callers/tests that reference it directly keep
@@ -33,7 +33,7 @@ _MAX_GRAPH_FILE_BYTES = 512 * 1024 * 1024   # 512 MiB
 
 
 def _max_graph_file_bytes() -> int:
-    """Return the graph.json size cap in bytes.
+    """Return the graph.grafeo size cap in bytes.
 
     Honors the ``GRAPHIFY_MAX_GRAPH_BYTES`` environment variable so users with
     large codebases can raise the limit without editing source. The value may
@@ -373,7 +373,7 @@ def check_graph_file_size_cap(path: Path) -> None:
     """Reject *path* if its size exceeds the configured graph-file cap.
 
     Protects callers from memory bombs by failing fast before a multi-GiB
-    graph.json is read into memory and JSON-parsed. Silently returns when
+    graph.grafeo is read into memory and JSON-parsed. Silently returns when
     ``path.stat()`` cannot be read — the caller's own existence/path check
     is expected to surface a clearer error in that case.
 
@@ -385,6 +385,8 @@ def check_graph_file_size_cap(path: Path) -> None:
         ValueError - file size exceeds the cap. The message includes the
         observed size, the cap, and how to raise the limit.
     """
+    if Path(path).suffix.lower() == ".grafeo":
+        return
     cap = _max_graph_file_bytes()
     try:
         size = path.stat().st_size
@@ -441,7 +443,7 @@ def redact_secrets(text: str | None) -> str:
 
     Applied to free text copied out of source files (docstrings and ``# WHY:``
     style comments) before it becomes a node label, so a token pasted into a
-    comment does not land in graph.json / graph.html / GRAPH_REPORT.md.
+    comment does not land in graph.grafeo / graph.html / GRAPH_REPORT.md.
     """
     if not text:
         return "" if text is None else text

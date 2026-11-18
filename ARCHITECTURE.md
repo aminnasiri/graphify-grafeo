@@ -1,3 +1,5 @@
+<!-- Grafeo migration: Python 3.12+, sole persistent graph backend. -->
+
 # Architecture
 
 The Grafeo storage migration is being implemented in phases. The new
@@ -6,6 +8,16 @@ Its sole backend is Grafeo; JSON is an interchange format. The pipeline below
 still describes existing command implementations until their integration phase.
 
 graphify is a Claude Code skill backed by a Python library. The skill orchestrates the library; the library can be used standalone.
+
+## Persistent storage
+
+`graphify/store/base.py` defines the graph contract; `grafeo.py` owns native
+transactions and locking, `pipeline.py` reconciles incremental deltas, `io.py`
+provides short-lived access for CLI/watch/hooks/MCP, and `commands.py` implements
+verified migration and JSON interchange. `graphify-out/graph.grafeo` holds graph
+records and metadata. JSON is produced only by explicit interchange operations.
+NetworkX remains a detached view, preserving algorithm and query behavior.
+See [storage details and benchmarks](docs/graph-store.md).
 
 ## Pipeline
 
@@ -27,7 +39,7 @@ Signatures below are the real ones - `tests/test_architecture_doc.py` imports ev
 | `cluster.py` | `cluster(G)` | graph → `{community_id: [node_id, ...]}` (the graph is not mutated) |
 | `analyze.py` | `god_nodes(G)`, `surprising_connections(G)`, `suggest_questions(G, communities, community_labels)`, `find_import_cycles(G)`, `graph_diff(G_old, G_new)` | graph → one list/dict per analysis. There is no single `analyze()` entry point |
 | `report.py` | `generate(G, communities, cohesion_scores, community_labels, ...)` | graph + analysis → GRAPH_REPORT.md string |
-| `export.py` | `to_json`, `to_html`, `to_obsidian`, `to_svg`, `to_graphml`, `to_canvas`, `to_cypher` | graph → graph.json, graph.html, Obsidian vault, graph.svg, … one function per format |
+| `export.py` | `to_json`, `to_html`, `to_obsidian`, `to_svg`, `to_graphml`, `to_canvas`, `to_cypher` | graph → Grafeo, JSON interchange, graph.html, Obsidian vault, graph.svg, … one function per format |
 | `wiki.py` | `to_wiki(G, communities, output_dir, ...)` | graph → one markdown article per community + `index.md` |
 | `callflow_html.py` | `write_callflow_html(...)` | graphify-out files → Mermaid architecture/call-flow HTML |
 | `ingest.py` | `ingest(url, target_dir, ...)` | URL → file saved to corpus dir |

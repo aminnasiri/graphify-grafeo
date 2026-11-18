@@ -1,5 +1,7 @@
 """Tests for graphify query CLI context filtering."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import json
 from pathlib import Path
@@ -21,8 +23,8 @@ def _write_graph(tmp_path):
     G.add_node("n3", label="build", source_file="build.py", source_location="L1", community=1)
     G.add_edge("n1", "n2", relation="calls", confidence="EXTRACTED", context="call")
     G.add_edge("n2", "n3", relation="imports", confidence="EXTRACTED", context="import")
-    graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(json_graph.node_link_data(G, edges="links")))
+    graph_path = tmp_path / "graph.grafeo"
+    _graph_write_text(graph_path, json.dumps(json_graph.node_link_data(G, edges="links")))
     return graph_path
 
 
@@ -57,7 +59,7 @@ def test_query_cli_heuristic_context_filter(monkeypatch, tmp_path, capsys):
 
 
 def _write_calls_graph(tmp_path):
-    """A single directed `calls` edge on an (on-disk) undirected graph.json,
+    """A single directed `calls` edge on an (on-disk) undirected graph.grafeo,
 
     the standard `graphify extract`/`update` output shape (`"directed":
     false`, direction implied only by each link's source/target).
@@ -66,8 +68,8 @@ def _write_calls_graph(tmp_path):
     G.add_node("caller", label="caller_fn", source_file="a.py", source_location="L1", community=0)
     G.add_node("callee", label="callee_fn", source_file="b.py", source_location="L1", community=1)
     G.add_edge("caller", "callee", relation="calls", confidence="EXTRACTED", context="call")
-    graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(json_graph.node_link_data(G, edges="links")))
+    graph_path = tmp_path / "graph.grafeo"
+    _graph_write_text(graph_path, json.dumps(json_graph.node_link_data(G, edges="links")))
     return graph_path
 
 
@@ -80,7 +82,7 @@ def test_query_cli_preserves_calls_direction_when_seeded_on_callee(monkeypatch, 
     as a neighbor of `callee_fn` with no direction of its own. Before the
     fix, the renderer assumed the BFS/DFS visit order (u, v) was the edge's
     (source, target), so seeding on the callee printed the edge backwards:
-    "callee_fn --calls--> caller_fn". graph.json's `source`/`target` for this
+    "callee_fn --calls--> caller_fn". graph.grafeo's `source`/`target` for this
     edge stay correct on disk either way; only the query rendering was wrong.
     """
     graph_path = _write_calls_graph(tmp_path)
@@ -112,10 +114,14 @@ def test_query_cli_preserves_calls_direction_when_seeded_on_caller(monkeypatch, 
 
 
 def test_query_cli_rejects_oversized_graph(monkeypatch, tmp_path, capsys):
-    """#F4: query CLI must refuse to parse a graph.json that exceeds the cap."""
+    """#F4: query CLI must refuse to parse a graph.grafeo that exceeds the cap."""
     import pytest
 
-    graph_path = _write_graph(tmp_path)
+    database = _write_graph(tmp_path)
+    graph_path = tmp_path / "graph.json"
+    from graphify.store.io import connection
+    with connection(database) as store:
+        store.export_json(graph_path)
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda _: None)
     monkeypatch.setattr("graphify.security._MAX_GRAPH_FILE_BYTES", 16)
     monkeypatch.setattr(
@@ -231,10 +237,10 @@ def test_query_settings_precedence_and_execution_log_agree(monkeypatch, tmp_path
     out.mkdir(parents=True)
     graph_path = _write_graph(out)
     if settings:
-        (project / ".graphifyrc").write_text(settings, encoding="utf-8")
+        _graph_write_text(project / ".graphifyrc", settings, encoding="utf-8")
     other = tmp_path / "other"
     other.mkdir()
-    (other / ".graphifyrc").write_text("query_budget=9999\nquery_depth=6\n", encoding="utf-8")
+    _graph_write_text(other / ".graphifyrc", "query_budget=9999\nquery_depth=6\n", encoding="utf-8")
     monkeypatch.chdir(other)
     monkeypatch.setattr("graphify.paths.GRAPHIFY_OUT", "graphify-out")
     captured = _capture_query_settings(monkeypatch, graph_path, flags)
@@ -274,7 +280,7 @@ def test_query_rejects_invalid_explicit_depth(monkeypatch, tmp_path, capsys, fla
     ("query_budget=4000\nquery_depth=no\n", ["--budget=5000", "--depth=3"], (5000, 3)),
 ])
 def test_bad_project_settings_warn_once_and_discard_all_defaults(monkeypatch, tmp_path, capsys, settings, flags, expected):
-    (tmp_path / ".graphifyrc").write_text(settings, encoding="utf-8")
+    _graph_write_text(tmp_path / ".graphifyrc", settings, encoding="utf-8")
     captured = _capture_query_settings(monkeypatch, _write_graph(tmp_path), flags)
     for consumer in ["execution", "log"]:
         assert (captured[consumer]["token_budget"], captured[consumer]["depth"]) == expected
@@ -307,10 +313,10 @@ def test_query_settings_unexpected_error_is_not_hidden(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("graph_error", ["missing", "invalid-json"])
 def test_graph_errors_precede_settings_loading(monkeypatch, tmp_path, capsys, graph_error):
-    (tmp_path / ".graphifyrc").write_text("query_depth=bad\n", encoding="utf-8")
-    graph_path = tmp_path / "graph.json"
+    _graph_write_text(tmp_path / ".graphifyrc", "query_depth=bad\n", encoding="utf-8")
+    graph_path = tmp_path / "graph.grafeo"
     if graph_error == "invalid-json":
-        graph_path.write_text("{broken", encoding="utf-8")
+        _graph_write_text(graph_path, "{broken", encoding="utf-8")
 
     def should_not_load(_root):
         pytest.fail("settings loaded before graph validation")
@@ -343,7 +349,7 @@ def test_query_root_suffix_is_native_lexical_and_cwd_independent(monkeypatch, tm
     monkeypatch.setattr("graphify.paths.GRAPHIFY_OUT", configured)
     directory = tmp_path / graph_dir
     directory.mkdir(parents=True)
-    gp = directory / "graph.json"
+    gp = directory / "graph.grafeo"
     for cwd in [tmp_path, directory]:
         monkeypatch.chdir(cwd)
         assert _graph_root_for(gp) == tmp_path / expected_root
@@ -357,13 +363,13 @@ def test_query_root_marker_is_absolute_directory_or_falls_back(monkeypatch, tmp_
     project.mkdir()
     directory = tmp_path / "shared" / "custom"
     directory.mkdir(parents=True)
-    gp = directory / "graph.json"
+    gp = directory / "graph.grafeo"
     not_dir = tmp_path / "plain-file"
-    not_dir.write_text("file", encoding="utf-8")
+    _graph_write_text(not_dir, "file", encoding="utf-8")
     values = {"empty": " \n", "dot": ".", "parent": "..", "relative": "selected",
               "file": str(not_dir), "nul": "\0", "bom-absolute": "\ufeff  " + str(project) + " \n"}
     if marker_kind != "missing":
-        (directory / ".graphify_root").write_text(values[marker_kind], encoding="utf-8")
+        _graph_write_text(directory / ".graphify_root", values[marker_kind], encoding="utf-8")
     monkeypatch.setattr("graphify.paths.GRAPHIFY_OUT", "graphify-out")
     for cwd in [tmp_path, directory]:
         monkeypatch.chdir(cwd)
@@ -387,7 +393,7 @@ def test_query_root_expected_marker_failures_fall_back(monkeypatch, tmp_path, fa
 
     monkeypatch.setattr(Path, "read_text", fail_marker)
     monkeypatch.setattr("graphify.paths.GRAPHIFY_OUT", "graphify-out")
-    assert _graph_root_for(directory / "graph.json") == tmp_path
+    assert _graph_root_for(directory / "graph.grafeo") == tmp_path
 
 
 def test_query_root_unexpected_marker_error_propagates(monkeypatch, tmp_path):
@@ -398,7 +404,7 @@ def test_query_root_unexpected_marker_error_propagates(monkeypatch, tmp_path):
 
     monkeypatch.setattr(Path, "read_text", unexpected)
     with pytest.raises(TypeError, match="unexpected marker failure"):
-        _graph_root_for(tmp_path / "graph.json")
+        _graph_root_for(tmp_path / "graph.grafeo")
 
 
 def test_query_root_absolute_symlink_marker_resolves_to_project(monkeypatch, tmp_path):
@@ -413,8 +419,8 @@ def test_query_root_absolute_symlink_marker_resolves_to_project(monkeypatch, tmp
         pytest.skip("directory symlinks unavailable")
     directory = tmp_path / "output"
     directory.mkdir()
-    (directory / ".graphify_root").write_text(str(link), encoding="utf-8")
-    assert _graph_root_for(directory / "graph.json") == project
+    _graph_write_text(directory / ".graphify_root", str(link), encoding="utf-8")
+    assert _graph_root_for(directory / "graph.grafeo") == project
 
 
 @pytest.mark.parametrize("operation, failure", [
@@ -430,7 +436,7 @@ def test_query_root_path_operation_failures_fall_back(monkeypatch, tmp_path, ope
     directory.mkdir()
     target = tmp_path / "selected"
     target.mkdir()
-    (directory / ".graphify_root").write_text(str(target), encoding="utf-8")
+    _graph_write_text(directory / ".graphify_root", str(target), encoding="utf-8")
     original = getattr(Path, operation)
 
     def fail_target(path, *args, **kwargs):
@@ -440,18 +446,18 @@ def test_query_root_path_operation_failures_fall_back(monkeypatch, tmp_path, ope
 
     monkeypatch.setattr(Path, operation, fail_target)
     monkeypatch.setattr("graphify.paths.GRAPHIFY_OUT", "graphify-out")
-    assert _graph_root_for(directory / "graph.json") == tmp_path
+    assert _graph_root_for(directory / "graph.grafeo") == tmp_path
 
 
 @pytest.mark.parametrize("layout", ["absolute-marker", "nested-relative-output"])
 def test_query_reads_custom_output_selected_project_settings(monkeypatch, tmp_path, layout):
     project = tmp_path / "project"
     project.mkdir()
-    (project / ".graphifyrc").write_text("query_budget=4000\nquery_depth=4\n", encoding="utf-8")
+    _graph_write_text(project / ".graphifyrc", "query_budget=4000\nquery_depth=4\n", encoding="utf-8")
     if layout == "absolute-marker":
         directory = tmp_path / "shared-output"
         directory.mkdir()
-        (directory / ".graphify_root").write_text(str(project), encoding="utf-8")
+        _graph_write_text(directory / ".graphify_root", str(project), encoding="utf-8")
         monkeypatch.setattr("graphify.paths.GRAPHIFY_OUT", str(directory))
     else:
         directory = project / "cache" / "graphs"
@@ -474,7 +480,7 @@ def test_query_root_unexpected_runtime_error_propagates(monkeypatch, tmp_path, o
     target = tmp_path / "project"
     target.mkdir()
     marker = directory / ".graphify_root"
-    marker.write_text(str(target), encoding="utf-8")
+    _graph_write_text(marker, str(target), encoding="utf-8")
     original = getattr(Path, operation)
 
     def unexpected(path, *args, **kwargs):
@@ -484,4 +490,4 @@ def test_query_root_unexpected_runtime_error_propagates(monkeypatch, tmp_path, o
 
     monkeypatch.setattr(Path, operation, unexpected)
     with pytest.raises(RuntimeError, match="unexpected marker operation"):
-        _graph_root_for(directory / "graph.json")
+        _graph_root_for(directory / "graph.grafeo")

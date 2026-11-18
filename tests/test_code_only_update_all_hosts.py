@@ -12,6 +12,8 @@ here-string bodies through the interpreter on stdin: it tests the Python and the
 not PowerShell quoting). aider and devin are monoliths with their own anchors.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, is_file as _graph_is_file, read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import os
@@ -157,7 +159,7 @@ def _env() -> dict[str, str]:
     # pastes its output into the Python source. That is a separate bug in the skills; this
     # test checks the code-only route, so keep graphify off PATH for the blocks it runs.
     path = os.pathsep.join(p for p in os.environ.get("PATH", "").split(os.pathsep)
-                           if not (Path(p) / "graphify").exists())
+                           if not _graph_exists(Path(p) / "graphify"))
     return {**os.environ, "PATH": path, "PYTHONPATH": str(REPO_ROOT)}
 
 
@@ -166,7 +168,7 @@ def _run(block: str, proj: Path, *, python_on_stdin: bool = False) -> subprocess
     # sidecar instead of a substituted literal; write it as Step 1 would.
     out = proj / "graphify-out"
     out.mkdir(parents=True, exist_ok=True)
-    (out / ".graphify_root").write_text(proj.as_posix(), encoding="utf-8")
+    _graph_write_text(out / ".graphify_root", proj.as_posix(), encoding="utf-8")
     block = block.replace("IS_DIRECTED", "False")
     if python_on_stdin:
         here_string = re.search(r"@'\n(.*?)\n'@", block, re.S)
@@ -186,23 +188,23 @@ def _project(tmp_path: Path) -> tuple[Path, int]:
     """A built two-file project, a.py then edited to add f_new(). Returns (path, baseline node count)."""
     proj = tmp_path / "proj"
     proj.mkdir()
-    (proj / "a.py").write_text("def f():\n    return 1\n", encoding="utf-8")
-    (proj / "b.py").write_text("def g():\n    return 2\n", encoding="utf-8")
+    _graph_write_text(proj / "a.py", "def f():\n    return 1\n", encoding="utf-8")
+    _graph_write_text(proj / "b.py", "def g():\n    return 2\n", encoding="utf-8")
     where = subprocess.run([sys.executable, "-c", "import graphify; print(graphify.__file__)"], cwd=proj,
                            env=_env(), capture_output=True, text=True, check=True).stdout.strip()
     assert Path(where).is_relative_to(REPO_ROOT), f"graphify imported from {where}, not this checkout"
     subprocess.run([sys.executable, "-m", "graphify", "update", str(proj)], cwd=proj, env=_env(),
                    check=True, capture_output=True, text=True)
-    (proj / "graphify-out" / ".graphify_python").write_text(sys.executable, encoding="utf-8")
-    baseline = len(json.loads((proj / "graphify-out" / "graph.json").read_text(encoding="utf-8"))["nodes"])
-    (proj / "a.py").write_text("def f():\n    return 1\n\ndef f_new():\n    return 3\n", encoding="utf-8")
+    _graph_write_text(proj / "graphify-out" / ".graphify_python", sys.executable, encoding="utf-8")
+    baseline = len(json.loads(_graph_read_text(proj / "graphify-out" / "graph.grafeo", encoding="utf-8"))["nodes"])
+    _graph_write_text(proj / "a.py", "def f():\n    return 1\n\ndef f_new():\n    return 3\n", encoding="utf-8")
     return proj, baseline
 
 
 def _semantic_cache(proj: Path) -> dict[str, bytes]:
     root = proj / "graphify-out" / "cache"
-    return {p.relative_to(root).as_posix(): p.read_bytes()
-            for d in root.glob("semantic*") for p in d.rglob("*") if p.is_file()}
+    return {p.relative_to(root).as_posix(): _graph_read_bytes(p)
+            for d in root.glob("semantic*") for p in d.rglob("*") if _graph_is_file(p)}
 
 
 @pytest.mark.parametrize("host,anchors", HOSTS)
@@ -218,10 +220,10 @@ def test_code_only_update_follows_its_paragraph_and_merges_the_new_function(host
     # State after a normal full build's cleanup: no extract/ast/semantic files. Seed a semantic
     # cache entry that must not move (the stale semantic file is seeded below, after detection:
     # aider keeps its .graphify_*.json in the project root, where detection would scan it).
-    assert not (out / ".graphify_extract.json").exists()
+    assert not _graph_exists(out / ".graphify_extract.json")
     entry = proj / "graphify-out" / "cache" / "semantic" / ("ab" * 32 + ".json")
     entry.parent.mkdir(parents=True, exist_ok=True)
-    entry.write_text(json.dumps({"nodes": [{"id": "cached_notes", "label": "cached"}],
+    _graph_write_text(entry, json.dumps({"nodes": [{"id": "cached_notes", "label": "cached"}],
                                  "edges": [], "hyperedges": []}), encoding="utf-8")
     cache_before = _semantic_cache(proj)
     assert cache_before
@@ -234,10 +236,10 @@ def test_code_only_update_follows_its_paragraph_and_merges_the_new_function(host
     assert any("code_only: True" in text for text in ran), "the code_only check did not report True"
 
     # Part A reads it, and Step 9 deleted it: the --update section has to write it again.
-    assert (out / ".graphify_detect.json").exists(), "the --update section never wrote .graphify_detect.json"
+    assert _graph_exists(out / ".graphify_detect.json"), "the --update section never wrote .graphify_detect.json"
 
     # A sidecar left by an earlier run, where this host keeps it: must not reach the result.
-    (out / ".graphify_semantic.json").write_text(json.dumps({
+    _graph_write_text(out / ".graphify_semantic.json", json.dumps({
         "nodes": [{"id": "stale_semantic", "label": STALE, "source_file": "notes.md"}],
         "edges": [], "hyperedges": []}), encoding="utf-8")
 
@@ -258,8 +260,8 @@ def test_code_only_update_follows_its_paragraph_and_merges_the_new_function(host
     assert int(merged.group(1)) == baseline + 1, f"{merged.group(0)}; expected {baseline + 1} nodes"
 
     extract = out / ".graphify_extract.json"
-    if extract.exists():  # the generated hosts' merge writes the merged extraction back
-        labels = {n.get("label") for n in json.loads(extract.read_text(encoding="utf-8"))["nodes"]}
+    if _graph_exists(extract):  # the generated hosts' merge writes the merged extraction back
+        labels = {n.get("label") for n in json.loads(_graph_read_text(extract, encoding="utf-8"))["nodes"]}
         assert "f_new()" in labels
         assert STALE not in labels
 

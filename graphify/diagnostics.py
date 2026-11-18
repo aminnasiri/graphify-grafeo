@@ -1,6 +1,7 @@
 """Read-only diagnostics for MultiDiGraph readiness."""
 
 from __future__ import annotations
+from graphify.store.io import read_json as _read_graph_data
 
 import json
 import re
@@ -303,8 +304,8 @@ def _read_json_file(path: str | Path) -> dict[str, Any]:
     json_path = Path(path)
     check_graph_file_size_cap(json_path)
     try:
-        data = json.loads(json_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
+        data = _read_graph_data(json_path)
+    except (ValueError, OSError) as exc:
         raise RuntimeError(
             f"Cannot parse {json_path}: {exc}. "
             "The file may be corrupted — re-run 'graphify extract'."

@@ -6,6 +6,8 @@ typed receiver must select the method owned by its declared type; unresolved or
 ambiguous receivers must stay unlinked rather than creating a false call edge.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 from pathlib import Path
@@ -18,7 +20,7 @@ def _calls(tmp_path: Path, files: dict[str, str]):
     for name, body in files.items():
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body, encoding="utf-8")
+        _graph_write_text(path, body, encoding="utf-8")
         paths.append(path)
     result = extract(paths, cache_root=tmp_path / "graphify-out")
     calls = {
@@ -522,7 +524,7 @@ def test_schema_bump_retires_java_entries_cached_without_the_unbound_marker(tmp_
     }
     paths = []
     for name, body in files.items():
-        (tmp_path / name).write_text(body, encoding="utf-8")
+        _graph_write_text(tmp_path / name, body, encoding="utf-8")
         paths.append(tmp_path / name)
     current_schema = cache_mod._AST_CACHE_SCHEMA
     monkeypatch.setattr(cache_mod, "_EXTRACTOR_VERSION", "same-version")
@@ -652,18 +654,18 @@ def test_chain_through_an_unchanged_file_survives_a_changed_files_rebuild(tmp_pa
         root = tmp_path / name
         root.mkdir()
         for fname, body in files.items():
-            (root / fname).write_text(body, encoding="utf-8")
+            _graph_write_text(root / fname, body, encoding="utf-8")
         roots.append(root)
     inc, full = roots
     assert _rebuild_code(inc, no_cluster=True, acquire_lock=False, force=True)
     for root in roots:
         p = root / "Client.java"
-        p.write_text(p.read_text(encoding="utf-8") + "// touched\n", encoding="utf-8")
+        _graph_write_text(p, p.read_text(encoding="utf-8") + "// touched\n", encoding="utf-8")
     assert _rebuild_code(inc, changed_paths=[inc / "Client.java"], no_cluster=True, acquire_lock=False)
     assert _rebuild_code(full, no_cluster=True, acquire_lock=False, force=True)
 
     def calls_of(root):
-        g = json.loads((root / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+        g = json.loads(_graph_read_text(root / "graphify-out" / "graph.grafeo", encoding="utf-8"))
         return {(e["source"], e["target"]) for e in g.get("links", g.get("edges", [])) if e["relation"] == "calls"}
 
     assert calls_of(inc) == calls_of(full)
@@ -680,7 +682,7 @@ def test_schema_bump_retires_java_entries_cached_without_receiver_chains(tmp_pat
     files = {**_BUILDER, "Client.java": "class Client { void run() { Factory.builder().size(3); } }\n"}
     paths = []
     for name, body in files.items():
-        (tmp_path / name).write_text(body, encoding="utf-8")
+        _graph_write_text(tmp_path / name, body, encoding="utf-8")
         paths.append(tmp_path / name)
     current_schema = cache_mod._AST_CACHE_SCHEMA
     monkeypatch.setattr(cache_mod, "_EXTRACTOR_VERSION", "same-version")
@@ -825,7 +827,7 @@ def test_schema_bump_retires_java_entries_cached_without_static_field_chains(
     }
     paths = []
     for name, body in files.items():
-        (tmp_path / name).write_text(body, encoding="utf-8")
+        _graph_write_text(tmp_path / name, body, encoding="utf-8")
         paths.append(tmp_path / name)
     current_schema = cache_mod._AST_CACHE_SCHEMA
     monkeypatch.setattr(cache_mod, "_EXTRACTOR_VERSION", "same-version")

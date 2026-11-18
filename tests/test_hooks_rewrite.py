@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text, write_text as _graph_write_text
 """Hooks must rebuild once after every git operation that changes the tree (#4490).
 
 Each test counts the background-rebuild launch line in git's output (hooks
@@ -40,7 +42,7 @@ class Repo:
         return (out.stdout + out.stderr).count(_LAUNCH_LINE)
 
     def write(self, name, text):
-        (self.path / name).write_text(text, encoding="utf-8")
+        _graph_write_text(self.path / name, text, encoding="utf-8")
 
     def commit(self, name, text, msg):
         self.write(name, text)
@@ -52,7 +54,7 @@ class Repo:
                        env=self.env, check=True, capture_output=True)
 
     def labels(self):
-        graph = json.loads((self.path / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+        graph = json.loads(_graph_read_text(self.path / "graphify-out" / "graph.grafeo", encoding="utf-8"))
         return {n["label"] for n in graph["nodes"]}
 
 
@@ -60,14 +62,14 @@ def _settle(repo, home, timeout=60):
     """Wait until the detached rebuild is done: log stable, no lock or pending files."""
     log, out = home / ".cache" / "graphify-rebuild.log", repo.path / "graphify-out"
     t0 = time.time()
-    while time.time() - t0 < 5 and not log.exists():
+    while time.time() - t0 < 5 and not _graph_exists(log):
         time.sleep(0.1)
-    if not log.exists():
+    if not _graph_exists(log):
         return  # nothing was launched; the caller's assertions say what was expected
     last = (-1, 0.0)
     while time.time() - t0 < timeout:
         size = log.stat().st_size
-        busy = any((out / n).exists() for n in (".rebuild.lock", ".pending_changes", ".pending_full"))
+        busy = any(_graph_exists(out / n) for n in (".rebuild.lock", ".pending_changes", ".pending_full"))
         if size != last[0]:
             last = (size, time.time())
         elif not busy and time.time() - last[1] > 2:
@@ -81,7 +83,7 @@ def repo(tmp_path):
     r = Repo(tmp_path / "repo", tmp_path)
     r.git("init", "-q", "-b", "main")
     (r.path / "graphify-out").mkdir()
-    r.write("graphify-out/graph.json", "{}")
+    r.write("graphify-out/graph.grafeo", "{}")
     r.commit("a.py", "def a(): pass\n", "init")
     install(r.path)
     return r
@@ -137,7 +139,7 @@ def test_pull_rebase_rebuilds_once(repo, tmp_path):
     clone = Repo(tmp_path / "clone", tmp_path)
     clone.git("clone", "-q", str(repo.path), ".")  # into the empty dir Repo made
     (clone.path / "graphify-out").mkdir()  # the graph is untracked, so a clone has none
-    clone.write("graphify-out/graph.json", "{}")
+    clone.write("graphify-out/graph.grafeo", "{}")
     install(clone.path)
     repo.commit("up.py", "def up(): pass\n", "up")
     clone.commit("lo.py", "def lo(): pass\n", "lo")
@@ -165,7 +167,7 @@ def test_conflicted_rebase_continues_and_rebuilds_once(repo):
     repo.git("add", "a.py")
     out = repo.git("rebase", "--continue")  # must not be blocked by a hook
     assert (out.stdout + out.stderr).count(_LAUNCH_LINE) == 1
-    assert not (repo.path / ".git" / "rebase-merge").exists()
+    assert not _graph_exists(repo.path / ".git" / "rebase-merge")
 
 
 @_SH_ONLY
@@ -218,21 +220,21 @@ def test_revert_range_rebuilds_once_and_removes_the_functions(tmp_path):
 
 @_SH_ONLY
 def test_tracked_graph_range_pick_with_conflict_completes(tmp_path):
-    """With graph.json tracked, a rebuild between picks would dirty it and git would
+    """With graph.grafeo tracked, a rebuild between picks would dirty it and git would
     refuse the next pick that touches it ("local changes would be overwritten")."""
     r = Repo(tmp_path / "repo", tmp_path)
     r.git("init", "-q", "-b", "main")
     (r.path / "graphify-out").mkdir()
-    r.write("graphify-out/graph.json", "{}")
+    r.write("graphify-out/graph.grafeo", "{}")
     r.commit("shared.py", "def s(): return 0\n", "init")
-    r.git("add", "-f", "graphify-out/graph.json")
+    r.git("add", "-f", "graphify-out/graph.grafeo")
     r.git("commit", "-qm", "track", quiet=True)
     install(r.path)
     r.git("checkout", "-qb", "side", quiet=True)
     r.commit("n1.py", "def n1(): pass\n", "c1")
     r.commit("shared.py", "def s(): return 2\n", "c2")
-    r.write("graphify-out/graph.json", '{"teammate": true}')
-    r.git("add", "-f", "graphify-out/graph.json")
+    r.write("graphify-out/graph.grafeo", '{"teammate": true}')
+    r.git("add", "-f", "graphify-out/graph.grafeo")
     r.git("commit", "-qm", "c3", quiet=True)
     r.git("checkout", "-q", "main", quiet=True)
     r.commit("shared.py", "def s(): return 1\n", "main edit")
@@ -241,7 +243,7 @@ def test_tracked_graph_range_pick_with_conflict_completes(tmp_path):
     r.git("add", "shared.py")
     out = r.git("cherry-pick", "--continue", check=False)
     assert out.returncode == 0, out.stdout + out.stderr
-    assert not (r.path / ".git" / "sequencer").exists()
+    assert not _graph_exists(r.path / ".git" / "sequencer")
     _settle(r, tmp_path)  # cleanup only: lets the rebuild after the last pick finish before tmp_path goes
 
 
@@ -257,7 +259,7 @@ def test_abandoned_range_pick_does_not_silence_later_commits(repo):
     repo.commit("a.py", "def a(): return 1\n", "main edit")
     repo.git("cherry-pick", "side~3..side", check=False)  # pauses on c2
     repo.git("reset", "-q", "--hard", "HEAD")
-    if not (repo.path / ".git" / "sequencer").exists():
+    if not _graph_exists(repo.path / ".git" / "sequencer"):
         pytest.skip("this git removes sequencer/ on reset --hard, so there is nothing stale to test")
     repo.write("z.py", "def z(): pass\n")
     repo.git("add", "z.py")

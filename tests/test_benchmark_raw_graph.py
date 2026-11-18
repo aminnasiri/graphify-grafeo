@@ -1,4 +1,4 @@
-"""#2212: run_benchmark must accept a raw --no-cluster graph.json.
+"""#2212: run_benchmark must accept a raw --no-cluster graph.grafeo.
 
 The clustered writer stores edges under "links" (networkx node-link default);
 the raw --no-cluster writer stores them under "edges". Consumers calling
@@ -7,6 +7,8 @@ shape — the `except TypeError` fallback only covered old networkx versions,
 not the missing key.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 import json
 
 from graphify.benchmark import run_benchmark
@@ -62,9 +64,9 @@ def _graph_payload(edges_key: str) -> dict:
 
 
 def test_run_benchmark_raw_edges_keyed_graph(tmp_path):
-    """A --no-cluster graph.json ("edges" key) must not raise KeyError."""
-    graph_file = tmp_path / "graph.json"
-    graph_file.write_text(json.dumps(_graph_payload("edges")), encoding="utf-8")
+    """A --no-cluster graph.grafeo ("edges" key) must not raise KeyError."""
+    graph_file = tmp_path / "graph.grafeo"
+    _graph_write_text(graph_file, json.dumps(_graph_payload("edges")), encoding="utf-8")
 
     result = run_benchmark(graph_path=str(graph_file), corpus_words=5_000)
 
@@ -79,8 +81,8 @@ def test_run_benchmark_raw_edges_keyed_graph(tmp_path):
 
 def test_run_benchmark_links_keyed_graph(tmp_path):
     """The clustered writer's "links" key keeps working identically."""
-    graph_file = tmp_path / "graph.json"
-    graph_file.write_text(json.dumps(_graph_payload("links")), encoding="utf-8")
+    graph_file = tmp_path / "graph.grafeo"
+    _graph_write_text(graph_file, json.dumps(_graph_payload("links")), encoding="utf-8")
 
     result = run_benchmark(graph_path=str(graph_file), corpus_words=5_000)
 
@@ -93,9 +95,9 @@ def test_run_benchmark_links_keyed_graph(tmp_path):
 def test_raw_and_links_graphs_benchmark_identically(tmp_path):
     """Both spellings of the same graph must produce the same stats."""
     raw_file = tmp_path / "raw.json"
-    raw_file.write_text(json.dumps(_graph_payload("edges")), encoding="utf-8")
+    _graph_write_text(raw_file, json.dumps(_graph_payload("edges")), encoding="utf-8")
     links_file = tmp_path / "links.json"
-    links_file.write_text(json.dumps(_graph_payload("links")), encoding="utf-8")
+    _graph_write_text(links_file, json.dumps(_graph_payload("links")), encoding="utf-8")
 
     raw = run_benchmark(graph_path=str(raw_file), corpus_words=5_000)
     links = run_benchmark(graph_path=str(links_file), corpus_words=5_000)

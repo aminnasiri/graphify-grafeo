@@ -8,6 +8,8 @@ treated as out-of-root, and `source_file` collapsed to the bare basename. Every
 `page.tsx` also pruned the re-extracted nodes of another.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import io
 import os
@@ -45,7 +47,7 @@ def test_source_file_is_repo_relative_under_a_symlinked_root(tmp_path):
     root = _linked_root(tmp_path)
     page = root / "web/app/customers/page.tsx"
     page.parent.mkdir(parents=True)
-    page.write_text(PAGE, encoding="utf-8")
+    _graph_write_text(page, PAGE, encoding="utf-8")
 
     result = _extract([page], root)
 
@@ -58,7 +60,7 @@ def test_same_basename_files_stay_distinct_under_a_symlinked_root(tmp_path):
     b = root / "web/app/b/page.tsx"
     for p in (a, b):
         p.parent.mkdir(parents=True)
-        p.write_text(PAGE, encoding="utf-8")
+        _graph_write_text(p, PAGE, encoding="utf-8")
 
     result = _extract([a, b], root)
 
@@ -70,20 +72,20 @@ def test_pruning_a_deleted_page_keeps_the_reextracted_one(tmp_path):
     root = _linked_root(tmp_path)
     old = root / "web/app/customers-list/page.tsx"
     old.parent.mkdir(parents=True)
-    old.write_text(PAGE, encoding="utf-8")
+    _graph_write_text(old, PAGE, encoding="utf-8")
     G = build_from_json(_extract([old], root), root=str(root))
     out = root / "graphify-out"
     out.mkdir()
     with redirect_stdout(io.StringIO()):
-        assert to_json(G, cluster(G), str(out / "graph.json"))
+        assert to_json(G, cluster(G), str(out / "graph.grafeo"))
 
-    old.unlink()
+    _graph_unlink(old)
     new = root / "web/app/customers/list/page.tsx"
     new.parent.mkdir(parents=True)
-    new.write_text(PAGE, encoding="utf-8")
+    _graph_write_text(new, PAGE, encoding="utf-8")
     fresh = _extract([new], root)
     with redirect_stdout(io.StringIO()):
-        merged = build_merge([fresh], graph_path=str(out / "graph.json"),
+        merged = build_merge([fresh], graph_path=str(out / "graph.grafeo"),
                              prune_sources=[str(old)], root=str(root))
 
     kept = {n: d.get("source_file") for n, d in merged.nodes(data=True)}

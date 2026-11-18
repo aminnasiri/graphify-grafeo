@@ -1,11 +1,13 @@
 """A complete `graphify extract` must not force-write a shrink that dedup caused (#3774).
 
 A full build sets force=True, and to_json then skips the #479 node-count check.
-Dedup can merge a same-file duplicate and replace graph.json with no message.
+Dedup can merge a same-file duplicate and replace graph.grafeo with no message.
 A deleted file is a different shrink: that write still happens.
 `--allow-dedup-shrink` is the only flag that accepts the dedup shrink.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 
@@ -46,27 +48,24 @@ def _notes(corpus):
 
 def _write_graph(path, nodes):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps({"nodes": nodes, "links": []}),
-        encoding="utf-8",
-    )
+    _graph_write_text(path, json.dumps({"nodes": nodes, "links": []}), encoding="utf-8")
 
 
 def _node_ids(path):
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(_graph_read_text(path, encoding="utf-8"))
     return [n["id"] for n in data["nodes"]]
 
 
 def _corpus(tmp_path):
-    (tmp_path / "README.md").write_text("# Notes\nThe entry point overview.\n", encoding="utf-8")
-    (tmp_path / "GUIDE.md").write_text("# Guide\nHow to use the thing.\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "README.md", "# Notes\nThe entry point overview.\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "GUIDE.md", "# Guide\nHow to use the thing.\n", encoding="utf-8")
     return tmp_path
 
 
 def _arm(monkeypatch, tmp_path, *, nodes, extra_argv=()):
     corpus = _corpus(tmp_path)
     out_dir = tmp_path / "out"
-    graph_path = out_dir / "graphify-out" / "graph.json"
+    graph_path = out_dir / "graphify-out" / "graph.grafeo"
     _write_graph(graph_path, nodes)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-fake-key")
 
@@ -130,7 +129,7 @@ def test_allow_dedup_shrink_writes_the_smaller_graph(monkeypatch, tmp_path):
     assert len(ids) == 2
     assert "readme_overview" in ids
     assert not {"readme_decisions_a", "readme_decisions_b"} <= set(ids)
-    raw = graph_path.read_text(encoding="utf-8")
+    raw = _graph_read_text(graph_path, encoding="utf-8")
     assert "_dedup_collapsed" not in raw
     assert "_pruned_node_count" not in raw
 
@@ -177,9 +176,9 @@ def test_to_json_does_not_store_shrink_accounting(tmp_path):
 
     G = build([{"nodes": _notes(tmp_path), "edges": [], "hyperedges": []}])
     assert G.graph.get("_dedup_collapsed") == 1
-    out = tmp_path / "graph.json"
+    out = tmp_path / "graph.grafeo"
     assert to_json(G, {}, str(out), force=True) is True
-    raw = out.read_text(encoding="utf-8")
+    raw = _graph_read_text(out, encoding="utf-8")
     assert "_dedup_collapsed" not in raw
     assert "_pruned_node_count" not in raw
 
@@ -197,7 +196,7 @@ def test_pruned_node_count_ignores_a_stub_created_this_run(tmp_path):
         {"id": "kept", "label": "Overview", "file_type": "document", "source_file": kept},
         {"id": "gone", "label": "Gone", "file_type": "document", "source_file": gone},
     ]
-    graph_path = root / "graphify-out" / "graph.json"
+    graph_path = root / "graphify-out" / "graph.grafeo"
     _write_graph(graph_path, disk)
     stub_edge = {"source": "gone", "target": "fresh_stub", "source_file": gone}
     chunk = {

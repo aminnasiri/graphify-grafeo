@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 """Linked copies excluded by detection must not survive a full reconcile."""
 import json
 from pathlib import Path
@@ -12,7 +14,7 @@ def workspace(tmp_path):
     main = tmp_path / "app"
     main.mkdir()
     source = main / "a.py"
-    source.write_text("def answer(): return 42\n", encoding="utf-8")
+    _graph_write_text(source, "def answer(): return 42\n", encoding="utf-8")
     def git(*args):
         subprocess.run(["git", "-C", str(main), *args], check=True, capture_output=True)
     git("init", "-q")
@@ -38,7 +40,7 @@ def test_predicate_matches_scan_for_linked_worktree(tmp_path):
 def test_reconcile_prunes_node_edge_and_hyperedge_owned_by_linked_copy(tmp_path, linked_node):
     source, linked_source, _ = workspace(tmp_path)
     control = tmp_path / "unexplained.txt"
-    control.write_text("still here", encoding="utf-8")
+    _graph_write_text(control, "still here", encoding="utf-8")
     nodes = [{"id": n, "label": n, "source_file": str(source), "_origin": "ast"} for n in ["a", "b"]]
     old = {"nodes": nodes + [{"id": "linked", "label": "linked", "source_file": str(linked_source), "_origin": "ast"},
                              {"id": "control", "label": "control", "source_file": str(control), "_origin": "semantic"}],
@@ -50,8 +52,8 @@ def test_reconcile_prunes_node_edge_and_hyperedge_owned_by_linked_copy(tmp_path,
         old["nodes"] = [n for n in old["nodes"] if n["id"] != "linked"]
     out = tmp_path / "graphify-out"
     out.mkdir()
-    graph = out / "graph.json"
-    graph.write_text(json.dumps(old), encoding="utf-8")
+    graph = out / "graph.grafeo"
+    _graph_write_text(graph, json.dumps(old), encoding="utf-8")
     result, _ = _reconcile_existing_graph(graph, {"nodes": nodes, "edges": [], "hyperedges": []},
         out=out, project_root=tmp_path, watch_root=tmp_path,
         code_files=[source], extract_targets=[source], full_rebuild=True,

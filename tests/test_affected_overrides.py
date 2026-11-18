@@ -6,6 +6,8 @@ affects those callers, although no edge points at the override. The overridden m
 stepping stone (it did not change), unless a real edge reaches it too.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import json
 from pathlib import Path
@@ -129,12 +131,12 @@ def _extract_graph(tmp_path: Path, files: dict[str, str]) -> nx.Graph:
     paths = []
     for name, body in files.items():
         p = tmp_path / name
-        p.write_text(body, encoding="utf-8")
+        _graph_write_text(p, body, encoding="utf-8")
         paths.append(p)
     result = extract(paths, cache_root=tmp_path / "graphify-out")
-    # loaded the way `graphify affected` loads graph.json (parallel edges kept)
-    graph_json = tmp_path / "graph.json"
-    graph_json.write_text(json.dumps({"nodes": result["nodes"], "links": result["edges"]}), encoding="utf-8")
+    # loaded the way `graphify affected` loads graph.grafeo (parallel edges kept)
+    graph_json = tmp_path / "graph.grafeo"
+    _graph_write_text(graph_json, json.dumps({"nodes": result["nodes"], "links": result["edges"]}), encoding="utf-8")
     return load_graph(graph_json)
 
 

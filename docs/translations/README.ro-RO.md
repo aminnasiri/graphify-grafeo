@@ -66,7 +66,7 @@ Asta e tot. Obțineți **trei fișiere**:
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 Graful persistat include `graph.schema_version` astfel încât integrările să poată detecta
@@ -117,7 +117,7 @@ Ce obțineți direct din cutie:
 | **Noduri-zeu (god nodes)** | Cele mai conectate concepte, astfel încât vedeți prin ce curge totul |
 | **Comunități** | Graful împărțit în subsisteme (Leiden), cu etichete fără LLM |
 | **Legături între fișiere** | `calls` / `imports` / `inherits` / `mixes_in` rezolvate în ~40 de limbaje prin tree-sitter AST |
-| **Interogare, cale, explicație** | Puneți o întrebare, trasați calea dintre două lucruri sau explicați un concept, totul pe baza `graph.json` |
+| **Interogare, cale, explicație** | Puneți o întrebare, trasați calea dintre două lucruri sau explicați un concept, totul pe baza `graph.grafeo` |
 | **Justificare + referințe doc** | Comentariile `# NOTE:` / `# WHY:` și citările ADR/RFC devin noduri de prim rang legate de cod |
 | **Dincolo de cod** | Documentația, PDF-urile, imaginile și videoclipurile/audio se mapează toate în același graf |
 | **Local în primul rând** | Codul este analizat local cu tree-sitter (fără LLM, nimic nu părăsește mașina voastră); doar trecerea semantică peste documente/media apelează un backend, și doar dacă configurați unul |
@@ -402,7 +402,7 @@ Comiteți sau partajați graful pentru ca întreaga echipă să interogheze acel
 
 ## Folosirea directă a grafului
 
-Dincolo de asistentul vostru AI, interogați `graph.json` direct din CLI cu `graphify query`, `graphify path` și `graphify explain`. Un nume care se potrivește cu mai multe noduri este refuzat, cu candidații listați în loc de ghicit. Scripturile pot citi rezultatul din codul de ieșire: `0` un răspuns, `3` un nume ambiguu, `4` niciun nod care se potrivește. Vedeți **[Puneți întrebări mai bune despre graf](https://docs.graphify.com/guides/querying)** și **[referința de interogare](https://docs.graphify.com/reference/query)**.
+Dincolo de asistentul vostru AI, interogați `graph.grafeo` direct din CLI cu `graphify query`, `graphify path` și `graphify explain`. Un nume care se potrivește cu mai multe noduri este refuzat, cu candidații listați în loc de ghicit. Scripturile pot citi rezultatul din codul de ieșire: `0` un răspuns, `3` un nume ambiguu, `4` niciun nod care se potrivește. Vedeți **[Puneți întrebări mai bune despre graf](https://docs.graphify.com/guides/querying)** și **[referința de interogare](https://docs.graphify.com/reference/query)**.
 
 ---
 

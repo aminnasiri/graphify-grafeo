@@ -9,6 +9,8 @@ persisted graph handed back as incremental resolution context is normalized
 back to it.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 from pathlib import Path
@@ -51,11 +53,11 @@ _SPLIT = {
 def _write(root: Path, files: dict[str, str]) -> None:
     root.mkdir(parents=True, exist_ok=True)
     for name, body in files.items():
-        (root / name).write_text(body, encoding="utf-8")
+        _graph_write_text(root / name, body, encoding="utf-8")
 
 
 def _graph(root: Path) -> dict:
-    return json.loads((root / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+    return json.loads(_graph_read_text(root / "graphify-out" / "graph.grafeo", encoding="utf-8"))
 
 
 def _labels(graph: dict) -> dict[str, str]:
@@ -123,7 +125,7 @@ def test_incremental_rebuild_binds_into_an_unchanged_file(tmp_path):
     assert _labels(_graph(inc))["report_ireport_build"] == "IReport.Build()"
     for root in (inc, full):
         p = root / "Exporter.cs"
-        p.write_text(p.read_text(encoding="utf-8") + "// touched\n", encoding="utf-8")
+        _graph_write_text(p, p.read_text(encoding="utf-8") + "// touched\n", encoding="utf-8")
     assert _rebuild_code(
         inc, changed_paths=[inc / "Exporter.cs"], no_cluster=True, acquire_lock=False,
     )

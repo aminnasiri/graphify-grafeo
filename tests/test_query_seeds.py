@@ -1,6 +1,8 @@
 """`graphify query --seed`: explicit start nodes chosen by the caller (an external ranker) instead of the question's
 keyword matches. A seed resolves exactly as `affected` resolves its seed, and fails closed when it does not."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 
@@ -25,8 +27,8 @@ def _graph():
 def _write(tmp_path, G):
     out = tmp_path / "graphify-out"
     out.mkdir()
-    graph_path = out / "graph.json"
-    graph_path.write_text(json.dumps(json_graph.node_link_data(G, edges="links")))
+    graph_path = out / "graph.grafeo"
+    _graph_write_text(graph_path, json.dumps(json_graph.node_link_data(G, edges="links")))
     return graph_path
 
 
@@ -132,7 +134,7 @@ def test_query_cli_logs_the_seeds(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(mainmod.sys, "argv", ["graphify", "query", "q", "--seed", "build", "--graph", str(graph_path)])
     mainmod.main()
     capsys.readouterr()
-    record = json.loads(log.read_text().strip().splitlines()[-1])
+    record = json.loads(_graph_read_text(log).strip().splitlines()[-1])
     assert record.get("seeds") == ["build"]
 
 

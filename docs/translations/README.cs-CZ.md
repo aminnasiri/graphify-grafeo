@@ -66,7 +66,7 @@ A je to. Získáte **tři soubory**:
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 Uložený graf obsahuje `graph.schema_version`, aby integrace dokázaly detekovat
@@ -117,7 +117,7 @@ Co dostanete rovnou z krabice:
 | **Boží uzly** | Nejvíce propojené koncepty, takže vidíte, čím vše protéká |
 | **Komunity** | Graf rozdělený na podsystémy (Leiden), s popisky bez LLM |
 | **Propojení napříč soubory** | `calls` / `imports` / `inherits` / `mixes_in` rozlišené napříč ~40 jazyky pomocí tree-sitter AST |
-| **Query, path, explain** | Položte otázku, vysledujte cestu mezi dvěma věcmi nebo vysvětlete jeden koncept, vše proti `graph.json` |
+| **Query, path, explain** | Položte otázku, vysledujte cestu mezi dvěma věcmi nebo vysvětlete jeden koncept, vše proti `graph.grafeo` |
 | **Zdůvodnění + odkazy na dokumentaci** | Komentáře `# NOTE:` / `# WHY:` a citace ADR/RFC se stávají prvotřídními uzly propojenými s kódem |
 | **Nad rámec kódu** | Dokumentace, PDF, obrázky a video/audio se vše mapuje do stejného grafu |
 | **Lokální na prvním místě** | Kód se parsuje lokálně pomocí tree-sitter (bez LLM, nic neopouští váš počítač); pouze sémantický průchod přes dokumentaci/média volá backend, a to jen pokud nějaký nakonfigurujete |
@@ -402,7 +402,7 @@ Commitněte nebo sdílejte graf, aby celý váš tým dotazoval stejný kontext,
 
 ## Používání grafu přímo
 
-Kromě vašeho AI asistenta dotazujte `graph.json` přímo z CLI pomocí `graphify query`, `graphify path` a `graphify explain`. Název, který odpovídá více uzlům, je odmítnut s uvedenými kandidáty, místo aby byl uhodnut. Skripty mohou číst výsledek z návratového kódu: `0` odpověď, `3` nejednoznačný název, `4` žádný odpovídající uzel. Viz **[Pokládejte lepší otázky grafu](https://docs.graphify.com/guides/querying)** a **[reference dotazů](https://docs.graphify.com/reference/query)**.
+Kromě vašeho AI asistenta dotazujte `graph.grafeo` přímo z CLI pomocí `graphify query`, `graphify path` a `graphify explain`. Název, který odpovídá více uzlům, je odmítnut s uvedenými kandidáty, místo aby byl uhodnut. Skripty mohou číst výsledek z návratového kódu: `0` odpověď, `3` nejednoznačný název, `4` žádný odpovídající uzel. Viz **[Pokládejte lepší otázky grafu](https://docs.graphify.com/guides/querying)** a **[reference dotazů](https://docs.graphify.com/reference/query)**.
 
 ---
 

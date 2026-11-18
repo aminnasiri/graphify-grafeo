@@ -16,6 +16,8 @@ The hypotheses the fix implements, named as they were argued on the issue:
 """
 
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import functools
 import json
@@ -137,7 +139,7 @@ def test_h4_capped_read_is_byte_identical(tmp_path, size):
     p = tmp_path / "blob.h"
     p.write_bytes(bytes((i * 7) % 251 for i in range(size)))
     with open(p, "rb") as fh:
-        assert p.read_bytes()[:CAP] == fh.read(CAP)
+        assert _graph_read_bytes(p)[:CAP] == fh.read(CAP)
 
 
 def test_h4_capped_read_preserves_sniff_answers(tmp_path):
@@ -244,17 +246,17 @@ HEADER_FUNCS = 60
 def _make_corpus(root: Path) -> Path:
     corpus = root / "corpus"
     corpus.mkdir(parents=True)
-    (corpus / "app.py").write_text("def one():\n    pass\n\ndef two():\n    pass\n")
+    _graph_write_text(corpus / "app.py", "def one():\n    pass\n\ndef two():\n    pass\n")
     lines = ["#ifndef BIG_H\n#define BIG_H\n"]
     lines += [
         f"static inline int hf{i}(int a) {{ return a + {i}; }}\n"
         for i in range(HEADER_FUNCS)
     ]
     lines.append("#endif\n")
-    (corpus / "big.h").write_text("".join(lines))
-    (corpus / "gone.c").write_text("int gone(void) { return 0; }\n")
+    _graph_write_text(corpus / "big.h", "".join(lines))
+    _graph_write_text(corpus / "gone.c", "int gone(void) { return 0; }\n")
     (corpus / "sub").mkdir()
-    (corpus / "sub" / "b.c").write_text("int b(void) { return 1; }\n")
+    _graph_write_text(corpus / "sub" / "b.c", "int b(void) { return 1; }\n")
     return corpus
 
 
@@ -270,19 +272,17 @@ def _restore(corpus: Path, snap: Path) -> None:
 
 
 def _apply_standard_change(corpus: Path) -> None:
-    (corpus / "app.py").write_text(
-        "def one():\n    pass\n\ndef two():\n    pass\n\ndef three():\n    pass\n"
-    )
-    (corpus / "gone.c").unlink()
+    _graph_write_text(corpus / "app.py", "def one():\n    pass\n\ndef two():\n    pass\n\ndef three():\n    pass\n")
+    _graph_unlink(corpus / "gone.c")
 
 
 def _node_ids(corpus: Path) -> list[str]:
-    data = json.loads((corpus / "graphify-out" / "graph.json").read_text())
+    data = json.loads(_graph_read_text(corpus / "graphify-out" / "graph.grafeo"))
     return sorted(n["id"] for n in data["nodes"])
 
 
 def _header_nodes(corpus: Path) -> int:
-    data = json.loads((corpus / "graphify-out" / "graph.json").read_text())
+    data = json.loads(_graph_read_text(corpus / "graphify-out" / "graph.grafeo"))
     return sum(1 for n in data["nodes"] if str(n.get("source_file", "")).endswith("big.h"))
 
 
@@ -406,9 +406,7 @@ def test_objc_m_resolves_once_and_reads_at_most_one_head(built_corpus, monkeypat
     _restore(corpus, snap)
     # marker first, then padding past the cap: verifies the owned branch and the
     # read size in one file, which a 15 byte fixture cannot do
-    (corpus / "objc.m").write_text(
-        "@implementation App\n+ (void)load { }\n@end\n" + "/* pad */\n" * 40000
-    )
+    _graph_write_text(corpus / "objc.m", "@implementation App\n+ (void)load { }\n@end\n" + "/* pad */\n" * 40000)
     assert _rebuild_code(corpus, no_cluster=True, acquire_lock=False) is True
     capsys.readouterr()
 
@@ -430,14 +428,14 @@ def test_memo_does_not_survive_a_rebuild(built_corpus, monkeypatch, capsys):
     corpus, snap = built_corpus
     _restore(corpus, snap)
     monkeypatch.chdir(corpus)
-    (corpus / "gone.c").unlink()
+    _graph_unlink(corpus / "gone.c")
 
     probe = Probe()
     probe.install(monkeypatch)
 
     counts = []
     for i in range(3):
-        (corpus / "app.py").write_text(f"def one():\n    pass\n\ndef r{i}():\n    pass\n")
+        _graph_write_text(corpus / "app.py", f"def one():\n    pass\n\ndef r{i}():\n    pass\n")
         before = _for(probe.reconcile_calls, "big.h")
         assert _rebuild_code(corpus, no_cluster=True, acquire_lock=False) is True
         capsys.readouterr()
@@ -455,8 +453,8 @@ def test_h8_stored_origin_can_answer_without_the_filesystem(built_corpus, monkey
     (corpus / "docs").mkdir()
     (corpus / "docs" / "paper.pdf").write_bytes(b"%PDF-1.4\n")
 
-    graph_path = corpus / "graphify-out" / "graph.json"
-    data = json.loads(graph_path.read_text())
+    graph_path = corpus / "graphify-out" / "graph.grafeo"
+    data = json.loads(_graph_read_text(graph_path))
     data["nodes"].append(
         {
             "id": "doc_paper",
@@ -469,7 +467,7 @@ def test_h8_stored_origin_can_answer_without_the_filesystem(built_corpus, monkey
     for item in data["nodes"]:
         item.pop("_origin", None)
         _backfill_origin(item)
-    graph_path.write_text(json.dumps(data, indent=2))
+    _graph_write_text(graph_path, json.dumps(data, indent=2))
 
     by_id = {n["id"]: n for n in data["nodes"]}
     assert by_id["doc_paper"]["_origin"] == "semantic"
@@ -500,6 +498,6 @@ def test_golden_node_set(built_corpus, monkeypatch, capsys):
 
     if os.environ.get("GRAPHIFY_4978_WRITE_GOLDEN"):
         GOLDEN.parent.mkdir(parents=True, exist_ok=True)
-        GOLDEN.write_text(json.dumps(ids, indent=2) + "\n")
+        _graph_write_text(GOLDEN, json.dumps(ids, indent=2) + "\n")
 
-    assert ids == json.loads(GOLDEN.read_text())
+    assert ids == json.loads(_graph_read_text(GOLDEN))

@@ -12,7 +12,7 @@ graphify hook uninstall  # remove
 graphify hook status     # check
 ```
 
-After every `git commit`, the hook detects which code files changed (via `git diff HEAD~1`), re-runs AST extraction on those files, and rebuilds `graph.json` and `GRAPH_REPORT.md`. Doc/image changes are ignored by the hook - run `/graphify --update` manually for those.
+After every `git commit`, the hook detects which code files changed (via `git diff HEAD~1`), re-runs AST extraction on those files, and rebuilds `graph.grafeo` and `GRAPH_REPORT.md`. Doc/image changes are ignored by the hook - run `/graphify --update` manually for those.
 
 If a post-commit hook already exists, graphify appends to it rather than replacing it.
 
@@ -34,7 +34,7 @@ graphify claude uninstall  # remove the section
 
 ## Source-read freshness
 
-The source-read guard treats a file newer than `graph.json` as potentially stale,
+The source-read guard treats a file newer than `graph.grafeo` as potentially stale,
 but a checkout can refresh timestamps without changing content. For newer files,
 the guard checks the exact project-relative path (or an exact legacy absolute
 path) in the configured output directory's extraction manifest. Every populated

@@ -66,7 +66,7 @@ graphify install               # detects your assistant and registers the skill
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 सहेजे गए ग्राफ में `graph.schema_version` शामिल होता है ताकि इंटीग्रेशन असंगत
@@ -117,7 +117,7 @@ Shortest path (3 hops):
 | **God nodes** | सबसे अधिक जुड़ी अवधारणाएं, ताकि आप देख सकें कि सब कुछ किसके माध्यम से प्रवाहित होता है |
 | **Communities** | ग्राफ को सबसिस्टम में विभाजित किया गया (Leiden), LLM-मुक्त लेबल के साथ |
 | **Cross-file links** | `calls` / `imports` / `inherits` / `mixes_in` जो tree-sitter AST के ज़रिए ~40 भाषाओं में सुलझाए जाते हैं |
-| **Query, path, explain** | कोई सवाल पूछें, दो चीज़ों के बीच का रास्ता ट्रेस करें, या किसी एक अवधारणा की व्याख्या कराएं, सब कुछ `graph.json` के विरुद्ध |
+| **Query, path, explain** | कोई सवाल पूछें, दो चीज़ों के बीच का रास्ता ट्रेस करें, या किसी एक अवधारणा की व्याख्या कराएं, सब कुछ `graph.grafeo` के विरुद्ध |
 | **Rationale + doc refs** | `# NOTE:` / `# WHY:` टिप्पणियां और ADR/RFC उद्धरण कोड से जुड़े फर्स्ट-क्लास नोड बन जाते हैं |
 | **Beyond code** | डॉक्स, PDF, इमेज, और वीडियो/ऑडियो सभी एक ही ग्राफ में मैप होते हैं |
 | **Local-first** | कोड tree-sitter के साथ लोकली पार्स होता है (कोई LLM नहीं, कुछ भी आपकी मशीन से बाहर नहीं जाता); केवल डॉक्स/मीडिया पर सिमैंटिक पास किसी बैकएंड को कॉल करता है, और वह भी तभी जब आप एक कॉन्फ़िगर करें |
@@ -402,7 +402,7 @@ viz_node_limit=0
 
 ## ग्राफ को सीधे उपयोग करना
 
-अपने AI असिस्टेंट के अलावा, `graph.json` को सीधे CLI से `graphify query`, `graphify path`, और `graphify explain` के साथ query करें। कई नोड से मेल खाने वाले नाम को अनुमान लगाने के बजाय उम्मीदवारों की सूची के साथ अस्वीकार कर दिया जाता है। स्क्रिप्ट्स परिणाम को exit code से पढ़ सकती हैं: `0` एक उत्तर, `3` एक अस्पष्ट नाम, `4` कोई मेल खाता नोड नहीं। देखें **[Ask better graph questions](https://docs.graphify.com/guides/querying)** और **[query reference](https://docs.graphify.com/reference/query)**।
+अपने AI असिस्टेंट के अलावा, `graph.grafeo` को सीधे CLI से `graphify query`, `graphify path`, और `graphify explain` के साथ query करें। कई नोड से मेल खाने वाले नाम को अनुमान लगाने के बजाय उम्मीदवारों की सूची के साथ अस्वीकार कर दिया जाता है। स्क्रिप्ट्स परिणाम को exit code से पढ़ सकती हैं: `0` एक उत्तर, `3` एक अस्पष्ट नाम, `4` कोई मेल खाता नोड नहीं। देखें **[Ask better graph questions](https://docs.graphify.com/guides/querying)** और **[query reference](https://docs.graphify.com/reference/query)**।
 
 ---
 

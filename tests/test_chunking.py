@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 """Tests for token-aware chunking and parallel chunk execution in graphify.llm."""
 import threading
 import time
@@ -27,7 +29,7 @@ def test_pack_chunks_packs_small_files_together(tmp_path):
     files = []
     for i in range(20):
         f = tmp_path / f"small_{i}.py"
-        f.write_text("x = 1\n")  # ~6 bytes => ~1 token
+        _graph_write_text(f, "x = 1\n")  # ~6 bytes => ~1 token
         files.append(f)
 
     chunks = _pack_chunks_by_tokens(files, token_budget=10_000)
@@ -47,7 +49,7 @@ def test_pack_chunks_starts_new_chunk_when_budget_would_overflow(tmp_path, no_to
     files = []
     for i in range(5):
         f = tmp_path / f"file_{i}.py"
-        f.write_text("x" * 10_000)
+        _graph_write_text(f, "x" * 10_000)
         files.append(f)
 
     chunks = _pack_chunks_by_tokens(files, token_budget=6_000)
@@ -65,10 +67,10 @@ def test_pack_chunks_groups_by_directory(tmp_path):
     dir_a.mkdir()
     dir_b.mkdir()
 
-    a1 = dir_a / "x.py"; a1.write_text("a")
-    a2 = dir_a / "y.py"; a2.write_text("a")
-    b1 = dir_b / "x.py"; b1.write_text("b")
-    b2 = dir_b / "y.py"; b2.write_text("b")
+    a1 = dir_a / "x.py"; _graph_write_text(a1, "a")
+    a2 = dir_a / "y.py"; _graph_write_text(a2, "a")
+    b1 = dir_b / "x.py"; _graph_write_text(b1, "b")
+    b2 = dir_b / "y.py"; _graph_write_text(b2, "b")
 
     # Big budget — everything fits in one chunk in principle, but the order
     # within the chunk should keep dir_a's files contiguous and dir_b's
@@ -88,8 +90,8 @@ def test_pack_chunks_oversized_file_gets_its_own_chunk(tmp_path, no_tokenizer):
     """A file larger than the budget can't be split — it goes alone in a chunk."""
     from graphify.llm import _pack_chunks_by_tokens
 
-    big = tmp_path / "big.py"; big.write_text("x" * 200_000)  # ~50k tokens (cap-bound)
-    small = tmp_path / "small.py"; small.write_text("x")
+    big = tmp_path / "big.py"; _graph_write_text(big, "x" * 200_000)  # ~50k tokens (cap-bound)
+    small = tmp_path / "small.py"; _graph_write_text(small, "x")
 
     chunks = _pack_chunks_by_tokens([big, small], token_budget=1_000)
     sizes = [len(c) for c in chunks]
@@ -101,7 +103,7 @@ def test_pack_chunks_oversized_file_gets_its_own_chunk(tmp_path, no_tokenizer):
 def test_pack_chunks_rejects_non_positive_budget(tmp_path):
     from graphify.llm import _pack_chunks_by_tokens
 
-    f = tmp_path / "x.py"; f.write_text("a")
+    f = tmp_path / "x.py"; _graph_write_text(f, "a")
     with pytest.raises(ValueError):
         _pack_chunks_by_tokens([f], token_budget=0)
 
@@ -115,7 +117,7 @@ def test_estimate_file_tokens_uses_tiktoken_when_available(tmp_path):
 
     f = tmp_path / "sample.py"
     text = "def hello():\n    return 'world'\n" * 50  # ~1500 chars
-    f.write_text(text)
+    _graph_write_text(f, text)
 
     # Force the tokenizer to be a mock that records calls and returns a known
     # token list, so we can assert the tiktoken path is taken.
@@ -132,7 +134,7 @@ def test_estimate_file_tokens_falls_back_to_chars_when_no_tokenizer(tmp_path):
     from graphify import llm
 
     f = tmp_path / "sample.py"
-    f.write_text("x" * 1_000)  # 1000 bytes
+    _graph_write_text(f, "x" * 1_000)  # 1000 bytes
 
     with patch.object(llm, "_TOKENIZER", None):
         n = llm._estimate_file_tokens(f)
@@ -160,7 +162,7 @@ def test_corpus_parallel_runs_chunks_concurrently(tmp_path):
 
     files = []
     for i in range(8):
-        f = tmp_path / f"f{i}.py"; f.write_text("x")
+        f = tmp_path / f"f{i}.py"; _graph_write_text(f, "x")
         files.append(f)
 
     def slow_extract(chunk, **kwargs):
@@ -186,7 +188,7 @@ def test_corpus_parallel_sequential_when_max_concurrency_is_one(tmp_path):
 
     files = []
     for i in range(3):
-        f = tmp_path / f"f{i}.py"; f.write_text("x")
+        f = tmp_path / f"f{i}.py"; _graph_write_text(f, "x")
         files.append(f)
 
     call_order = []
@@ -208,12 +210,12 @@ def test_corpus_parallel_merge_order_is_submission_order_not_completion(tmp_path
     """#1632: merged node/edge order must be deterministic (submission order),
     not the order chunks' network calls happen to finish. We skew latencies so
     the first-submitted chunk finishes LAST; the merged result must still be in
-    file/submission order so graph.json is stable run-to-run."""
+    file/submission order so graph.grafeo is stable run-to-run."""
     from graphify.llm import extract_corpus_parallel
 
     files = []
     for i in range(4):
-        f = tmp_path / f"f{i}.py"; f.write_text("x")
+        f = tmp_path / f"f{i}.py"; _graph_write_text(f, "x")
         files.append(f)
 
     def latency_skewed(chunk, **kwargs):
@@ -258,7 +260,7 @@ def test_corpus_parallel_continues_after_chunk_failure(tmp_path, capsys):
 
     files = []
     for i in range(4):
-        f = tmp_path / f"f{i}.py"; f.write_text("x")
+        f = tmp_path / f"f{i}.py"; _graph_write_text(f, "x")
         files.append(f)
 
     call_count = {"n": 0}
@@ -288,8 +290,8 @@ def test_checkpoint_scopes_cache_writes_to_chunk_files(tmp_path):
     from graphify.llm import extract_corpus_parallel
     from graphify.cache import save_semantic_cache, load_cached
 
-    a = tmp_path / "A.py"; a.write_text("def a(): pass")
-    b = tmp_path / "B.py"; b.write_text("def b(): pass")
+    a = tmp_path / "A.py"; _graph_write_text(a, "def a(): pass")
+    b = tmp_path / "B.py"; _graph_write_text(b, "def b(): pass")
 
     # Seed B.py's legitimate semantic cache (a full, correct entry).
     save_semantic_cache(
@@ -337,7 +339,7 @@ def test_truncated_chunk_is_cached_partial_and_missed_on_reload(tmp_path):
     from graphify.llm import extract_corpus_parallel, _extraction_system
     from graphify.cache import load_cached
 
-    doc = tmp_path / "doc.md"; doc.write_text("# Heading\nlots of prose\n")
+    doc = tmp_path / "doc.md"; _graph_write_text(doc, "# Heading\nlots of prose\n")
 
     def truncated(chunk, **kwargs):
         return {
@@ -365,7 +367,7 @@ def test_checkpoint_writes_deep_namespace_in_deep_mode(tmp_path):
     from graphify.cache import load_cached
 
     doc = tmp_path / "doc.md"
-    doc.write_text("# Doc\n\nsome content\n")
+    _graph_write_text(doc, "# Doc\n\nsome content\n")
 
     def ok(chunk, **kwargs):
         return {
@@ -402,7 +404,7 @@ def test_omitted_documents_are_reconciled_and_warned(tmp_path, capsys):
     docs = []
     for i in range(4):
         f = tmp_path / f"doc{i}.md"
-        f.write_text(f"# Doc {i}\n\nsome content\n", encoding="utf-8")
+        _graph_write_text(f, f"# Doc {i}\n\nsome content\n", encoding="utf-8")
         docs.append(f)
 
     def omit_odd(chunk, **kwargs):
@@ -438,11 +440,11 @@ def test_files_of_a_failed_chunk_are_not_reported_as_model_omissions(
     from graphify.llm import extract_corpus_parallel
 
     failed = tmp_path / "failed.md"
-    failed.write_text("# Failed\n", encoding="utf-8")
+    _graph_write_text(failed, "# Failed\n", encoding="utf-8")
     omitted = tmp_path / "omitted.md"
-    omitted.write_text("# Omitted\n", encoding="utf-8")
+    _graph_write_text(omitted, "# Omitted\n", encoding="utf-8")
     kept = tmp_path / "kept.md"
-    kept.write_text("# Kept\n", encoding="utf-8")
+    _graph_write_text(kept, "# Kept\n", encoding="utf-8")
 
     def fake(chunk, **kwargs):
         name = getattr(chunk[0], "path", chunk[0]).name
@@ -475,17 +477,17 @@ def test_files_of_a_failed_chunk_are_not_reported_as_model_omissions(
 def test_out_of_scope_nodes_are_dropped_from_merged_result(tmp_path, capsys):
     """#1895: the #1757 cache guard skips the CACHE write for a node attributed
     to a real corpus file that was not dispatched, but the node itself still
-    flowed into merged["nodes"] and landed in graph.json. The merged result must
+    flowed into merged["nodes"] and landed in graph.grafeo. The merged result must
     drop such nodes (and edges/hyperedges touching them), warn once, and record
     the count — while keeping in-scope sibling attributions (a node attributed
     to a different dispatched file in the same chunk) and non-file concept
     source_files, mirroring the #1757 `.is_file()` condition."""
     from graphify.llm import extract_corpus_parallel
 
-    a = tmp_path / "A.md"; a.write_text("# a\n")
-    c = tmp_path / "C.md"; c.write_text("# c\n")
+    a = tmp_path / "A.md"; _graph_write_text(a, "# a\n")
+    c = tmp_path / "C.md"; _graph_write_text(c, "# c\n")
     # B.py exists on disk but is NOT dispatched — the #1895 out-of-scope case.
-    b = tmp_path / "B.py"; b.write_text("def b(): pass\n")
+    b = tmp_path / "B.py"; _graph_write_text(b, "def b(): pass\n")
 
     def stray(chunk, **kwargs):
         return {
@@ -549,7 +551,7 @@ def test_edge_between_kept_nodes_survives_when_source_file_was_not_dispatched(tm
     log = tmp_path / "log.md"
     other = tmp_path / "other.md"
     for path in (page_a, page_b, log, other):
-        path.write_text("# page\n", encoding="utf-8")
+        _graph_write_text(path, "# page\n", encoding="utf-8")
 
     def _node(nid: str, source_file: str) -> dict:
         return {
@@ -587,7 +589,7 @@ def test_edge_between_kept_nodes_survives_when_source_file_was_not_dispatched(tm
         ],
         "hyperedges": [],
     }
-    graph_path = tmp_path / "graph.json"
+    graph_path = tmp_path / "graph.grafeo"
     to_json(build([prior], root=tmp_path), {}, str(graph_path))
 
     def fresh(chunk, **kwargs):
@@ -636,7 +638,7 @@ def test_out_of_scope_drop_count_is_zero_when_all_in_scope(tmp_path, capsys):
     """Counter-test: a clean run records out_of_scope_dropped == 0 and no warning."""
     from graphify.llm import extract_corpus_parallel
 
-    a = tmp_path / "A.md"; a.write_text("# a\n")
+    a = tmp_path / "A.md"; _graph_write_text(a, "# a\n")
 
     def clean(chunk, **kwargs):
         return {
@@ -668,7 +670,7 @@ def test_checkpoint_caches_sliced_document_chunks(tmp_path, capsys):
     from graphify.cache import load_cached
 
     doc = tmp_path / "big.md"
-    doc.write_text("# Title\n" + ("word " * 12000) + "\n## Section\n" + ("more " * 12000))
+    _graph_write_text(doc, "# Title\n" + ("word " * 12000) + "\n## Section\n" + ("more " * 12000))
     # sanity: the doc really does slice into FileSlice units
     units = expand_oversized_files([doc], _FILE_CHAR_CAP)
     assert len(units) > 1 and all(isinstance(u, FileSlice) for u in units)
@@ -702,7 +704,7 @@ def test_corpus_parallel_legacy_mode_when_token_budget_is_none(tmp_path):
 
     files = []
     for i in range(45):
-        f = tmp_path / f"f{i}.py"; f.write_text("x")
+        f = tmp_path / f"f{i}.py"; _graph_write_text(f, "x")
         files.append(f)
 
     chunks_seen = []
@@ -726,7 +728,7 @@ def test_corpus_parallel_token_budget_default_packs_files(tmp_path):
 
     files = []
     for i in range(50):
-        f = tmp_path / f"f{i}.py"; f.write_text("x = 1\n")
+        f = tmp_path / f"f{i}.py"; _graph_write_text(f, "x = 1\n")
         files.append(f)
 
     chunks_seen = []
@@ -763,7 +765,7 @@ def test_adaptive_retry_returns_directly_when_not_truncated(tmp_path):
 
     files = [tmp_path / f"f{i}.py" for i in range(4)]
     for f in files:
-        f.write_text("x")
+        _graph_write_text(f, "x")
 
     calls = []
 
@@ -787,7 +789,7 @@ def test_adaptive_retry_splits_when_finish_reason_length(tmp_path):
 
     files = [tmp_path / f"f{i}.py" for i in range(4)]
     for f in files:
-        f.write_text("x")
+        _graph_write_text(f, "x")
 
     calls = []
 
@@ -813,7 +815,7 @@ def test_adaptive_retry_recurses_for_persistent_truncation(tmp_path):
 
     files = [tmp_path / f"f{i}.py" for i in range(8)]
     for f in files:
-        f.write_text("x")
+        _graph_write_text(f, "x")
 
     calls = []
 
@@ -840,7 +842,7 @@ def test_adaptive_retry_caps_at_max_depth(tmp_path, capsys):
 
     files = [tmp_path / f"f{i}.py" for i in range(8)]
     for f in files:
-        f.write_text("x")
+        _graph_write_text(f, "x")
 
     calls = []
 
@@ -864,7 +866,7 @@ def test_adaptive_retry_single_file_truncation_does_not_recurse(tmp_path, capsys
     warning and return what we got. No infinite loop."""
     from graphify.llm import _extract_with_adaptive_retry
 
-    f = tmp_path / "huge.py"; f.write_text("x")
+    f = tmp_path / "huge.py"; _graph_write_text(f, "x")
 
     calls = []
 
@@ -887,7 +889,7 @@ def test_adaptive_retry_marks_single_file_truncation_partial(tmp_path):
     marks every item ``_partial`` so it is not cached as complete."""
     from graphify.llm import _extract_with_adaptive_retry
 
-    f = tmp_path / "huge.py"; f.write_text("x")
+    f = tmp_path / "huge.py"; _graph_write_text(f, "x")
 
     def stub(chunk, **kwargs):
         return _stub_with_finish(len(chunk), finish_reason="length")
@@ -908,7 +910,7 @@ def test_adaptive_retry_marks_max_depth_giveup_partial(tmp_path):
 
     files = [tmp_path / f"f{i}.py" for i in range(8)]
     for f in files:
-        f.write_text("x")
+        _graph_write_text(f, "x")
 
     def stub(chunk, **kwargs):
         return _stub_with_finish(len(chunk), finish_reason="length")
@@ -929,7 +931,7 @@ def test_adaptive_retry_successful_split_is_not_marked_partial(tmp_path):
 
     files = [tmp_path / f"f{i}.py" for i in range(4)]
     for f in files:
-        f.write_text("x")
+        _graph_write_text(f, "x")
 
     def stub(chunk, **kwargs):
         finish = "length" if len(chunk) == 4 else "stop"
@@ -952,7 +954,7 @@ def test_corpus_parallel_uses_adaptive_retry(tmp_path):
 
     files = [tmp_path / f"f{i}.py" for i in range(4)]
     for f in files:
-        f.write_text("x")
+        _graph_write_text(f, "x")
 
     calls = []
 
@@ -993,7 +995,7 @@ def test_corpus_parallel_cancels_queued_chunks_when_callback_raises(tmp_path, mo
     monkeypatch.setenv("GRAPHIFY_NO_INCREMENTAL_CACHE", "1")
     files = [tmp_path / f"d{index}.md" for index in range(6)]
     for path in files:
-        path.write_text("Cedar requires Beacon approval.\n")
+        _graph_write_text(path, "Cedar requires Beacon approval.\n")
 
     pair = threading.Barrier(2)
     failed = threading.Event()
@@ -1064,7 +1066,7 @@ def test_estimate_file_tokens_handles_tiktoken_special_token(tmp_path):
         import pytest
         pytest.skip("tiktoken not installed; estimation uses the char heuristic")
     f = tmp_path / "tokenizer-notes.md"
-    f.write_text("The GPT end-of-text token is <|endoftext|> in the vocab.\n")
+    _graph_write_text(f, "The GPT end-of-text token is <|endoftext|> in the vocab.\n")
     n = llm._estimate_file_tokens(f)  # must not raise
     assert isinstance(n, int) and n > 0
 
@@ -1073,7 +1075,7 @@ def test_pack_chunks_with_special_token_doc_does_not_crash(tmp_path):
     """End to end: packing a corpus that includes a special-token doc must not
     raise (the crash in #1685 happened during token-budget packing)."""
     from graphify.llm import _pack_chunks_by_tokens
-    doc = tmp_path / "doc.md"; doc.write_text("see <|endoftext|> and <|im_start|> tokens\n")
-    code = tmp_path / "code.py"; code.write_text("def f():\n    return 1\n")
+    doc = tmp_path / "doc.md"; _graph_write_text(doc, "see <|endoftext|> and <|im_start|> tokens\n")
+    code = tmp_path / "code.py"; _graph_write_text(code, "def f():\n    return 1\n")
     chunks = _pack_chunks_by_tokens([doc, code], token_budget=60_000)
     assert chunks  # produced at least one chunk, no exception

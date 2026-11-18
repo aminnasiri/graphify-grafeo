@@ -7,6 +7,7 @@ core runs a default extraction with zero reference reads, on-demand content
 lives only in the references, and no reference duplicates core content.
 """
 from __future__ import annotations
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text, write_text as _graph_write_text
 
 import sys
 from pathlib import Path
@@ -31,7 +32,7 @@ def test_audit_coverage_passes():
 
 def test_update_reference_does_not_dump_incremental_corpus():
     """--update must not print every corpus path into the agent context (#3944)."""
-    text = (gen.FRAGMENTS_DIR / "references" / "shared" / "update.md").read_text(encoding="utf-8")
+    text = _graph_read_text(gen.FRAGMENTS_DIR / "references" / "shared" / "update.md", encoding="utf-8")
     assert "print(json.dumps(result, indent=2, ensure_ascii=False))" not in text
     assert "new_by_type" in text
     assert "graphify-out/.graphify_incremental.json" in text
@@ -424,7 +425,7 @@ def test_windows_and_posix_cores_have_step_and_2490_parity():
     for heading in _STEP_HEADINGS:
         assert heading in claude_core, f"skill.md lost step heading: {heading!r}"
         assert heading in windows_core, f"skill-windows.md lost step heading: {heading!r}"
-    line_2490 = "to_json(G, communities, 'graphify-out/graph.json', community_labels=labels)"
+    line_2490 = "to_json(G, communities, 'graphify-out/graph.grafeo', community_labels=labels)"
     assert line_2490 in claude_core, "skill.md lost the #2490 Step-5 re-export"
     assert line_2490 in windows_core, "skill-windows.md lost the #2490 Step-5 re-export"
 
@@ -700,7 +701,7 @@ def test_generated_runbooks_pass_root_to_save_manifest():
     targets += sorted((REPO_ROOT / "graphify" / "skills").glob("*/references/update.md"))
     checked = 0
     for path in targets:
-        for ln in path.read_text(encoding="utf-8").splitlines():
+        for ln in _graph_read_text(path, encoding="utf-8").splitlines():
             if "save_manifest(" in ln and "import" not in ln:
                 checked += 1
                 assert "root=" in ln, (
@@ -787,7 +788,8 @@ def test_always_on_roundtrip_is_byte_faithful():
     baseline_agents = baseline_agents.replace(*gen._QUERY_FIRST_EDIT)
     old_rule, new_rule = gen._GRAPH_DIFF_EDIT
     replayed = baseline_agents.replace(old_instruction, new_instruction).replace(old_rule, new_rule)
-    assert replayed.replace(*gen._SECTION_EDIT) == rendered_agents
+    from tools.skillgen.storage_migration import migrate_storage_instructions
+    assert migrate_storage_instructions(replayed.replace(*gen._SECTION_EDIT)) == rendered_agents
     assert "`skill` tool" not in rendered_agents
     assert 'skill: "graphify"' not in rendered_agents
 
@@ -806,7 +808,7 @@ def test_extracted_constants_equal_the_packaged_always_on_files():
     }
     pkg = Path(mainmod.__file__).parent
     for const_name, basename in pairs.items():
-        on_disk = (pkg / "always_on" / f"{basename}.md").read_text(encoding="utf-8")
+        on_disk = _graph_read_text(pkg / "always_on" / f"{basename}.md", encoding="utf-8")
         assert getattr(mainmod, const_name) == on_disk, const_name
 
 
@@ -1187,18 +1189,16 @@ def _substituted(body: str, root: Path) -> str:
     blocks read for INPUT_PATH since #4762 (callers chdir to ``root`` so the
     relative ``graphify-out/.graphify_root`` resolves there)."""
     spec = root / "extraction-spec.md"
-    spec.write_text("extraction prompt fixture\n", encoding="utf-8")
+    _graph_write_text(spec, "extraction prompt fixture\n", encoding="utf-8")
     out = root / "graphify-out"
     out.mkdir(parents=True, exist_ok=True)
-    (out / ".graphify_root").write_text(str(root), encoding="utf-8")
+    _graph_write_text(out / ".graphify_root", str(root), encoding="utf-8")
     return body.replace("'SPEC_PATH'", repr(str(spec)))
 
 
 def _write_chunk(out_dir: Path, payload: dict) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / ".graphify_chunk_01.json").write_text(
-        __import__("json").dumps(payload), encoding="utf-8"
-    )
+    _graph_write_text(out_dir / ".graphify_chunk_01.json", __import__("json").dumps(payload), encoding="utf-8")
 
 
 def test_extraction_specs_demand_complete_reads_and_report_coverage():
@@ -1274,9 +1274,9 @@ def test_coverage_check_flags_a_partly_read_file_and_clears_a_complete_one(
     out = tmp_path / "graphify-out"
 
     doc = tmp_path / "big.md"
-    doc.write_text("\n".join(f"line {i}" for i in range(1, 51)), encoding="utf-8")
+    _graph_write_text(doc, "\n".join(f"line {i}" for i in range(1, 51)), encoding="utf-8")
     whole = tmp_path / "small.md"
-    whole.write_text("\n".join(f"line {i}" for i in range(1, 11)), encoding="utf-8")
+    _graph_write_text(whole, "\n".join(f"line {i}" for i in range(1, 11)), encoding="utf-8")
 
     # big.md was only read to line 10 of 50; small.md was read to its end.
     _write_chunk(out, {"coverage": {str(doc): 10, str(whole): 10}, "nodes": []})
@@ -1284,7 +1284,7 @@ def test_coverage_check_flags_a_partly_read_file_and_clears_a_complete_one(
     printed = capsys.readouterr().out
     assert "WARNING" in printed and "partly read" in printed, printed
     assert "read 10 of 50 lines" in printed, printed
-    flagged = (out / ".graphify_partial.txt").read_text(encoding="utf-8").splitlines()
+    flagged = _graph_read_text(out / ".graphify_partial.txt", encoding="utf-8").splitlines()
     assert flagged == [str(doc)], f"only the partly-read file may be flagged, got {flagged}"
 
     # Now report the full length for big.md: nothing is flagged and the warning clears.
@@ -1292,7 +1292,7 @@ def test_coverage_check_flags_a_partly_read_file_and_clears_a_complete_one(
     exec(compile(body, "step-b35", "exec"), {"__name__": "__main__"})
     printed = capsys.readouterr().out
     assert "Coverage OK" in printed, printed
-    assert (out / ".graphify_partial.txt").read_text(encoding="utf-8") == ""
+    assert _graph_read_text(out / ".graphify_partial.txt", encoding="utf-8") == ""
 
 
 def test_a_partly_read_file_is_cached_as_a_miss_so_the_next_update_retries_it(
@@ -1316,12 +1316,11 @@ def test_a_partly_read_file_is_cached_as_a_miss_so_the_next_update_retries_it(
     out.mkdir(parents=True, exist_ok=True)
 
     short, whole = tmp_path / "short.md", tmp_path / "whole.md"
-    short.write_text("a\n" * 50, encoding="utf-8")
-    whole.write_text("b\n" * 10, encoding="utf-8")
-    (out / ".graphify_uncached.txt").write_text(f"{short}\n{whole}\n", encoding="utf-8")
-    (out / ".graphify_partial.txt").write_text(f"{short}\n", encoding="utf-8")
-    (out / ".graphify_semantic_new.json").write_text(
-        _json.dumps({
+    _graph_write_text(short, "a\n" * 50, encoding="utf-8")
+    _graph_write_text(whole, "b\n" * 10, encoding="utf-8")
+    _graph_write_text(out / ".graphify_uncached.txt", f"{short}\n{whole}\n", encoding="utf-8")
+    _graph_write_text(out / ".graphify_partial.txt", f"{short}\n", encoding="utf-8")
+    _graph_write_text(out / ".graphify_semantic_new.json", _json.dumps({
             "nodes": [
                 {"id": "short_head", "label": "Head", "file_type": "document",
                  "source_file": str(short)},
@@ -1329,9 +1328,7 @@ def test_a_partly_read_file_is_cached_as_a_miss_so_the_next_update_retries_it(
                  "source_file": str(whole)},
             ],
             "edges": [], "hyperedges": [],
-        }),
-        encoding="utf-8",
-    )
+        }), encoding="utf-8")
 
     exec(compile(body, "step-b3-cache", "exec"), {"__name__": "__main__"})
     assert "1 left partial for retry" in capsys.readouterr().out, (
@@ -1358,7 +1355,7 @@ def test_step4_skill_honors_force_flag_on_shrink(tmp_path, capsys, monkeypatch):
     assert "force=IS_FORCE" in core
     assert "IS_FORCE" in core
 
-    body = _substituted(_step_body(core, "wrote = to_json(G, communities, 'graphify-out/graph.json', force=IS_FORCE)"), tmp_path)
+    body = _substituted(_step_body(core, "wrote = to_json(G, communities, 'graphify-out/graph.grafeo', force=IS_FORCE)"), tmp_path)
     out = tmp_path / "graphify-out"
     out.mkdir(parents=True, exist_ok=True)
 
@@ -1366,12 +1363,12 @@ def test_step4_skill_honors_force_flag_on_shrink(tmp_path, capsys, monkeypatch):
     big = _nx.Graph()
     for i in range(50):
         big.add_node(f"n{i}", label=f"n{i}", source_file=f"f{i}.py", file_type="code")
-    to_json(big, {0: list(big.nodes)}, str(out / "graph.json"))
+    to_json(big, {0: list(big.nodes)}, str(out / "graph.grafeo"))
 
     # Prepare extraction and detect fixtures with only 10 nodes (intentional shrink)
     small_nodes = [{"id": f"n{i}", "label": f"n{i}", "source_file": f"f{i}.py", "file_type": "code"} for i in range(10)]
-    (out / ".graphify_extract.json").write_text(_json.dumps({"nodes": small_nodes, "edges": [], "hyperedges": []}), encoding="utf-8")
-    (out / ".graphify_detect.json").write_text(_json.dumps({"files": {"code": [f"f{i}.py" for i in range(10)]}, "total_files": 10, "total_words": 100}), encoding="utf-8")
+    _graph_write_text(out / ".graphify_extract.json", _json.dumps({"nodes": small_nodes, "edges": [], "hyperedges": []}), encoding="utf-8")
+    _graph_write_text(out / ".graphify_detect.json", _json.dumps({"files": {"code": [f"f{i}.py" for i in range(10)]}, "total_files": 10, "total_words": 100}), encoding="utf-8")
 
     # 1. When IS_FORCE is False, Step 4 must refuse to shrink and raise SystemExit(1)
     body_no_force = body.replace("IS_DIRECTED", "False").replace("IS_FORCE", "False")
@@ -1385,16 +1382,16 @@ def test_step4_skill_honors_force_flag_on_shrink(tmp_path, capsys, monkeypatch):
     exec(compile(body_force, "step-4-force", "exec"), {"__name__": "__main__"})
     out_text = capsys.readouterr().out
     assert "Graph: 10 nodes" in out_text
-    assert (out / "GRAPH_REPORT.md").exists()
-    persisted = _json.loads((out / "graph.json").read_text(encoding="utf-8"))
+    assert _graph_exists(out / "GRAPH_REPORT.md")
+    persisted = _json.loads(_graph_read_text(out / "graph.grafeo", encoding="utf-8"))
     assert len(persisted["nodes"]) == 10
 
-    # 3. Subsequent Step 5 re-export succeeds because graph.json was updated
+    # 3. Subsequent Step 5 re-export succeeds because graph.grafeo was updated
     step5_body = _substituted(_step_body(core, "labels = LABELS_DICT"), tmp_path)
     step5_exec = step5_body.replace("IS_DIRECTED", "False").replace("LABELS_DICT", "{0: 'Test Community'}")
     exec(compile(step5_exec, "step-5-exec", "exec"), {"__name__": "__main__"})
     assert "Report updated with community labels" in capsys.readouterr().out
-    persisted5 = _json.loads((out / "graph.json").read_text(encoding="utf-8"))
+    persisted5 = _json.loads(_graph_read_text(out / "graph.grafeo", encoding="utf-8"))
     assert len(persisted5["nodes"]) == 10
     assert persisted5["nodes"][0]["community_name"] == "Test Community"
 
@@ -1421,16 +1418,14 @@ def _unreported_fixture(tmp_path: Path) -> dict:
         "empty": tmp_path / "empty.md",
         "pic": tmp_path / "pic.png",
     }
-    files["read"].write_text("r\n" * 10, encoding="utf-8")
-    files["never"].write_text("n\n" * 20, encoding="utf-8")
-    files["zero"].write_text("z\n" * 5, encoding="utf-8")
-    files["empty"].write_text("", encoding="utf-8")
+    _graph_write_text(files["read"], "r\n" * 10, encoding="utf-8")
+    _graph_write_text(files["never"], "n\n" * 20, encoding="utf-8")
+    _graph_write_text(files["zero"], "z\n" * 5, encoding="utf-8")
+    _graph_write_text(files["empty"], "", encoding="utf-8")
     files["pic"].write_bytes(b"\x89PNG")
     deleted = tmp_path / "deleted.md"  # dispatched, then deleted before Step B3 ran
     dispatched = [files[k] for k in ("read", "never", "zero", "empty", "pic")] + [deleted]
-    (out / ".graphify_uncached.txt").write_text(
-        "\n".join(str(p) for p in dispatched), encoding="utf-8"
-    )
+    _graph_write_text(out / ".graphify_uncached.txt", "\n".join(str(p) for p in dispatched), encoding="utf-8")
 
     def node(node_id, src):
         return {"id": node_id, "label": node_id, "file_type": "document", "source_file": str(src)}
@@ -1469,14 +1464,14 @@ def _unreported_fixture(tmp_path: Path) -> dict:
     })
     # Part A's AST output: never.md also guessed the code id src_lib_util, so read.md's
     # edge to that real AST node must survive even though never.md's copy is dropped.
-    (out / ".graphify_ast.json").write_text(_json.dumps({"nodes": [
+    _graph_write_text(out / ".graphify_ast.json", _json.dumps({"nodes": [
         {"id": "src_main_run", "label": "run", "file_type": "code", "source_file": "src/main.py"},
         {"id": "src_lib_util", "label": "util", "file_type": "code", "source_file": "src/lib.py"},
     ], "edges": []}), encoding="utf-8")
-    d = _json.loads((out / ".graphify_chunk_01.json").read_text(encoding="utf-8"))
+    d = _json.loads(_graph_read_text(out / ".graphify_chunk_01.json", encoding="utf-8"))
     d["nodes"].append(node("src_lib_util", n))
     d["edges"].append(edge("read_a", "src_lib_util", r))
-    (out / ".graphify_chunk_01.json").write_text(_json.dumps(d), encoding="utf-8")
+    _graph_write_text(out / ".graphify_chunk_01.json", _json.dumps(d), encoding="utf-8")
     files["chunk"] = out / ".graphify_chunk_01.json"
     files["out"] = out
     return files
@@ -1495,7 +1490,7 @@ def test_drop_unreported_chunk_sources_drops_by_source_file_and_returns_unread(t
     )
     assert dropped == 8, dropped  # 4 nodes, 2 edges, 2 hyperedges
 
-    d = _json.loads(f["chunk"].read_text(encoding="utf-8"))
+    d = _json.loads(_graph_read_text(f["chunk"], encoding="utf-8"))
     kept_nodes = sorted((n["id"], Path(n["source_file"]).name) for n in d["nodes"])
     assert kept_nodes == [("pic_p", "pic.png"), ("read_a", "read.md"), ("shared", "read.md")], kept_nodes
     assert sorted((e["source"], e["target"]) for e in d["edges"]) == [
@@ -1525,9 +1520,9 @@ def test_drop_unreported_chunk_sources_ignores_chunks_without_a_coverage_contrac
     from graphify.cache import drop_unreported_chunk_sources
 
     f = _unreported_fixture(tmp_path)
-    d = _json.loads(f["chunk"].read_text(encoding="utf-8"))
+    d = _json.loads(_graph_read_text(f["chunk"], encoding="utf-8"))
     del d["coverage"]
-    f["chunk"].write_text(_json.dumps(d), encoding="utf-8")
+    _graph_write_text(f["chunk"], _json.dumps(d), encoding="utf-8")
     before = f["chunk"].read_bytes()
     assert drop_unreported_chunk_sources(f["out"], tmp_path) == ([], 0)
     assert f["chunk"].read_bytes() == before
@@ -1541,11 +1536,11 @@ def test_drop_unreported_chunk_sources_leaves_a_chunk_without_coverage_unjudged(
 
     f = _unreported_fixture(tmp_path)
     other = tmp_path / "other.md"
-    other.write_text("o\n" * 8, encoding="utf-8")
+    _graph_write_text(other, "o\n" * 8, encoding="utf-8")
     with (f["out"] / ".graphify_uncached.txt").open("a", encoding="utf-8") as fh:
         fh.write(f"\n{other}")
     second = f["out"] / ".graphify_chunk_02.json"
-    second.write_text(_json.dumps({
+    _graph_write_text(second, _json.dumps({
         "nodes": [{"id": "other_x", "label": "x", "file_type": "document", "source_file": str(other)}],
         "edges": [], "hyperedges": [],
     }), encoding="utf-8")
@@ -1553,7 +1548,7 @@ def test_drop_unreported_chunk_sources_leaves_a_chunk_without_coverage_unjudged(
     unread, _ = drop_unreported_chunk_sources(f["out"], tmp_path)
     assert str(other) not in unread, unread
     assert unread == [str(f["never"]), str(f["zero"])], unread
-    assert [n["id"] for n in _json.loads(second.read_text(encoding="utf-8"))["nodes"]] == ["other_x"]
+    assert [n["id"] for n in _json.loads(_graph_read_text(second, encoding="utf-8"))["nodes"]] == ["other_x"]
 
 
 def test_coverage_step_flags_unreported_files_alongside_partly_read_ones(tmp_path, capsys, monkeypatch):
@@ -1564,15 +1559,15 @@ def test_coverage_step_flags_unreported_files_alongside_partly_read_ones(tmp_pat
     core, _ = _platform_artifacts("claude")
     body = _substituted(_step_body(core, "covered[src] = max("), tmp_path)
     f = _unreported_fixture(tmp_path)
-    d = _json.loads(f["chunk"].read_text(encoding="utf-8"))
+    d = _json.loads(_graph_read_text(f["chunk"], encoding="utf-8"))
     d["coverage"][str(f["read"])] = 4  # read.md was only partly read (4 of 10 lines)
-    f["chunk"].write_text(_json.dumps(d), encoding="utf-8")
+    _graph_write_text(f["chunk"], _json.dumps(d), encoding="utf-8")
 
     exec(compile(body, "step-b35", "exec"), {"__name__": "__main__"})
     printed = capsys.readouterr().out
     assert "2 file(s) reported no coverage" in printed, printed
     assert "read 4 of 10 lines" in printed, printed
-    flagged = (f["out"] / ".graphify_partial.txt").read_text(encoding="utf-8").splitlines()
+    flagged = _graph_read_text(f["out"] / ".graphify_partial.txt", encoding="utf-8").splitlines()
     # zero.md is both short (0 of 5) and unread: it must appear once.
     assert sorted(flagged) == sorted(str(f[k]) for k in ("read", "never", "zero")), flagged
     assert len(flagged) == len(set(flagged)), f"a file was flagged twice: {flagged}"

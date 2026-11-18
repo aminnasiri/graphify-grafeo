@@ -6,6 +6,8 @@ half of the cycle, so it is kept as a `reverse_import` stamp on the surviving
 edge and `find_import_cycles` reads it back.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import tempfile
@@ -23,7 +25,7 @@ def _extract(tmp_path, files: dict[str, str]):
     for name, body in files.items():
         p = tmp_path / name
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(body, encoding="utf-8")
+        _graph_write_text(p, body, encoding="utf-8")
     return extract([tmp_path / n for n in files], cache_root=Path(tempfile.mkdtemp()),
                    root=tmp_path, parallel=False)
 
@@ -123,9 +125,9 @@ def test_the_directed_build_is_unchanged():
 
 def test_the_cycle_survives_a_graph_json_round_trip(tmp_path):
     G = _build(tmp_path, _TS_CYCLE)
-    graph_path = tmp_path / "graph.json"
+    graph_path = tmp_path / "graph.grafeo"
     assert to_json(G, {}, str(graph_path), force=True)
-    data = json.loads(graph_path.read_text(encoding="utf-8"))
+    data = json.loads(_graph_read_text(graph_path, encoding="utf-8"))
     G2 = build_from_json({"nodes": data["nodes"], "edges": data["links"], "hyperedges": []},
                          directed=bool(data.get("directed")))
     assert _names(find_import_cycles(G2)) == [["a.ts", "b.ts"]]
@@ -137,7 +139,7 @@ def _rebuild_cycles(root, changed=None):
     from graphify.watch import _rebuild_code
 
     assert _rebuild_code(root, changed_paths=changed, acquire_lock=False, force=True)
-    data = json.loads((root / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+    data = json.loads(_graph_read_text(root / "graphify-out" / "graph.grafeo", encoding="utf-8"))
     G = build_from_json({"nodes": data["nodes"], "edges": data["links"], "hyperedges": []},
                         directed=bool(data.get("directed")))
     return _names(find_import_cycles(G))
@@ -147,17 +149,17 @@ def test_an_incremental_rebuild_drops_the_stamp_with_the_reverse_import(tmp_path
     """The stamp is b.py's import, stored on a.py's edge: when b.py stops
     importing a.py, re-extracting b.py alone must not leave a stale cycle."""
     for name, body in _PY_CYCLE.items():
-        (tmp_path / name).write_text(body, encoding="utf-8")
+        _graph_write_text(tmp_path / name, body, encoding="utf-8")
     assert _rebuild_cycles(tmp_path) == [["a.py", "b.py"]]
-    (tmp_path / "b.py").write_text("class B:\n    pass\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "b.py", "class B:\n    pass\n", encoding="utf-8")
     assert _rebuild_cycles(tmp_path, [tmp_path / "b.py"]) == []
 
 
 def test_an_incremental_rebuild_of_the_kept_edges_file_keeps_the_cycle(tmp_path):
     for name, body in _PY_CYCLE.items():
-        (tmp_path / name).write_text(body, encoding="utf-8")
+        _graph_write_text(tmp_path / name, body, encoding="utf-8")
     assert _rebuild_cycles(tmp_path) == [["a.py", "b.py"]]
-    (tmp_path / "a.py").write_text("# edited\n" + _PY_CYCLE["a.py"], encoding="utf-8")
+    _graph_write_text(tmp_path / "a.py", "# edited\n" + _PY_CYCLE["a.py"], encoding="utf-8")
     assert _rebuild_cycles(tmp_path, [tmp_path / "a.py"]) == [["a.py", "b.py"]]
-    (tmp_path / "a.py").write_text("class A:\n    pass\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "a.py", "class A:\n    pass\n", encoding="utf-8")
     assert _rebuild_cycles(tmp_path, [tmp_path / "a.py"]) == []

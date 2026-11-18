@@ -66,7 +66,7 @@ graphify install               # detects your assistant and registers the skill
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 持久化的图谱包含 `graph.schema_version`，让集成方可以检测不兼容的格式变更，另外还有 `graph.graphify_version`，用来标识生成它的 Graphify 版本。
@@ -115,7 +115,7 @@ Shortest path (3 hops):
 | **God nodes** | 连接数最多的概念，让你看出一切都流经哪里 |
 | **Communities** | 将图谱拆分为子系统（Leiden），并附上不需 LLM 的标签 |
 | **Cross-file links** | `calls` / `imports` / `inherits` / `mixes_in` 通过 tree-sitter AST 在 ~40 languages 间解析 |
-| **Query, path, explain** | 问一个问题、追踪两个事物之间的路径，或解释某一个概念，全都针对 `graph.json` 进行 |
+| **Query, path, explain** | 问一个问题、追踪两个事物之间的路径，或解释某一个概念，全都针对 `graph.grafeo` 进行 |
 | **Rationale + doc refs** | `# NOTE:` / `# WHY:` 注释以及 ADR/RFC 引用会成为一等节点，并链接到代码 |
 | **Beyond code** | 文档、PDF、图片以及视频/音频都会映射进同一张图谱 |
 | **Local-first** | 代码在本地以 tree-sitter 解析（不使用 LLM，没有任何东西离开你的机器）；只有针对文档/媒体的语义处理会调用后端，而且仅在你有配置时 |
@@ -394,7 +394,7 @@ viz_node_limit=0
 
 ## 直接使用图谱
 
-除了你的 AI 助手之外，你也可以用 `graphify query`、`graphify path` 与 `graphify explain` 直接从 CLI 查询 `graph.json`。一个符合多个节点的名称会被拒绝，并列出候选项而非擅自猜测。脚本可以从退出码读取结果：`0` 代表有答案，`3` 代表名称有歧义，`4` 代表没有符合的节点。请见 **[Ask better graph questions](https://docs.graphify.com/guides/querying)** 与 **[query reference](https://docs.graphify.com/reference/query)**。
+除了你的 AI 助手之外，你也可以用 `graphify query`、`graphify path` 与 `graphify explain` 直接从 CLI 查询 `graph.grafeo`。一个符合多个节点的名称会被拒绝，并列出候选项而非擅自猜测。脚本可以从退出码读取结果：`0` 代表有答案，`3` 代表名称有歧义，`4` 代表没有符合的节点。请见 **[Ask better graph questions](https://docs.graphify.com/guides/querying)** 与 **[query reference](https://docs.graphify.com/reference/query)**。
 
 ---
 

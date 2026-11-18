@@ -66,7 +66,7 @@ Das war's. Sie erhalten **drei Dateien**:
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 Der persistierte Graph enthält `graph.schema_version`, damit Integrationen
@@ -117,7 +117,7 @@ Was Sie out of the box bekommen:
 | **God-Nodes** | Die am stärksten verbundenen Konzepte, damit Sie sehen, wodurch alles fließt |
 | **Communities** | Der Graph aufgeteilt in Subsysteme (Leiden), mit LLM-freien Labels |
 | **Dateiübergreifende Verknüpfungen** | `calls` / `imports` / `inherits` / `mixes_in` aufgelöst über ~40 Sprachen via tree-sitter AST |
-| **Query, path, explain** | Stellen Sie eine Frage, verfolgen Sie den Pfad zwischen zwei Dingen oder lassen Sie ein Konzept erklären, alles gegen `graph.json` |
+| **Query, path, explain** | Stellen Sie eine Frage, verfolgen Sie den Pfad zwischen zwei Dingen oder lassen Sie ein Konzept erklären, alles gegen `graph.grafeo` |
 | **Begründung + Dok-Referenzen** | `# NOTE:` / `# WHY:` Kommentare und ADR/RFC-Zitate werden zu erstklassigen Knoten, die mit dem Code verknüpft sind |
 | **Über Code hinaus** | Dokumente, PDFs, Bilder und Video/Audio bilden sich alle in denselben Graphen ab |
 | **Local-first** | Code wird lokal mit tree-sitter geparst (kein LLM, nichts verlässt Ihren Rechner); nur der semantische Durchlauf über Dokumente/Medien ruft ein Backend auf, und auch nur, wenn Sie eines konfigurieren |
@@ -402,7 +402,7 @@ Committen oder teilen Sie den Graphen, damit Ihr ganzes Team denselben Kontext a
 
 ## Den Graphen direkt nutzen
 
-Über Ihren KI-Assistenten hinaus können Sie `graph.json` direkt von der CLI aus mit `graphify query`, `graphify path` und `graphify explain` abfragen. Ein Name, der auf mehrere Knoten passt, wird mit aufgelisteten Kandidaten abgelehnt, statt geraten. Skripte können das Ergebnis aus dem Exit-Code lesen: `0` eine Antwort, `3` ein mehrdeutiger Name, `4` kein passender Knoten. Siehe **[Bessere Graphenfragen stellen](https://docs.graphify.com/guides/querying)** und die **[Query-Referenz](https://docs.graphify.com/reference/query)**.
+Über Ihren KI-Assistenten hinaus können Sie `graph.grafeo` direkt von der CLI aus mit `graphify query`, `graphify path` und `graphify explain` abfragen. Ein Name, der auf mehrere Knoten passt, wird mit aufgelisteten Kandidaten abgelehnt, statt geraten. Skripte können das Ergebnis aus dem Exit-Code lesen: `0` eine Antwort, `3` ein mehrdeutiger Name, `4` kein passender Knoten. Siehe **[Bessere Graphenfragen stellen](https://docs.graphify.com/guides/querying)** und die **[Query-Referenz](https://docs.graphify.com/reference/query)**.
 
 ---
 

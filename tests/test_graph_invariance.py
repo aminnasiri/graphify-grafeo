@@ -1,4 +1,4 @@
-"""The same source tree must give the same graph.json, however it is built.
+"""The same source tree must give the same graph.grafeo, however it is built.
 
 Each test builds the whole ``tests/fixtures`` corpus (every language graphify
 ships an extractor for) two ways that must not matter, through the real CLI,
@@ -15,6 +15,8 @@ extractor at once, so a new extractor or a change to the write paths cannot
 silently break them.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import is_file as _graph_is_file, read_text as _graph_read_text
 
 import json
 import os
@@ -36,9 +38,9 @@ def _copy(src: Path, dst: Path, *, crlf: bool = False) -> Path:
     shutil.copytree(src, dst, ignore=shutil.ignore_patterns("graphify-out"))
     if crlf:
         for path in dst.rglob("*"):
-            if not path.is_file():
+            if not _graph_is_file(path):
                 continue
-            data = path.read_bytes()
+            data = _graph_read_bytes(path)
             if b"\0" in data:
                 continue
             try:
@@ -50,14 +52,14 @@ def _copy(src: Path, dst: Path, *, crlf: bool = False) -> Path:
 
 
 def _build(root: Path, *, cluster: bool) -> dict:
-    """Build ``root`` with the CLI and return graph.json, parsed, plus its raw text under ``"__text__"``."""
+    """Build ``root`` with the CLI and return graph.grafeo, parsed, plus its raw text under ``"__text__"``."""
     args = [sys.executable, "-m", "graphify", "update", str(root), "--force"]
     if not cluster:
         args.append("--no-cluster")
     env = dict(os.environ, PYTHONHASHSEED="0", PYTHONIOENCODING="utf-8")
     result = subprocess.run(args, cwd=root, env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr[-2000:]
-    text = (root / "graphify-out" / "graph.json").read_text(encoding="utf-8")
+    text = _graph_read_text(root / "graphify-out" / "graph.grafeo", encoding="utf-8")
     graph = json.loads(text)
     graph["__text__"] = text
     return graph
@@ -76,7 +78,7 @@ def _canonical(graph: dict) -> tuple[Counter, Counter]:
 def _assert_same(a: dict, b: dict, what: str) -> None:
     keys_a = set(a) - {"__text__", "built_at_commit"}
     keys_b = set(b) - {"__text__", "built_at_commit"}
-    assert keys_a == keys_b, f"{what} changed graph.json's top-level keys: {sorted(keys_a ^ keys_b)}"
+    assert keys_a == keys_b, f"{what} changed graph.grafeo's top-level keys: {sorted(keys_a ^ keys_b)}"
     nodes_a, edges_a = _canonical(a)
     nodes_b, edges_b = _canonical(b)
     only = {
@@ -85,7 +87,7 @@ def _assert_same(a: dict, b: dict, what: str) -> None:
         "edges only in the first": list((edges_a - edges_b).elements())[:5],
         "edges only in the second": list((edges_b - edges_a).elements())[:5],
     }
-    assert not any(only.values()), f"{what} changed graph.json: " + json.dumps(only, indent=1)[:4000]
+    assert not any(only.values()), f"{what} changed graph.grafeo: " + json.dumps(only, indent=1)[:4000]
 
 
 @pytest.fixture(scope="module", params=[False, True], ids=["no_cluster", "clustered"])
@@ -119,7 +121,7 @@ def test_graph_never_contains_the_checkout_path(builds):
     for graph in (builds["cold"], builds["rebuilt"], builds["other_folder"]):
         lowered = graph["__text__"].lower()
         assert "alice_home" not in lowered and "bob_elsewhere" not in lowered, (
-            "graph.json embeds the checkout path: "
+            "graph.grafeo embeds the checkout path: "
             + str([
                 item.get("id") or (item.get("source"), item.get("target"))
                 for item in graph["nodes"] + _links(graph)

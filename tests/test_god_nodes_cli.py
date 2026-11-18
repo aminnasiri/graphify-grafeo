@@ -6,6 +6,8 @@ but was never wired as a CLI subcommand, so `graphify god_nodes` errored with
 and that file nodes are excluded from the ranking.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import json
 
@@ -25,8 +27,8 @@ def _write_graph(tmp_path):
         g.add_node(f"caller{i}", label=f"c{i}()", file_type="code", source_file=f"m{i}.py", source_location="L1")
         g.add_edge(f"caller{i}", "hub", relation="calls", confidence="EXTRACTED")
     g.add_edge("f", "hub", relation="contains", confidence="EXTRACTED")
-    gp = tmp_path / "graph.json"
-    gp.write_text(json.dumps(json_graph.node_link_data(g, edges="links")), encoding="utf-8")
+    gp = tmp_path / "graph.grafeo"
+    _graph_write_text(gp, json.dumps(json_graph.node_link_data(g, edges="links")), encoding="utf-8")
     return gp
 
 

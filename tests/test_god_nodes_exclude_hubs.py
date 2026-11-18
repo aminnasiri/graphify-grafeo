@@ -7,6 +7,7 @@ top regardless of the setting. The same threshold computation cluster()
 uses now applies to the ranking, and the CLI/MCP surfaces expose it.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
 
 import inspect
 import json
@@ -82,7 +83,7 @@ def test_the_cli_command_takes_the_flag(tmp_path, monkeypatch, capsys):
     import graphify.__main__ as mainmod
     from graphify.export import to_json
     G = _graph()
-    gp = tmp_path / "graph.json"
+    gp = tmp_path / "graph.grafeo"
     to_json(G, {0: list(G.nodes)}, str(gp))
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda *_a, **_k: None)
 

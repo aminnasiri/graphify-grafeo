@@ -7,6 +7,8 @@ corpus shared no edge at all. Mentions now ride the ``raw_calls`` channel
 resolver matches them against the merged corpus after the id-remap passes.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import os
@@ -81,7 +83,7 @@ def _extract(tmp_path, files: dict[str, str]):
     for name, body in files.items():
         p = tmp_path / name
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(body)
+        _graph_write_text(p, body)
     old = os.getcwd()
     try:
         os.chdir(tmp_path)
@@ -163,7 +165,7 @@ def test_cited_file_matching():
 def test_extract_markdown_reports_mentions_as_markdown_raw_calls(tmp_path):
     doc = tmp_path / "docs" / "guide.md"
     doc.parent.mkdir()
-    doc.write_text(_GUIDE_MD)
+    _graph_write_text(doc, _GUIDE_MD)
 
     r = extract_markdown(doc)
 
@@ -192,7 +194,7 @@ def test_extract_markdown_reports_mentions_as_markdown_raw_calls(tmp_path):
 
 def test_extract_markdown_heading_code_span_belongs_to_that_heading(tmp_path):
     doc = tmp_path / "api.md"
-    doc.write_text("# API\n\n## `Widget`\n\nText.\n")
+    _graph_write_text(doc, "# API\n\n## `Widget`\n\nText.\n")
 
     r = extract_markdown(doc)
 
@@ -312,13 +314,13 @@ def test_mentions_survive_a_rebuild_over_an_existing_graph(tmp_path):
 
     corpus = tmp_path / "corpus"
     corpus.mkdir()
-    (corpus / "widget.py").write_text(_WIDGET_PY)
+    _graph_write_text(corpus / "widget.py", _WIDGET_PY)
     doc = corpus / "doc.md"
-    doc.write_text("# Doc\n\n## Usage\n\nBuild a `Widget`.\n")
-    graph_path = corpus / "graphify-out" / "graph.json"
+    _graph_write_text(doc, "# Doc\n\n## Usage\n\nBuild a `Widget`.\n")
+    graph_path = corpus / "graphify-out" / "graph.grafeo"
 
     def mention_edges():
-        links = json.loads(graph_path.read_text(encoding="utf-8"))["links"]
+        links = json.loads(_graph_read_text(graph_path, encoding="utf-8"))["links"]
         return {(e["source"], e["target"]) for e in links
                 if e.get("relation") == "references" and e.get("confidence_score")}
 
@@ -329,12 +331,12 @@ def test_mentions_survive_a_rebuild_over_an_existing_graph(tmp_path):
     assert _rebuild_code(corpus, no_cluster=True, acquire_lock=False) is True
     assert mention_edges() == expected, "no-change rebuild"
 
-    doc.write_text(doc.read_text() + "\nStill a `Widget`.\n")
+    _graph_write_text(doc, doc.read_text() + "\nStill a `Widget`.\n")
     assert _rebuild_code(corpus, changed_paths=[doc], no_cluster=True,
                          acquire_lock=False) is True
     assert mention_edges() == expected, "document re-extracted"
 
-    (corpus / "widget.py").write_text(_WIDGET_PY + "\n\ndef extra():\n    pass\n")
+    _graph_write_text(corpus / "widget.py", _WIDGET_PY + "\n\ndef extra():\n    pass\n")
     assert _rebuild_code(corpus, changed_paths=[corpus / "widget.py"], no_cluster=True,
                          acquire_lock=False) is True
     assert mention_edges() == expected, "code re-extracted"
@@ -681,7 +683,7 @@ def test_extract_markdown_records_a_source_file_link_as_a_citation(tmp_path):
     corpus-aware resolver can decide edge vs evidence-only (#4804)."""
     doc = tmp_path / "docs" / "guide.md"
     doc.parent.mkdir()
-    doc.write_text("# Guide\n\nSee [charts](../web/charts.js) and `token`.\n")
+    _graph_write_text(doc, "# Guide\n\nSee [charts](../web/charts.js) and `token`.\n")
 
     r = extract_markdown(doc)
 
@@ -699,7 +701,7 @@ def test_link_to_unscanned_source_file_yields_no_edge_or_phantom(tmp_path):
     """A link to a source file outside the corpus is evidence only, never a dangling edge."""
     outside = tmp_path / "outside" / "script.py"
     outside.parent.mkdir()
-    outside.write_text("def run():\n    pass\n")
+    _graph_write_text(outside, "def run():\n    pass\n")
     r = _extract(tmp_path, {"docs/guide.md": "# Guide\n\nSee [script](../outside/script.py).\n"})
 
     assert r["edges"] == [e for e in r["edges"] if e["relation"] == "contains"]
@@ -751,10 +753,9 @@ def test_file_citation_evidence_survives_a_rebuild(tmp_path):
     corpus = tmp_path / "corpus"
     (corpus / "docs").mkdir(parents=True)
     (corpus / "web").mkdir()
-    (corpus / "web" / "charts.js").write_text(
-        "export function token(name) { return name; }\n")
+    _graph_write_text(corpus / "web" / "charts.js", "export function token(name) { return name; }\n")
     doc = corpus / "docs" / "guide.md"
-    doc.write_text("# Guide\n\nSee [charts](../web/charts.js). Sends `token`.\n")
+    _graph_write_text(doc, "# Guide\n\nSee [charts](../web/charts.js). Sends `token`.\n")
     result_file = tmp_path / "result.json"
 
     script = '''
@@ -766,10 +767,10 @@ def test_file_citation_evidence_survives_a_rebuild(tmp_path):
         result_file = Path(sys.argv[2])
         doc = corpus / "docs" / "guide.md"
         charts = corpus / "web" / "charts.js"
-        graph_path = corpus / "graphify-out" / "graph.json"
+        graph_path = corpus / "graphify-out" / "graph.grafeo"
 
         def reference_edges():
-            links = json.loads(graph_path.read_text(encoding="utf-8"))["links"]
+            links = __import__("graphify.paths", fromlist=["read_graph_json"]).read_graph_json(graph_path)["links"]
             return sorted((e["source"], e["target"]) for e in links
                           if e.get("relation") == "references")
 
@@ -795,7 +796,7 @@ def test_file_citation_evidence_survives_a_rebuild(tmp_path):
     completed = _run_isolated(script, str(corpus), str(result_file))
     assert completed.returncode == 0, completed.stderr[-2000:]
 
-    payload = json.loads(result_file.read_text(encoding="utf-8"))
+    payload = json.loads(_graph_read_text(result_file, encoding="utf-8"))
     expected = payload["first"]
     # Two edges: the doc->file link reference and the licensed mention edge.
     assert len(expected) == 2

@@ -1,5 +1,7 @@
 """A failed producer cannot authorize replacement of its last good graph data."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 from copy import deepcopy
 import json
@@ -16,7 +18,7 @@ from graphify.build import build_merge, merge_raw_extraction
 def test_failed_sources_are_not_successful_extraction_provenance(tmp_path, monkeypatch, empty):
     paths = [tmp_path / name for name in ("bad.py", "good.py", "skipped.py")]
     for path in paths:
-        path.write_text("def helper(): return 1\n", encoding="utf-8")
+        _graph_write_text(path, "def helper(): return 1\n", encoding="utf-8")
     original = extractmod._DISPATCH[".py"]
 
     def extractor(path):
@@ -45,7 +47,7 @@ def _node(nid, source):
 
 def test_error_payload_does_not_publish_partial_ast_records(tmp_path, monkeypatch):
     path = tmp_path / "bad.py"
-    path.write_text("def helper(): return 1\n")
+    _graph_write_text(path, "def helper(): return 1\n")
     monkeypatch.setenv("GRAPHIFY_MAX_WORKERS", "1")
     monkeypatch.setitem(extractmod._DISPATCH, ".py", lambda p: {
         "nodes": [_node("partial", str(p))], "edges": [], "error": "failed after one node",
@@ -59,7 +61,7 @@ def test_error_payload_does_not_publish_partial_ast_records(tmp_path, monkeypatc
 @pytest.mark.parametrize("raw", [False, True])
 @pytest.mark.parametrize("explicit", [False, True])
 def test_merge_preserves_failed_source_even_with_explicit_provenance(tmp_path, raw, explicit):
-    graph_path = tmp_path / "graph.json"
+    graph_path = tmp_path / "graph.grafeo"
     old = {"nodes": [_node("a", "bad.py"), _node("child", "bad.py"),
                      _node("b", "good.py"), _node("old", "good.py")],
            "edges": [{"source": "a", "target": "child", "relation": "calls",
@@ -67,7 +69,7 @@ def test_merge_preserves_failed_source_even_with_explicit_provenance(tmp_path, r
            "hyperedges": [{"id": "group", "nodes": ["a", "child", "b"],
                            "label": "Group", "source_file": "bad.py",
                            "confidence": "INFERRED"}]}
-    graph_path.write_text(json.dumps(old), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(old), encoding="utf-8")
     dispatched = [str(tmp_path / "bad.py"), str(tmp_path / "good.py")]
     fresh = {"nodes": [_node(nid, "good.py") for nid in ("b", "new1", "new2", "new3")],
              "edges": [], "extracted_sources": dispatched, "failed_sources": ["bad.py"]}
@@ -91,8 +93,8 @@ def test_merge_preserves_failed_source_even_with_explicit_provenance(tmp_path, r
 
 @pytest.mark.parametrize("raw", [False, True])
 def test_deliberately_skipped_source_still_replaces_old_nodes(tmp_path, raw):
-    graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps({"nodes": [_node("a", "bad.py")], "edges": []}))
+    graph_path = tmp_path / "graph.grafeo"
+    _graph_write_text(graph_path, json.dumps({"nodes": [_node("a", "bad.py")], "edges": []}))
     fresh = {"nodes": [], "edges": [], "extracted_sources": [str(tmp_path / "bad.py")],
              "skipped_sources": [str(tmp_path / "bad.py")], "failed_sources": []}
     if raw:
@@ -112,8 +114,8 @@ def test_cli_retains_failed_records_updates_healthy_source_and_retries(
     root.mkdir()
     bad = root / "bad.py"
     good = root / "good.py"
-    bad.write_text("def helper(): return leaf()\n\ndef leaf(): return 1\n")
-    good.write_text("def old(): return 1\n")
+    _graph_write_text(bad, "def helper(): return leaf()\n\ndef leaf(): return 1\n")
+    _graph_write_text(good, "def old(): return 1\n")
     monkeypatch.setenv("GRAPHIFY_MAX_WORKERS", "1")
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda _: None)
     argv = ["graphify", "extract", str(root), "--code-only"]
@@ -129,14 +131,14 @@ def test_cli_retains_failed_records_updates_healthy_source_and_retries(
         except SystemExit as exc:
             assert exc.code in (None, 0)
 
-    graph_path = root / "graphify-out/graph.json"
+    graph_path = root / "graphify-out/graph.grafeo"
     run()
-    before = json.loads(graph_path.read_text())
+    before = json.loads(_graph_read_text(graph_path))
     old_bad = {n["id"]: n for n in before["nodes"] if n.get("source_file") == "bad.py"}
     assert len(old_bad) == 3
     capsys.readouterr()
-    bad.write_text("def helper(): return 2\n\ndef added(): return 3\n")
-    good.write_text("\n".join(f"def new{i}(): return {i}\n" for i in range(4)))
+    _graph_write_text(bad, "def helper(): return 2\n\ndef added(): return 3\n")
+    _graph_write_text(good, "\n".join(f"def new{i}(): return {i}\n" for i in range(4)))
     original = extractmod._DISPATCH[".py"]
     state = {"fail": True}
 
@@ -148,7 +150,7 @@ def test_cli_retains_failed_records_updates_healthy_source_and_retries(
     monkeypatch.setitem(extractmod._DISPATCH, ".py", extractor)
     run()
     output = capsys.readouterr()
-    after = json.loads(graph_path.read_text())
+    after = json.loads(_graph_read_text(graph_path))
     by_id = {n["id"]: n for n in after["nodes"]}
     for nid, node in old_bad.items():
         assert nid in by_id
@@ -159,16 +161,16 @@ def test_cli_retains_failed_records_updates_healthy_source_and_retries(
     edges = after.get("edges", after.get("links", []))
     assert any(e.get("source_file") == "bad.py" and e.get("relation") == "calls" for e in edges)
     assert "incomplete" in (output.out + output.err).lower()
-    manifest = json.loads((root / "graphify-out/manifest.json").read_text())
+    manifest = json.loads(_graph_read_text(root / "graphify-out/manifest.json"))
     assert not manifest["bad.py"]["ast_hash"]
     assert manifest["good.py"]["ast_hash"]
 
     state["fail"] = False
     run()
-    recovered = json.loads(graph_path.read_text())
+    recovered = json.loads(_graph_read_text(graph_path))
     labels = {n["label"] for n in recovered["nodes"] if n.get("source_file") == "bad.py"}
     assert "added()" in labels and "leaf()" not in labels
-    manifest = json.loads((root / "graphify-out/manifest.json").read_text())
+    manifest = json.loads(_graph_read_text(root / "graphify-out/manifest.json"))
     assert manifest["bad.py"]["ast_hash"]
 
 
@@ -186,12 +188,10 @@ def test_never_succeeded_failed_source_does_not_arm_the_shrink_guard(
     good = root / "good.py"
     other = root / "other.py"
     broken = root / "broken.py"
-    good.write_text("def alpha(): return beta()\n\ndef beta(): return 1\n")
-    other.write_text(
-        "class Gamma:\n    def one(self): return 1\n    def two(self): return 2\n\n"
-        "def delta(): return Gamma().one()\n"
-    )
-    broken.write_text("def never_parses(): return 1\n")
+    _graph_write_text(good, "def alpha(): return beta()\n\ndef beta(): return 1\n")
+    _graph_write_text(other, "class Gamma:\n    def one(self): return 1\n    def two(self): return 2\n\n"
+        "def delta(): return Gamma().one()\n")
+    _graph_write_text(broken, "def never_parses(): return 1\n")
 
     monkeypatch.setenv("GRAPHIFY_MAX_WORKERS", "1")
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda _: None)
@@ -216,18 +216,18 @@ def test_never_succeeded_failed_source_does_not_arm_the_shrink_guard(
             return exc.code
         return 0
 
-    graph_path = root / "graphify-out/graph.json"
+    graph_path = root / "graphify-out/graph.grafeo"
     assert run() == 0
-    before = json.loads(graph_path.read_text())
+    before = json.loads(_graph_read_text(graph_path))
     assert len(before["nodes"]) > 0
     assert not any(n.get("source_file") == "broken.py" for n in before["nodes"])
     capsys.readouterr()
 
-    other.unlink()
+    _graph_unlink(other)
     assert run() == 0
     output = capsys.readouterr()
     assert "AST extraction incomplete" in output.err
-    after = json.loads(graph_path.read_text())
+    after = json.loads(_graph_read_text(graph_path))
     assert not any(n.get("source_file") == "other.py" for n in after["nodes"])
     assert len(after["nodes"]) < len(before["nodes"])
 
@@ -241,8 +241,8 @@ def test_a_failed_source_with_saved_records_still_arms_the_shrink_guard(tmp_path
     root.mkdir()
     good = root / "good.py"
     regressed = root / "regressed.py"
-    good.write_text("def alpha(): return beta()\n\ndef beta(): return 1\n")
-    regressed.write_text("def one(): return 1\n\ndef two(): return 2\n")
+    _graph_write_text(good, "def alpha(): return beta()\n\ndef beta(): return 1\n")
+    _graph_write_text(regressed, "def one(): return 1\n\ndef two(): return 2\n")
 
     monkeypatch.setenv("GRAPHIFY_MAX_WORKERS", "1")
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda _: None)
@@ -256,9 +256,9 @@ def test_a_failed_source_with_saved_records_still_arms_the_shrink_guard(tmp_path
             return exc.code
         return 0
 
-    graph_path = root / "graphify-out/graph.json"
+    graph_path = root / "graphify-out/graph.grafeo"
     assert run() == 0
-    before = json.loads(graph_path.read_text())
+    before = json.loads(_graph_read_text(graph_path))
     assert any(n.get("source_file") == "regressed.py" for n in before["nodes"])
 
     original = extractmod._DISPATCH[".py"]
@@ -269,8 +269,8 @@ def test_a_failed_source_with_saved_records_still_arms_the_shrink_guard(tmp_path
         return original(path)
 
     monkeypatch.setitem(extractmod._DISPATCH, ".py", extractor)
-    good.write_text("def alpha(): return 1\n")  # shrink: beta() is gone too
-    regressed.write_text("def one(): return 1\n\ndef two(): return 3\n")  # touched, so it re-dispatches
+    _graph_write_text(good, "def alpha(): return 1\n")  # shrink: beta() is gone too
+    _graph_write_text(regressed, "def one(): return 1\n\ndef two(): return 3\n")  # touched, so it re-dispatches
     assert run() == 1
-    after = json.loads(graph_path.read_text())
+    after = json.loads(_graph_read_text(graph_path))
     assert after == before

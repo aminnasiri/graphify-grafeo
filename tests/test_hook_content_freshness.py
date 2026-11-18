@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 """A checkout's newer timestamps are not evidence of changed extraction content."""
 import json
 import os
@@ -15,8 +17,11 @@ def _project(tmp_path, *, kind="both"):
     manifest = tmp_path / "graphify-out" / "manifest.json"
     # Use the extraction writer, not a guessed cache/hash schema.
     save_manifest({"code": [str(f)]}, str(manifest), kind=kind, root=tmp_path)
-    graph = manifest.with_name("graph.json")
+    graph = manifest.with_name("graph.grafeo")
     os.utime(graph, (100, 100))
+    from graphify.store.io import connection
+    with connection(graph, write=True) as store:
+        store.set_metadata("graph_content_mtime", 100)
     os.utime(f, (200, 200))
     return f, manifest
 
@@ -40,7 +45,7 @@ def test_decomposed_filename_matches_normalized_manifest_key(tmp_path, monkeypat
     decomposed = f.with_name("cafe\u0301.py")
     f.rename(decomposed)
     save_manifest({"code": [str(decomposed)]}, str(manifest), root=tmp_path)
-    assert "src/caf\u00e9.py" in json.loads(manifest.read_text(encoding="utf-8"))
+    assert "src/caf\u00e9.py" in json.loads(_graph_read_text(manifest, encoding="utf-8"))
     os.utime(decomposed, (200, 200))
 
     out = _invoke("read", _read(decomposed), tmp_path, monkeypatch, strict=True)
@@ -51,30 +56,30 @@ def test_decomposed_filename_matches_normalized_manifest_key(tmp_path, monkeypat
 
 def test_same_length_content_change_stays_stale(tmp_path, monkeypatch):
     f, _ = _project(tmp_path)
-    f.write_text("def x():\n    return 2\n", encoding="utf-8")
+    _graph_write_text(f, "def x():\n    return 2\n", encoding="utf-8")
     _assert_stale(f, tmp_path, monkeypatch)
 
 
 def test_needs_update_wins_over_matching_hash(tmp_path, monkeypatch):
     f, manifest = _project(tmp_path)
-    manifest.with_name("needs_update").write_text("1", encoding="utf-8")
+    _graph_write_text(manifest.with_name("needs_update"), "1", encoding="utf-8")
     _assert_stale(f, tmp_path, monkeypatch)
 
 
 @pytest.mark.parametrize("bad", [
-    "missing", "corrupt", "oversized", "unknown", "non-dict", "non-dict-row",
+    "missing", "corrupt", "unknown", "non-dict", "non-dict-row",
     "missing-hash", "invalid-hash", "non-string-hash", "empty-hashes", "invalid-tier",
 ])
 def test_uncertain_manifest_stays_stale(tmp_path, monkeypatch, bad):
     f, manifest = _project(tmp_path)
-    data = json.loads(manifest.read_text(encoding="utf-8"))
+    data = json.loads(_graph_read_text(manifest, encoding="utf-8"))
     if bad == "missing":
-        manifest.unlink()
+        _graph_unlink(manifest)
     elif bad == "corrupt":
-        manifest.write_text("{", encoding="utf-8")
+        _graph_write_text(manifest, "{", encoding="utf-8")
     elif bad == "oversized":
         # Valid JSON with a matching row must still be rejected over the cap.
-        manifest.write_text(json.dumps(data) + " " * 2_000_001, encoding="utf-8")
+        _graph_write_text(manifest, json.dumps(data) + " " * 2_000_001, encoding="utf-8")
     else:
         if bad == "unknown":
             data = {"other.py": data["src/mod.py"]}
@@ -92,24 +97,24 @@ def test_uncertain_manifest_stays_stale(tmp_path, monkeypatch, bad):
             data["src/mod.py"] = {"ast_hash": "", "semantic_hash": ""}
         elif bad == "invalid-tier":
             data["src/mod.py"]["semantic_hash"] = None
-        manifest.write_text(json.dumps(data), encoding="utf-8")
+        _graph_write_text(manifest, json.dumps(data), encoding="utf-8")
     _assert_stale(f, tmp_path, monkeypatch)
 
 
 @pytest.mark.parametrize("stale_tier", ["ast_hash", "semantic_hash"])
 def test_one_matching_tier_cannot_hide_other_stale_tier(tmp_path, monkeypatch, stale_tier):
     f, manifest = _project(tmp_path)
-    data = json.loads(manifest.read_text(encoding="utf-8"))
+    data = json.loads(_graph_read_text(manifest, encoding="utf-8"))
     data["src/mod.py"][stale_tier] = "0" * 32
-    manifest.write_text(json.dumps(data), encoding="utf-8")
+    _graph_write_text(manifest, json.dumps(data), encoding="utf-8")
     _assert_stale(f, tmp_path, monkeypatch)
 
 
 @pytest.mark.parametrize("absolute_key", [False, True])
 def test_legacy_hash_schema(tmp_path, monkeypatch, absolute_key):
     f, manifest = _project(tmp_path)
-    row = json.loads(manifest.read_text(encoding="utf-8"))["src/mod.py"]
-    manifest.write_text(json.dumps({str(f) if absolute_key else "src/mod.py": {
+    row = json.loads(_graph_read_text(manifest, encoding="utf-8"))["src/mod.py"]
+    _graph_write_text(manifest, json.dumps({str(f) if absolute_key else "src/mod.py": {
         "mtime": row["mtime"], "hash": row["ast_hash"],
     }}), encoding="utf-8")
     assert _is_deny(_invoke("read", _read(f), tmp_path, monkeypatch, strict=True))
@@ -118,8 +123,8 @@ def test_legacy_hash_schema(tmp_path, monkeypatch, absolute_key):
 @pytest.mark.parametrize("collision", ["mod.py", "other/src/mod.py", "other/mod.py"])
 def test_basename_or_suffix_collision_is_not_extraction_evidence(tmp_path, monkeypatch, collision):
     f, manifest = _project(tmp_path)
-    row = json.loads(manifest.read_text(encoding="utf-8"))["src/mod.py"]
-    manifest.write_text(json.dumps({collision: row}), encoding="utf-8")
+    row = json.loads(_graph_read_text(manifest, encoding="utf-8"))["src/mod.py"]
+    _graph_write_text(manifest, json.dumps({collision: row}), encoding="utf-8")
     _assert_stale(f, tmp_path, monkeypatch)
 
 
@@ -165,14 +170,15 @@ def test_read_errors_stay_stale(tmp_path, monkeypatch, failure):
 
         monkeypatch.setattr(builtins, "open", denied_source)
     else:
-        original = Path.open
+        import graphify.cli as cli
+        original = cli._read_graph_data
 
-        def denied(self, *args, **kwargs):
-            if self.resolve() == manifest:
-                raise PermissionError("unreadable fixture")
-            return original(self, *args, **kwargs)
+        def denied(path):
+            if Path(path).name == "manifest.json":
+                raise PermissionError("unreadable manifest metadata")
+            return original(path)
 
-        monkeypatch.setattr(Path, "open", denied)
+        monkeypatch.setattr(cli, "_read_graph_data", denied)
     _assert_stale(f, tmp_path, monkeypatch)
 
 
@@ -180,6 +186,6 @@ def test_stat_index_digest_cannot_bless_changed_extraction(tmp_path, monkeypatch
     from graphify.cache import file_hash
 
     f, _ = _project(tmp_path)
-    f.write_text("def x():\n    return 2\n", encoding="utf-8")
+    _graph_write_text(f, "def x():\n    return 2\n", encoding="utf-8")
     file_hash(f, root=tmp_path)  # Memoizes current content, not extracted content.
     _assert_stale(f, tmp_path, monkeypatch)

@@ -66,7 +66,7 @@ graphify install               # detects your assistant and registers the skill
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 Збережений граф містить `graph.schema_version`, щоб інтеграції могли виявляти
@@ -117,7 +117,7 @@ Shortest path (3 hops):
 | **Божественні вузли** | Найбільш звʼязані поняття, тож ви бачите, через що все проходить |
 | **Спільноти** | Граф, розділений на підсистеми (Leiden), з мітками без LLM |
 | **Міжфайлові звʼязки** | `calls` / `imports` / `inherits` / `mixes_in`, розвʼязані між ~40 мовами через tree-sitter AST |
-| **Запит, шлях, пояснення** | Поставте питання, простежте шлях між двома речами або поясніть одне поняття, усе проти `graph.json` |
+| **Запит, шлях, пояснення** | Поставте питання, простежте шлях між двома речами або поясніть одне поняття, усе проти `graph.grafeo` |
 | **Обґрунтування + посилання на документи** | Коментарі `# NOTE:` / `# WHY:` та цитати ADR/RFC стають повноцінними вузлами, повʼязаними з кодом |
 | **Поза межами коду** | Документи, PDF, зображення та відео/аудіо - усе відображається в той самий граф |
 | **Локальний пріоритет** | Код розбирається локально за допомогою tree-sitter (без LLM, нічого не залишає вашу машину); лише семантичний прохід над документами/медіа звертається до бекенду, і тільки якщо ви його налаштуєте |
@@ -402,7 +402,7 @@ viz_node_limit=0
 
 ## Використання графа напряму
 
-Окрім вашого AI-асистента, запитуйте `graph.json` прямо з CLI за допомогою `graphify query`, `graphify path` та `graphify explain`. Назва, що збігається з кількома вузлами, відхиляється з переліченими кандидатами, а не вгадується. Скрипти можуть прочитати результат з коду виходу: `0` - відповідь, `3` - неоднозначна назва, `4` - немає відповідного вузла. Дивіться **[Ставте кращі запитання до графа](https://docs.graphify.com/guides/querying)** та **[довідник запитів](https://docs.graphify.com/reference/query)**.
+Окрім вашого AI-асистента, запитуйте `graph.grafeo` прямо з CLI за допомогою `graphify query`, `graphify path` та `graphify explain`. Назва, що збігається з кількома вузлами, відхиляється з переліченими кандидатами, а не вгадується. Скрипти можуть прочитати результат з коду виходу: `0` - відповідь, `3` - неоднозначна назва, `4` - немає відповідного вузла. Дивіться **[Ставте кращі запитання до графа](https://docs.graphify.com/guides/querying)** та **[довідник запитів](https://docs.graphify.com/reference/query)**.
 
 ---
 

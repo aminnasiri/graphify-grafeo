@@ -18,6 +18,8 @@ either, so the merged edge is `type_only` only if every import folded into it
 is: a runtime import next to a type-only one keeps its cycle.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import tempfile
 from pathlib import Path
@@ -33,7 +35,7 @@ def _extract(tmp_path, files: dict[str, str]):
     for name, body in files.items():
         p = tmp_path / name
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(body, encoding="utf-8")
+        _graph_write_text(p, body, encoding="utf-8")
     return extract([tmp_path / n for n in files], cache_root=Path(tempfile.mkdtemp()),
                    root=tmp_path, parallel=False)
 
@@ -107,7 +109,7 @@ def _cycles(tmp_path, files, directed=True, raw=False):
     # graph two module edges between one file pair collapse to a single
     # stored edge, so a synthetic 2-cycle needs distinct endpoints anyway.
     # raw=True takes the `update --no-cluster` route: edges are deduplicated
-    # before the graph is built from that graph.json (`cluster-only`).
+    # before the graph is built from that graph.grafeo (`cluster-only`).
     edges = dedupe_edges(r["edges"]) if raw else r["edges"]
     G = build_from_json({"nodes": r["nodes"], "edges": edges, "hyperedges": []},
                         root=str(tmp_path), directed=directed)

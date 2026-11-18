@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 """A query answer must say which graph it came from.
 
 `graphify-out/` resolves against the CWD. Running `graphify query` from a parent
@@ -39,11 +41,11 @@ def _header(G, **kw):
 
 def test_header_names_the_graph_and_its_size(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    gp = tmp_path / "graphify-out" / "graph.json"
+    gp = tmp_path / "graphify-out" / "graph.grafeo"
     gp.parent.mkdir(parents=True)
-    gp.write_text("{}", encoding="utf-8")
+    _graph_write_text(gp, "{}", encoding="utf-8")
     header = _header(_graph(4), graph_path=str(gp))
-    assert header.startswith("Graph: graphify-out/graph.json (4 nodes) | ")
+    assert header.startswith("Graph: graphify-out/graph.grafeo (4 nodes) | ")
     assert "Traversal:" in header
 
 
@@ -53,8 +55,8 @@ def test_a_graph_outside_the_cwd_is_shown_in_full(tmp_path, monkeypatch):
     other = tmp_path / "elsewhere" / "graphify-out"
     here.mkdir()
     other.mkdir(parents=True)
-    gp = other / "graph.json"
-    gp.write_text("{}", encoding="utf-8")
+    gp = other / "graph.grafeo"
+    _graph_write_text(gp, "{}", encoding="utf-8")
     monkeypatch.chdir(here)
     header = _header(_graph(), graph_path=str(gp))
     assert "elsewhere" in header, header
@@ -73,7 +75,7 @@ def test_the_node_count_is_the_graphs_not_the_traversals():
     graph is the whole corpus. Conflating them would hide the mismatch this is
     meant to surface."""
     G = _graph(6)
-    header = _header(G, graph_path="graphify-out/graph.json")
+    header = _header(G, graph_path="graphify-out/graph.grafeo")
     assert "(6 nodes)" in header
     assert G.number_of_nodes() == 6
 
@@ -84,20 +86,20 @@ def test_the_node_count_is_the_graphs_not_the_traversals():
 
 def test_display_is_relative_under_cwd(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    p = tmp_path / "graphify-out" / "graph.json"
+    p = tmp_path / "graphify-out" / "graph.grafeo"
     p.parent.mkdir(parents=True)
-    p.write_text("{}", encoding="utf-8")
-    assert _display_graph_path(str(p)) == "graphify-out/graph.json"
+    _graph_write_text(p, "{}", encoding="utf-8")
+    assert _display_graph_path(str(p)) == "graphify-out/graph.grafeo"
 
 
 def test_display_uses_posix_separators(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    p = tmp_path / "a" / "b" / "graph.json"
+    p = tmp_path / "a" / "b" / "graph.grafeo"
     p.parent.mkdir(parents=True)
-    p.write_text("{}", encoding="utf-8")
+    _graph_write_text(p, "{}", encoding="utf-8")
     shown = _display_graph_path(str(p))
     assert "\\" not in shown, shown
-    assert shown == "a/b/graph.json"
+    assert shown == "a/b/graph.grafeo"
 
 
 def test_display_is_absolute_outside_cwd(tmp_path, monkeypatch):
@@ -106,7 +108,7 @@ def test_display_is_absolute_outside_cwd(tmp_path, monkeypatch):
     here.mkdir()
     there.mkdir()
     monkeypatch.chdir(here)
-    shown = _display_graph_path(str(there / "graph.json"))
+    shown = _display_graph_path(str(there / "graph.grafeo"))
     assert Path(shown).is_absolute()
     assert "there" in shown
 
@@ -124,11 +126,11 @@ def test_two_projects_produce_distinguishable_headers(tmp_path, monkeypatch):
     (parent / "graphify-out").mkdir(parents=True)
     (sub / "graphify-out").mkdir(parents=True)
     for d in (parent, sub):
-        (d / "graphify-out" / "graph.json").write_text("{}", encoding="utf-8")
+        _graph_write_text(d / "graphify-out" / "graph.grafeo", "{}", encoding="utf-8")
 
     monkeypatch.chdir(parent)
-    h_parent = _header(_graph(9), graph_path=str(parent / "graphify-out" / "graph.json"))
-    h_sub = _header(_graph(3), graph_path=str(sub / "graphify-out" / "graph.json"))
+    h_parent = _header(_graph(9), graph_path=str(parent / "graphify-out" / "graph.grafeo"))
+    h_sub = _header(_graph(3), graph_path=str(sub / "graphify-out" / "graph.grafeo"))
     assert h_parent != h_sub
     assert "(9 nodes)" in h_parent and "(3 nodes)" in h_sub
-    assert "Sub/graphify-out/graph.json" in h_sub
+    assert "Sub/graphify-out/graph.grafeo" in h_sub

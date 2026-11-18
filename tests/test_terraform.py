@@ -1,5 +1,7 @@
 """Tests for the Terraform/HCL extractor (graphify/extract.py, issue #187)."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 from pathlib import Path
 
@@ -9,7 +11,7 @@ from graphify.extract import extract_terraform
 
 def _write(tmp_path: Path, name: str, body: str) -> Path:
     p = tmp_path / name
-    p.write_text(body, encoding="utf-8")
+    _graph_write_text(p, body, encoding="utf-8")
     return p
 
 
@@ -316,7 +318,7 @@ resource "aws_s3_bucket" "example" {
 """
     r = extract_terraform(_write(tmp_path, "main.tf", body))
     G = build_from_json(r)
-    out_file = tmp_path / "graph.json"
+    out_file = tmp_path / "graph.grafeo"
     to_json(G, {}, str(out_file), force=True)
     loaded_G = _load_graph(str(out_file))
     node_id = next(n["id"] for n in r["nodes"] if n["label"] == "aws_s3_bucket.example")
@@ -324,7 +326,7 @@ resource "aws_s3_bucket" "example" {
 
 
 def test_terraform_sensitive_attribute_values_are_redacted(tmp_path):
-    """Attribute values are persisted to graph.json and surfaced to the model,
+    """Attribute values are persisted to graph.grafeo and surfaced to the model,
     so a hardcoded credential must not leak: the VALUE of a secret-named key is
     redacted while the key stays visible, and non-secret keys are untouched
     (#3644 security follow-up). Redaction recurses into map values too."""
@@ -407,7 +409,7 @@ def test_terraform_secret_named_variable_default_and_output_value_are_redacted(t
     attribute key: `variable "db_password" { default = "..." }` stores the
     credential under the generic key `default`, and `output "admin_token"` under
     `value`. Key-name matching alone never sees the secret signal, so the
-    hardcoded default reached graph.json verbatim. Terraform's own
+    hardcoded default reached graph.grafeo verbatim. Terraform's own
     `sensitive = true` marker must be honoured the same way."""
     body = """\
 variable "db_password" {
@@ -456,7 +458,7 @@ def test_terraform_name_value_pair_secret_is_redacted(tmp_path):
     `[{ name, value }]` list) names the secret in the `name` LITERAL, while the
     credential sits under the generic key `value`. Key-name matching never sees
     that signal, so `{ name = "DB_PASSWORD", value = "hunter2" }` reached
-    graph.json verbatim (#3787). Ordinary name/value config stays intact."""
+    graph.grafeo verbatim (#3787). Ordinary name/value config stays intact."""
     body = """\
 resource "aws_ecs_task_definition" "app" {
   family = "app"

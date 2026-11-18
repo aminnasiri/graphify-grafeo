@@ -1,5 +1,7 @@
 """Tests for graphify/dedup.py entity deduplication pipeline."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 import pytest
 from graphify.dedup import (
     deduplicate_entities,
@@ -950,7 +952,7 @@ def test_doc_reextract_keeps_ast_node_with_shared_id(tmp_path):
              "links": [{"source": "pkg_test_x", "target": "pkg_test_x_run",
                         "relation": "contains", "confidence": "EXTRACTED",
                         "source_file": "pkg/test_x.py", "_origin": "ast"}]}
-    (tmp_path / "graph.json").write_text(json.dumps(graph))
+    _graph_write_text(tmp_path / "graph.grafeo", json.dumps(graph))
     overview = {"id": "pkg_overview", "label": "Overview", "file_type": "document",
                 "source_file": "pkg.md"}
     doc = {"nodes": [dict(_DOC_COPY), dict(overview)],
@@ -958,12 +960,11 @@ def test_doc_reextract_keeps_ast_node_with_shared_id(tmp_path):
                       "relation": "describes", "confidence": "EXTRACTED",
                       "source_file": "pkg.md"}],
            "hyperedges": []}
-    G = build_merge([doc], graph_path=tmp_path / "graph.json")
+    G = build_merge([doc], graph_path=tmp_path / "graph.grafeo")
     assert G.nodes["pkg_test_x"]["source_file"] == "pkg/test_x.py"
     assert G.has_edge("pkg_overview", "pkg_test_x")
 
-    (tmp_path / "graph2.json").write_text(
-        json.dumps(json_graph.node_link_data(G, edges="links")))
+    _graph_write_text(tmp_path / "graph2.json", json.dumps(json_graph.node_link_data(G, edges="links")))
     doc2 = {"nodes": [dict(overview)], "edges": [], "hyperedges": []}
     G2 = build_merge([doc2], graph_path=tmp_path / "graph2.json")
     assert "pkg_test_x" in G2

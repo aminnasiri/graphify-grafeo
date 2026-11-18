@@ -66,7 +66,7 @@ Ennyi az egész. **Három fájlt** kap:
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 A megőrzött gráf tartalmazza a `graph.schema_version` mezőt, hogy az integrációk
@@ -117,7 +117,7 @@ Amit alapból kap:
 | **God nodes** | A legtöbb kapcsolattal rendelkező fogalmak, így látja, hogy min folyik keresztül minden |
 | **Communities** | A gráf alrendszerekre bontva (Leiden), LLM-mentes címkékkel |
 | **Fájlközi hivatkozások** | `calls` / `imports` / `inherits` / `mixes_in` feloldva ~40 nyelven át a tree-sitter AST segítségével |
-| **Query, path, explain** | Tegyen fel egy kérdést, kövesse nyomon a két dolog közötti utat, vagy magyaráztasson el egy fogalmat, mindezt a `graph.json` ellenében |
+| **Query, path, explain** | Tegyen fel egy kérdést, kövesse nyomon a két dolog közötti utat, vagy magyaráztasson el egy fogalmat, mindezt a `graph.grafeo` ellenében |
 | **Indoklás + dokumentumhivatkozások** | A `# NOTE:` / `# WHY:` megjegyzések és az ADR/RFC-hivatkozások elsőrangú csomópontokká válnak, amelyek a kódhoz kapcsolódnak |
 | **A kódon túl** | A dokumentumok, PDF-ek, képek és videó/hang mind ugyanabba a gráfba képeződnek le |
 | **Local-first** | A kódot lokálisan elemzi a tree-sitter (nincs LLM, semmi sem hagyja el a gépét); csak a dokumentumokon/médián végzett szemantikai futtatás hív meg egy backendet, és csak akkor, ha beállít egyet |
@@ -402,7 +402,7 @@ Commitolja vagy ossza meg a gráfot, hogy az egész csapata ugyanazt a kontextus
 
 ## Using the graph directly
 
-Az AI-asszisztensén túl a `graph.json` fájlt közvetlenül a CLI-ből is lekérdezheti a `graphify query`, `graphify path` és `graphify explain` parancsokkal. A több csomópontra illeszkedő nevet elutasítja, és a jelölteket felsorolja ahelyett, hogy találgatna. A szkriptek a kilépési kódból olvashatják ki az eredményt: `0` egy válasz, `3` egy nem egyértelmű név, `4` nincs illeszkedő csomópont. Lásd: **[Ask better graph questions](https://docs.graphify.com/guides/querying)** és a **[query reference](https://docs.graphify.com/reference/query)**.
+Az AI-asszisztensén túl a `graph.grafeo` fájlt közvetlenül a CLI-ből is lekérdezheti a `graphify query`, `graphify path` és `graphify explain` parancsokkal. A több csomópontra illeszkedő nevet elutasítja, és a jelölteket felsorolja ahelyett, hogy találgatna. A szkriptek a kilépési kódból olvashatják ki az eredményt: `0` egy válasz, `3` egy nem egyértelmű név, `4` nincs illeszkedő csomópont. Lásd: **[Ask better graph questions](https://docs.graphify.com/guides/querying)** és a **[query reference](https://docs.graphify.com/reference/query)**.
 
 ---
 

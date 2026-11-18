@@ -2,7 +2,7 @@
 """
 callflow_html.py — Generate call-flow architecture HTML from graphify knowledge graph outputs.
 
-Reads graph.json plus optional GRAPH_REPORT.md, .graphify_labels.json, and sections JSON,
+Reads graph.grafeo plus optional GRAPH_REPORT.md, .graphify_labels.json, and sections JSON,
 then produces a self-contained HTML file with:
   - Dark-themed CSS (fixed template)
   - Navigation bar from section list
@@ -13,11 +13,13 @@ then produces a self-contained HTML file with:
 
 Usage:
   python3 -m graphify export callflow-html
-  python3 -m graphify export callflow-html /path/to/project/graphify-out/graph.json
-  python3 -m graphify export callflow-html --graph /path/to/graph.json --output docs/architecture.html
+  python3 -m graphify export callflow-html /path/to/project/graphify-out/graph.grafeo
+  python3 -m graphify export callflow-html --graph /path/to/graph.grafeo --output docs/architecture.html
 """
 
 from __future__ import annotations
+from graphify.paths import database_path as _database_path
+from graphify.store.io import read_json as _read_graph_data
 
 import json
 import argparse
@@ -96,10 +98,11 @@ def read_json(path: str | Path, default=None):
     if not path:
         return default
     path = Path(path)
-    if not path.exists():
+    from graphify.store.io import state_exists
+    if not state_exists(path):
         return default
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return _read_graph_data(path)
     except json.JSONDecodeError as exc:
         raise SystemExit(f"ERROR: invalid JSON in {path}: {exc}") from exc
 
@@ -136,7 +139,7 @@ def endpoint_id(value) -> str:
 
 
 def normalize_node(raw: dict, index: int) -> dict:
-    """Normalize a graphify node across common graph.json schema variants."""
+    """Normalize a graphify node across common graph.grafeo schema variants."""
     node = dict(raw)
     node_id = first_present(
         node,
@@ -220,7 +223,7 @@ def normalize_edge(raw: dict, index: int) -> dict | None:
 
 
 def _node_link_payload(data: dict) -> tuple[list, list] | None:
-    """Read current graphify graph.json via NetworkX's node-link parser."""
+    """Read current graphify graph.grafeo via NetworkX's node-link parser."""
     if not isinstance(data.get("nodes"), list):
         return None
     if not isinstance(data.get("links"), list) and not isinstance(data.get("edges"), list):
@@ -236,7 +239,7 @@ def _node_link_payload(data: dict) -> tuple[list, list] | None:
         # Force directed/multigraph so the stored caller->callee direction and
         # parallel edges survive the round-trip; mirrors affected.py,
         # serve.py and cli.py (#1174) and the directed-view fix for
-        # path/shortest_path (#2487, #2309). graph.json is written with
+        # path/shortest_path (#2487, #2309). graph.grafeo is written with
         # "directed": false for backward compatibility, so without this
         # networkx returns an undirected Graph and edge orientation becomes
         # arbitrary -- which silently swaps the Caller and Callee columns of
@@ -263,7 +266,7 @@ def _node_link_payload(data: dict) -> tuple[list, list] | None:
 
 
 def load_graph(path: str | Path) -> tuple:
-    """Load graph.json. Returns normalized (nodes, edges, hyperedges, metadata)."""
+    """Load graph.grafeo. Returns normalized (nodes, edges, hyperedges, metadata)."""
     if path:
         from graphify.security import check_graph_file_size_cap
         try:
@@ -428,13 +431,13 @@ def resolve_graphify_paths(args) -> dict:
         graphify_out = Path(args.graphify_out).expanduser()
     elif args.graph:
         graphify_out = Path(args.graph).expanduser().parent
-    elif (base / "graph.json").exists():
+    elif (_database_path(base)).exists():
         graphify_out = base
     else:
         graphify_out = base / GRAPHIFY_OUT
 
     project_root = graphify_out.parent if graphify_out.name == GRAPHIFY_OUT_NAME else base
-    graph = Path(args.graph).expanduser() if args.graph else graphify_out / "graph.json"
+    graph = Path(args.graph).expanduser() if args.graph else _database_path(graphify_out)
     report = Path(args.report).expanduser() if args.report else graphify_out / "GRAPH_REPORT.md"
     labels = Path(args.labels).expanduser() if args.labels else graphify_out / ".graphify_labels.json"
     sections = Path(args.sections).expanduser() if args.sections else None
@@ -1641,7 +1644,7 @@ def write_callflow_html(
     if not paths["graph"].exists():
         raise FileNotFoundError(
             f"graphify output not found: {paths['graph']}. "
-            "Run graphify first or pass --graph /path/to/graph.json."
+            "Run graphify first or pass --graph /path/to/graph.grafeo."
         )
 
     # Load data
@@ -1656,7 +1659,7 @@ def write_callflow_html(
     report_text = load_report(paths["report"])
 
     if not nodes:
-        raise ValueError("graph.json contains 0 nodes")
+        raise ValueError("graph.grafeo contains 0 nodes")
     if len(sections) <= 1:
         raise ValueError("no sections defined")
 
@@ -1666,7 +1669,7 @@ def write_callflow_html(
     node_ids = {node.get("id") for node in nodes}
     missing_endpoint_edges = [edge for edge in edges if edge.get("source") not in node_ids or edge.get("target") not in node_ids]
     if verbose and missing_endpoint_edges:
-        print(f"WARNING: {len(missing_endpoint_edges)} edges reference nodes not present in graph.json.", file=sys.stderr)
+        print(f"WARNING: {len(missing_endpoint_edges)} edges reference nodes not present in graph.grafeo.", file=sys.stderr)
 
     meta["project_name"] = infer_project_name(str(paths["graph"]), meta)
     meta["node_count"] = len(nodes)
@@ -2014,7 +2017,7 @@ def main():
     )
     parser.add_argument("project", nargs="?", default=None, help="Project root or graphify output directory")
     parser.add_argument("--graphify-out", default=None, help="Path to graphify output directory")
-    parser.add_argument("--graph", default=None, help="Path to graph.json")
+    parser.add_argument("--graph", default=None, help="Path to graph.grafeo")
     parser.add_argument("--report", default=None, help="Path to GRAPH_REPORT.md")
     parser.add_argument("--labels", default=None, help="Path to .graphify_labels.json")
     parser.add_argument("--sections", default=None, help="Path to sections JSON file; auto-derived when omitted")

@@ -1,5 +1,7 @@
 """A reachable plain C++ forward denotes its unique class definition."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import os
@@ -19,7 +21,7 @@ def _extract(tmp_path, files, *, reverse=False):
     for name, source in files.items():
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(source, encoding="utf-8")
+        _graph_write_text(path, source, encoding="utf-8")
         paths.append(path)
     return extract(paths[::-1] if reverse else paths, root=tmp_path,
                    cache_root=tmp_path, parallel=False)
@@ -55,9 +57,9 @@ def test_forward_and_reachable_definition_have_one_identity_and_all_sites(tmp_pa
     again = extract([tmp_path / name for name in reversed(files)], root=tmp_path,
                     cache_root=tmp_path, parallel=False)
     assert sorted(result["nodes"], key=lambda n: n["id"]) == sorted(again["nodes"], key=lambda n: n["id"])
-    graph_path = tmp_path / "graph.json"
+    graph_path = tmp_path / "graph.grafeo"
     to_json(build_from_json(result, root=tmp_path), {}, str(graph_path))
-    persisted = json.loads(graph_path.read_text(encoding="utf-8"))
+    persisted = json.loads(_graph_read_text(graph_path, encoding="utf-8"))
     saved = next(n for n in persisted["nodes"] if n["id"] == owner["id"])
     assert saved["metadata"]["cpp_declaration_sites"] == owner["metadata"]["cpp_declaration_sites"]
 
@@ -130,14 +132,14 @@ def test_changed_forward_rebuilds_only_its_group_and_preserves_incoming_edges(tm
         "include/service.hpp": '#include "forward.hpp"\nclass Service { public: void Run() {} };',
         "use.cpp": '#include "include/service.hpp"\nvoid Use(Service& s) { s.Run(); }',
     })
-    graph_path = tmp_path / "graph.json"
+    graph_path = tmp_path / "graph.grafeo"
     to_json(build_from_json(result, root=tmp_path), {}, str(graph_path))
-    saved = json.loads(graph_path.read_text(encoding="utf-8"))
+    saved = json.loads(_graph_read_text(graph_path, encoding="utf-8"))
     caller = next(n for n in saved["nodes"] if n["label"] == "Use()")
     method = next(n for n in saved["nodes"] if n["label"] == ".Run()")
     owner = next(n for n in saved["nodes"] if n.get("_callable_class") and n["label"] == "Service")
     path = tmp_path / "include/forward.hpp"
-    path.write_text("class Other;", encoding="utf-8")
+    _graph_write_text(path, "class Other;", encoding="utf-8")
     updated = extract(
         [path], root=tmp_path, cache_root=tmp_path, parallel=False,
         resolution_context_nodes=[n for n in saved["nodes"] if n.get("source_file") != "include/forward.hpp"],
@@ -161,7 +163,7 @@ def test_group_refresh_stays_inside_the_permitted_corpus_and_handles_deletions(t
     from graphify.extractors.resolution import _cpp_reconciliation_paths
 
     for name in ("forward.hpp", "service.hpp", "excluded.hpp", "unrelated.hpp"):
-        (tmp_path / name).write_text("class Service;", encoding="utf-8")
+        _graph_write_text(tmp_path / name, "class Service;", encoding="utf-8")
     nodes = [{"_cpp_reconcile_files": ["forward.hpp", "service.hpp", "excluded.hpp", "../outside.hpp"]}]
     paths = _cpp_reconciliation_paths(
         [], nodes, tmp_path,
@@ -177,8 +179,8 @@ def test_external_cache_anchor_keeps_distinct_source_and_include_identities(tmp_
     source.mkdir()
     forward = source / "forward.hpp"
     definition = source / "service.hpp"
-    forward.write_text("class Service;", encoding="utf-8")
-    definition.write_text(('#include "forward.hpp"\n' if included else '')
+    _graph_write_text(forward, "class Service;", encoding="utf-8")
+    _graph_write_text(definition, ('#include "forward.hpp"\n' if included else '')
                           + "class Service {};", encoding="utf-8")
     result = extract([forward, definition], cache_root=tmp_path / "cache", parallel=False)
     owners = _classes(result)
@@ -210,14 +212,14 @@ def test_persisted_graph_rechecks_the_group_when_a_source_or_proof_changes(tmp_p
     command = [sys.executable, "-m", "graphify", "extract", str(project), "--code-only", "--no-cluster"]
     before = subprocess.run(command, env=env, cwd=tmp_path, text=True, capture_output=True)
     assert before.returncode == 0, before.stdout + before.stderr
-    graph_path = project / "graphify-out/graph.json"
-    assert len(_classes(json.loads(graph_path.read_text(encoding="utf-8")))) == 1
+    graph_path = project / "graphify-out/graph.grafeo"
+    assert len(_classes(json.loads(_graph_read_text(graph_path, encoding="utf-8")))) == 1
     changed = project / {"forward": "forward.hpp", "definition": "service.hpp",
                          "proof": "bridge.hpp", "delete": "service.hpp"}[change]
     if change == "delete":
-        changed.unlink()
+        _graph_unlink(changed)
     else:
-        changed.write_text({"forward": "class Other;", "definition": "class Service {};",
+        _graph_write_text(changed, {"forward": "class Other;", "definition": "class Service {};",
                             "proof": "// include removed"}[change], encoding="utf-8")
     if update == "cli":
         after = subprocess.run(command, env=env, cwd=tmp_path, text=True, capture_output=True)
@@ -225,7 +227,7 @@ def test_persisted_graph_rechecks_the_group_when_a_source_or_proof_changes(tmp_p
     else:
         from graphify.watch import _rebuild_code
         assert _rebuild_code(project, changed_paths=[changed], no_cluster=True, acquire_lock=False)
-    saved = json.loads(graph_path.read_text(encoding="utf-8"))
+    saved = json.loads(_graph_read_text(graph_path, encoding="utf-8"))
     classes = _classes(saved)
     assert len(classes) == (1 if change in {"forward", "delete"} else 2)
     assert all("cpp_declaration_sites" not in n.get("metadata", {}) for n in classes)
@@ -244,14 +246,14 @@ def test_updates_form_new_groups_and_split_new_ambiguities(tmp_path, update, cha
     initial = subprocess.run(command, env=env, cwd=tmp_path, text=True, capture_output=True)
     assert initial.returncode == 0, initial.stdout + initial.stderr
     changed = project / ("forward.hpp" if change == "new-forward" else "other.hpp")
-    changed.write_text("class Service;" if change == "new-forward" else "class Service {};", encoding="utf-8")
+    _graph_write_text(changed, "class Service;" if change == "new-forward" else "class Service {};", encoding="utf-8")
     if update == "cli":
         after = subprocess.run(command, env=env, cwd=tmp_path, text=True, capture_output=True)
         assert after.returncode == 0, after.stdout + after.stderr
     else:
         from graphify.watch import _rebuild_code
         assert _rebuild_code(project, changed_paths=[changed], no_cluster=True, acquire_lock=False)
-    saved = json.loads((project / "graphify-out/graph.json").read_text(encoding="utf-8"))
+    saved = json.loads(_graph_read_text(project / "graphify-out/graph.grafeo", encoding="utf-8"))
     classes = _classes(saved)
     assert len(classes) == (1 if change == "new-forward" else 3)
     assert bool(classes[0].get("metadata", {}).get("cpp_declaration_sites")) == (change == "new-forward")
@@ -275,9 +277,9 @@ def test_same_stem_conflicts_keep_distinct_class_member_ids_and_provenance_after
         "service.hpp": "class Service { public: void Run() {} };",
         "service.cpp": '#include "service.hpp"\nclass Service { public: void Run() {} };',
     })
-    graph_path = tmp_path / "graph.json"
+    graph_path = tmp_path / "graph.grafeo"
     to_json(build_from_json(result, root=tmp_path), {}, str(graph_path))
-    saved = json.loads(graph_path.read_text(encoding="utf-8"))
+    saved = json.loads(_graph_read_text(graph_path, encoding="utf-8"))
     owners = _classes(saved)
     assert len({n["id"] for n in owners}) == 2
     assert {n["source_file"] for n in owners} == {"service.hpp", "service.cpp"}

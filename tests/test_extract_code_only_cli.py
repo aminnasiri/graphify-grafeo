@@ -5,6 +5,8 @@ doc/paper/image files. `--code-only` skips the semantic pass so the code graph
 still builds, and the no-key error now points users at the flag.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text, write_text as _graph_write_text
 
 import os
 import json
@@ -20,9 +22,9 @@ _KEY_VARS = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_
 def _mixed_repo(tmp_path: Path) -> Path:
     repo = tmp_path / "repo"
     repo.mkdir()
-    (repo / "app.py").write_text("def hello():\n    return 1\n")
-    (repo / "README.md").write_text("# Design\n\nHow it works.\n")
-    (repo / "NOTES.txt").write_text("Architecture notes and rationale.\n")
+    _graph_write_text(repo / "app.py", "def hello():\n    return 1\n")
+    _graph_write_text(repo / "README.md", "# Design\n\nHow it works.\n")
+    _graph_write_text(repo / "NOTES.txt", "Architecture notes and rationale.\n")
     return repo
 
 
@@ -41,10 +43,10 @@ def test_code_only_succeeds_without_key(tmp_path):
     assert r.returncode == 0, f"--code-only should succeed with no key: {r.stderr}"
     out = r.stdout + r.stderr
     assert "--code-only: skipping" in out
-    graph = repo / "graphify-out" / "graph.json"
-    assert graph.exists(), "code graph must still be written"
+    graph = repo / "graphify-out" / "graph.grafeo"
+    assert _graph_exists(graph), "code graph must still be written"
     import json
-    g = json.loads(graph.read_text())
+    g = json.loads(_graph_read_text(graph))
     labels = [n.get("label") for n in g["nodes"]]
     assert any(str(l).startswith("hello") for l in labels), "code was indexed"
 
@@ -85,23 +87,23 @@ def test_output_flag_is_alias_of_out(tmp_path):
     to the default `<path>/graphify-out/`). It is now an alias of `--out`."""
     repo = tmp_path / "repo"
     repo.mkdir()
-    (repo / "app.py").write_text("def hello():\n    return 1\n")
+    _graph_write_text(repo / "app.py", "def hello():\n    return 1\n")
     custom = tmp_path / "elsewhere"
 
     r = _run_relative_out(repo, "--code-only", "--no-cluster", "--output", str(custom))
     assert r.returncode == 0, r.stderr
-    assert (custom / "graphify-out" / "graph.json").exists(), "--output was ignored (#2004)"
-    assert not (repo / "graphify-out").exists(), "output must not go to the default dir"
+    assert _graph_exists(custom / "graphify-out" / "graph.grafeo"), "--output was ignored (#2004)"
+    assert not _graph_exists(repo / "graphify-out"), "output must not go to the default dir"
 
 
 def test_output_flag_inline_form(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
-    (repo / "app.py").write_text("def hello():\n    return 1\n")
+    _graph_write_text(repo / "app.py", "def hello():\n    return 1\n")
     custom = tmp_path / "out2"
     r = _run_relative_out(repo, "--code-only", "--no-cluster", f"--output={custom}")
     assert r.returncode == 0, r.stderr
-    assert (custom / "graphify-out" / "graph.json").exists()
+    assert _graph_exists(custom / "graphify-out" / "graph.grafeo")
 
 
 def test_no_gitignore_indexes_vcs_ignored_code_but_keeps_graphifyignore(tmp_path):
@@ -109,21 +111,21 @@ def test_no_gitignore_indexes_vcs_ignored_code_but_keeps_graphifyignore(tmp_path
     generated = repo / "proj" / "deep" / "generated"
     generated.mkdir(parents=True)
     (repo / ".git" / "info").mkdir(parents=True)
-    (repo / ".git" / "info" / "exclude").write_text("local/\n")
-    (repo / "proj" / ".gitignore").write_text("generated/\n")
-    (repo / "proj" / ".graphifyignore").write_text("hidden/\n")
-    (generated / "Gen.cs").write_text("namespace N { public class Gen {} }\n")
+    _graph_write_text(repo / ".git" / "info" / "exclude", "local/\n")
+    _graph_write_text(repo / "proj" / ".gitignore", "generated/\n")
+    _graph_write_text(repo / "proj" / ".graphifyignore", "hidden/\n")
+    _graph_write_text(generated / "Gen.cs", "namespace N { public class Gen {} }\n")
     local = repo / "local"
     local.mkdir()
-    (local / "Local.cs").write_text("namespace N { public class Local {} }\n")
+    _graph_write_text(local / "Local.cs", "namespace N { public class Local {} }\n")
     hidden = repo / "proj" / "hidden"
     hidden.mkdir()
-    (hidden / "Hidden.cs").write_text("namespace N { public class Hidden {} }\n")
+    _graph_write_text(hidden / "Hidden.cs", "namespace N { public class Hidden {} }\n")
 
     result = _run(repo, "--no-gitignore", "--no-cluster")
 
     assert result.returncode == 0, result.stderr
-    graph = json.loads((repo / "graphify-out" / "graph.json").read_text())
+    graph = json.loads(_graph_read_text(repo / "graphify-out" / "graph.grafeo"))
     sources = {Path(str(node.get("source_file", ""))).as_posix() for node in graph["nodes"]}
     assert any(source.endswith("proj/deep/generated/Gen.cs") for source in sources)
     assert any(source.endswith("local/Local.cs") for source in sources)
@@ -137,12 +139,12 @@ def test_no_gitignore_setting_persists_across_flagless_extract(tmp_path):
     repo = tmp_path / "repo"
     gen = repo / "generated"
     gen.mkdir(parents=True)
-    (repo / ".gitignore").write_text("generated/\n")
-    (repo / "app.py").write_text("def hello():\n    return 1\n")
-    (gen / "Gen.py").write_text("def gen():\n    return 2\n")
+    _graph_write_text(repo / ".gitignore", "generated/\n")
+    _graph_write_text(repo / "app.py", "def hello():\n    return 1\n")
+    _graph_write_text(gen / "Gen.py", "def gen():\n    return 2\n")
 
     def _sources():
-        g = json.loads((repo / "graphify-out" / "graph.json").read_text())
+        g = json.loads(_graph_read_text(repo / "graphify-out" / "graph.grafeo"))
         return {Path(str(n.get("source_file", ""))).as_posix() for n in g["nodes"]}
 
     r1 = _run(repo, "--no-gitignore", "--code-only", "--no-cluster")
@@ -161,11 +163,11 @@ def test_exclude_setting_persists_across_flagless_extract(tmp_path):
     repo = tmp_path / "repo"
     vendor = repo / "vendor"
     vendor.mkdir(parents=True)
-    (repo / "app.py").write_text("def app():\n    return 1\n")
-    (vendor / "lib.py").write_text("def vendor():\n    return 2\n")
+    _graph_write_text(repo / "app.py", "def app():\n    return 1\n")
+    _graph_write_text(vendor / "lib.py", "def vendor():\n    return 2\n")
 
     def _sources():
-        graph = json.loads((repo / "graphify-out" / "graph.json").read_text())
+        graph = json.loads(_graph_read_text(repo / "graphify-out" / "graph.grafeo"))
         return {
             Path(str(node.get("source_file", ""))).as_posix()
             for node in graph["nodes"]
@@ -190,9 +192,9 @@ def test_explicit_exclude_replaces_persisted_setting_with_custom_out(tmp_path):
     generated = repo / "generated"
     vendor.mkdir(parents=True)
     generated.mkdir()
-    (repo / "app.py").write_text("def app():\n    return 1\n")
-    (vendor / "lib.py").write_text("def vendor():\n    return 2\n")
-    (generated / "gen.py").write_text("def generated():\n    return 3\n")
+    _graph_write_text(repo / "app.py", "def app():\n    return 1\n")
+    _graph_write_text(vendor / "lib.py", "def vendor():\n    return 2\n")
+    _graph_write_text(generated / "gen.py", "def generated():\n    return 3\n")
     out_root = tmp_path / "custom-output"
 
     env = {key: value for key, value in os.environ.items() if key not in _KEY_VARS}
@@ -223,7 +225,7 @@ def test_explicit_exclude_replaces_persisted_setting_with_custom_out(tmp_path):
 
     graph_out = out_root / "graphify-out"
     def _sources():
-        graph = json.loads((graph_out / "graph.json").read_text())
+        graph = json.loads(_graph_read_text(graph_out / "graph.grafeo"))
         return {
             Path(str(node.get("source_file", ""))).as_posix()
             for node in graph["nodes"]
@@ -241,10 +243,10 @@ def test_explicit_exclude_replaces_persisted_setting_with_custom_out(tmp_path):
     assert any(source.endswith("app.py") for source in sources)
     assert any(source.endswith("vendor/lib.py") for source in sources)
     assert not any(source.endswith("generated/gen.py") for source in sources)
-    assert json.loads((graph_out / ".graphify_build.json").read_text()) == {
+    assert json.loads(_graph_read_text(graph_out / ".graphify_build.json")) == _canonical_expected({
         "excludes": ["generated"],
         "code_only": True,
-    }
+    })
 
 
 def test_extract_names_skipped_sensitive_files(tmp_path):
@@ -252,8 +254,8 @@ def test_extract_names_skipped_sensitive_files(tmp_path):
     by NAME (not just a count), so a wrongly-flagged file is visible."""
     repo = tmp_path / "repo"
     repo.mkdir()
-    (repo / "app.py").write_text("def hello():\n    return 1\n")
-    (repo / "github_token.txt").write_text("ghp_secretvalue\n")  # real secret -> skipped
+    _graph_write_text(repo / "app.py", "def hello():\n    return 1\n")
+    _graph_write_text(repo / "github_token.txt", "ghp_secretvalue\n")  # real secret -> skipped
     r = _run(repo, "--code-only", "--no-cluster")
     assert r.returncode == 0, r.stderr
     out = r.stdout + r.stderr
@@ -265,17 +267,17 @@ def test_code_only_force_preserves_existing_semantic_layer(tmp_path):
     """#2923 regression: --code-only --force must not drop the existing semantic
     layer. The AST pass is fully replaced (full re-scan, semantic cache reads
     skipped) but the semantic pass is itself skipped, so doc/paper/image nodes
-    from graph.json must be carried forward. Before the fix this combination
-    silently rewrote graph.json with only the AST tier, losing every semantic
+    from graph.grafeo must be carried forward. Before the fix this combination
+    silently rewrote graph.grafeo with only the AST tier, losing every semantic
     node and every hyperedge connected to one.
     """
     repo = _mixed_repo(tmp_path)
     out = repo / "graphify-out"
     out.mkdir()
-    graph = out / "graph.json"
-    # Seed a graph.json as if a prior full extract with an LLM backend had run:
+    graph = out / "graph.grafeo"
+    # Seed a graph.grafeo as if a prior full extract with an LLM backend had run:
     # 2 AST nodes from app.py + 4 SEMANTIC nodes from README.md/NOTES.txt.
-    graph.write_text(json.dumps({
+    _graph_write_text(graph, json.dumps({
         "nodes": [
             {"id": "app_py", "label": "app.py", "type": "file",
              "source_file": "app.py", "origin": "AST"},
@@ -306,7 +308,7 @@ def test_code_only_force_preserves_existing_semantic_layer(tmp_path):
     r = _run(repo, "--code-only", "--force", "--no-cluster")
     assert r.returncode == 0, r.stderr
 
-    out_graph = json.loads(graph.read_text())
+    out_graph = json.loads(_graph_read_text(graph))
     semantic_labels = {n["label"] for n in out_graph["nodes"]
                        if n.get("origin") == "SEMANTIC"}
     semantic_source_files = {
@@ -324,7 +326,7 @@ def test_code_only_force_preserves_existing_semantic_layer(tmp_path):
     # Hyperedges are also semantic tier; the seeded graph had none but the
     # AST re-extract must not have invented any non-semantic work, and the
     # surviving edges list must not have been wholesale replaced.
-    assert "edges" in out_graph, "graph.json must still have an edges key"
+    assert "links" in out_graph, "native snapshots expose canonical links"
     # And the user-visible console line must explain why a semantic-layer-
     # preserving branch fired.
     assert "existing semantic layer preserved" in r.stdout + r.stderr, (
@@ -340,8 +342,8 @@ def test_code_only_force_prunes_removed_semantic_files(tmp_path):
     repo = _mixed_repo(tmp_path)
     out = repo / "graphify-out"
     out.mkdir()
-    graph = out / "graph.json"
-    graph.write_text(json.dumps({
+    graph = out / "graph.grafeo"
+    _graph_write_text(graph, json.dumps({
         "nodes": [
             {"id": "app_py", "label": "app.py", "type": "file",
              "source_file": "app.py", "origin": "AST"},
@@ -360,11 +362,11 @@ def test_code_only_force_prunes_removed_semantic_files(tmp_path):
 
     # Delete NOTES.txt between seed and re-run. The merge's graph_stale_sources
     # path must drop its semantic nodes because the file no longer exists.
-    (repo / "NOTES.txt").unlink()
+    _graph_unlink(repo / "NOTES.txt")
 
     r = _run(repo, "--code-only", "--force", "--no-cluster")
     assert r.returncode == 0, r.stderr
-    out_graph = json.loads(graph.read_text())
+    out_graph = json.loads(_graph_read_text(graph))
     remaining_sources = {
         Path(n["source_file"]).name
         for n in out_graph["nodes"]
@@ -385,30 +387,30 @@ def test_code_only_force_rescan_re_resolves_tsconfig_paths_and_preserves_semanti
     repo.mkdir()
     src = repo / "src"
     src.mkdir()
-    (src / "utils.ts").write_text("export const helper = 42;\n")
-    (src / "index.ts").write_text("import { helper } from '@/utils';\nconsole.log(helper);\n")
-    (repo / "tsconfig.json").write_text(json.dumps({"compilerOptions": {"target": "es2020"}}))
+    _graph_write_text(src / "utils.ts", "export const helper = 42;\n")
+    _graph_write_text(src / "index.ts", "import { helper } from '@/utils';\nconsole.log(helper);\n")
+    _graph_write_text(repo / "tsconfig.json", json.dumps({"compilerOptions": {"target": "es2020"}}))
 
     # 1. Initial extract --code-only
     r1 = _run(repo, "--code-only", "--no-cluster")
     assert r1.returncode == 0, r1.stderr
-    graph_path = repo / "graphify-out" / "graph.json"
-    g1 = json.loads(graph_path.read_text(encoding="utf-8"))
+    graph_path = repo / "graphify-out" / "graph.grafeo"
+    g1 = json.loads(_graph_read_text(graph_path, encoding="utf-8"))
     edges1 = [(e["source"], e["target"]) for e in g1.get("edges", g1.get("links", []))]
     assert not any(src == "src_index" and ("src_utils" in tgt or "helper" in tgt) for src, tgt in edges1), (
         "alias import @/utils must not resolve without tsconfig paths mapping"
     )
 
-    # 2. Seed a semantic file and node into graph.json to verify semantic preservation (#2923)
-    (repo / "ARCH.md").write_text("# Architecture\nDesign notes.\n")
+    # 2. Seed a semantic file and node into graph.grafeo to verify semantic preservation (#2923)
+    _graph_write_text(repo / "ARCH.md", "# Architecture\nDesign notes.\n")
     g1["nodes"].append({
         "id": "doc_arch", "label": "Architecture", "type": "concept",
         "source_file": "ARCH.md", "origin": "SEMANTIC", "_origin": "semantic"
     })
-    graph_path.write_text(json.dumps(g1), encoding="utf-8")
+    _graph_write_text(graph_path, json.dumps(g1), encoding="utf-8")
 
     # 3. Modify only tsconfig.json to add baseUrl and paths alias
-    (repo / "tsconfig.json").write_text(json.dumps({
+    _graph_write_text(repo / "tsconfig.json", json.dumps({
         "compilerOptions": {
             "target": "es2020",
             "baseUrl": ".",
@@ -420,7 +422,7 @@ def test_code_only_force_rescan_re_resolves_tsconfig_paths_and_preserves_semanti
     r2 = _run(repo, "--code-only", "--force", "--no-cluster")
     assert r2.returncode == 0, r2.stderr
 
-    g2 = json.loads(graph_path.read_text(encoding="utf-8"))
+    g2 = json.loads(_graph_read_text(graph_path, encoding="utf-8"))
     edges2 = [(e["source"], e["target"]) for e in g2.get("edges", g2.get("links", []))]
     # Verify the import edge now exists
     assert any(src == "src_index" and ("src_utils" in tgt or "helper" in tgt) for src, tgt in edges2), (

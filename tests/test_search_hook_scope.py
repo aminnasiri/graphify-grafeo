@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, write_text as _graph_write_text
 """Only searches known to target files outside the graph should lose the hint."""
 import io
 import json
@@ -26,7 +28,7 @@ def _invoke(monkeypatch, project, tool_input):
 def project(tmp_path):
     root = tmp_path / "project"
     (root / "graphify-out").mkdir(parents=True)
-    (root / "graphify-out" / "graph.json").write_text("{}", encoding="utf-8")
+    _graph_write_text(root / "graphify-out" / "graph.grafeo", "{}", encoding="utf-8")
     return root
 
 
@@ -45,7 +47,7 @@ def project(tmp_path):
 def test_shell_external_search_is_silent(monkeypatch, project, command):
     outside = (project.parent / "external log.txt").as_posix()
     assert not _invoke(monkeypatch, project, {"command": command.format(outside=outside)})
-    assert not (project / "graphify-out/cache/hook_sessions/scope-test.nudges").exists()
+    assert not _graph_exists(project / "graphify-out/cache/hook_sessions/scope-test.nudges")
 
 
 @pytest.mark.parametrize("relative", [False, True])

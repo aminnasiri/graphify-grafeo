@@ -1,5 +1,7 @@
 """Proven zero-argument member pairs share an identity without overload guessing."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import os
@@ -19,7 +21,7 @@ def _extract(tmp_path, files, *, reverse=False):
     for name, source in files.items():
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(source, encoding="utf-8")
+        _graph_write_text(path, source, encoding="utf-8")
         paths.append(path)
     return extract(paths[::-1] if reverse else paths, root=tmp_path,
                    cache_root=tmp_path, parallel=False)
@@ -55,9 +57,9 @@ def test_zero_argument_member_preserves_both_sites_and_body_calls(tmp_path, reve
     again = extract([tmp_path / name for name in reversed(files)], root=tmp_path,
                     cache_root=tmp_path, parallel=False)
     assert sorted(result["nodes"], key=lambda n: n["id"]) == sorted(again["nodes"], key=lambda n: n["id"])
-    graph_path = tmp_path / "graph.json"
+    graph_path = tmp_path / "graph.grafeo"
     to_json(build_from_json(result, root=tmp_path), {}, str(graph_path))
-    saved = json.loads(graph_path.read_text(encoding="utf-8"))
+    saved = json.loads(_graph_read_text(graph_path, encoding="utf-8"))
     assert _members(saved)[0]["definition_file"] == "implementation.cpp"
     assert _members(saved)[0]["definition_location"] == "L3"
 
@@ -194,18 +196,18 @@ def test_incremental_updates_recheck_member_proofs_and_keep_incoming_calls(tmp_p
     changed = project / ("api.hpp" if change == "qualifier" else
                          "other.cpp" if change == "second-definition" else "implementation.cpp")
     if change == "delete":
-        changed.unlink()
+        _graph_unlink(changed)
     elif change == "qualifier":
-        changed.write_text("namespace api { class Service { public: int Run() const; }; }", encoding="utf-8")
+        _graph_write_text(changed, "namespace api { class Service { public: int Run() const; }; }", encoding="utf-8")
     else:
-        changed.write_text('#include "api.hpp"\nint api::Service::Run() { return 2; }', encoding="utf-8")
+        _graph_write_text(changed, '#include "api.hpp"\nint api::Service::Run() { return 2; }', encoding="utf-8")
     if update == "cli":
         after = subprocess.run(command, env=env, cwd=tmp_path, text=True, capture_output=True)
         assert after.returncode == 0, after.stdout + after.stderr
     else:
         from graphify.watch import _rebuild_code
         assert _rebuild_code(project, changed_paths=[changed], no_cluster=True, acquire_lock=False)
-    saved = json.loads((project / "graphify-out/graph.json").read_text(encoding="utf-8"))
+    saved = json.loads(_graph_read_text(project / "graphify-out/graph.grafeo", encoding="utf-8"))
     members = _members(saved)
     assert len(members) == (2 if change == "qualifier" else 3 if change == "second-definition" else 1)
     merged = change in {"body", "new-definition"}

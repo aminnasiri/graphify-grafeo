@@ -7,6 +7,8 @@ it. A false "unchanged" ships a stale graph, so every uncertain input has to fal
 back to the full path.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, is_file as _graph_is_file, write_text as _graph_write_text
 
 import importlib
 import json
@@ -25,16 +27,12 @@ SKIP_MESSAGE = "No relevant changes"
 def _corpus(root: Path) -> Path:
     """A corpus whose graph depends on more than its own code files."""
     (root / "src").mkdir(parents=True, exist_ok=True)
-    (root / "src" / "a.ts").write_text(
-        "export const A = 1;\nexport function fa() { return A; }\n"
-    )
-    (root / "src" / "b.ts").write_text(
-        'import { fa } from "./a";\nexport const B = fa();\n'
-    )
-    (root / "src" / "m.py").write_text("def f():\n    return 1\n")
-    (root / "tsconfig.json").write_text('{"compilerOptions": {"baseUrl": "."}}\n')
-    (root / "package.json").write_text('{"name": "x", "version": "1.0.0"}\n')
-    (root / "package-lock.json").write_text('{"lockfileVersion": 3}\n')
+    _graph_write_text(root / "src" / "a.ts", "export const A = 1;\nexport function fa() { return A; }\n")
+    _graph_write_text(root / "src" / "b.ts", 'import { fa } from "./a";\nexport const B = fa();\n')
+    _graph_write_text(root / "src" / "m.py", "def f():\n    return 1\n")
+    _graph_write_text(root / "tsconfig.json", '{"compilerOptions": {"baseUrl": "."}}\n')
+    _graph_write_text(root / "package.json", '{"name": "x", "version": "1.0.0"}\n')
+    _graph_write_text(root / "package-lock.json", '{"lockfileVersion": 3}\n')
     return root
 
 
@@ -43,7 +41,7 @@ def built(tmp_path: Path) -> Path:
     """A corpus with one completed rebuild behind it (manifest stamped)."""
     root = _corpus(tmp_path / "corpus")
     assert _rebuild_code(root, acquire_lock=False) is True
-    assert (root / "graphify-out" / "manifest.json").is_file()
+    assert _graph_is_file(root / "graphify-out" / "manifest.json")
     return root
 
 
@@ -62,9 +60,9 @@ def _spy_extract(monkeypatch: pytest.MonkeyPatch) -> list:
 
 def _snapshot(root: Path) -> dict[str, bytes]:
     return {
-        p.name: p.read_bytes()
+        p.name: _graph_read_bytes(p)
         for p in sorted((root / "graphify-out").iterdir())
-        if p.is_file()
+        if _graph_is_file(p)
     }
 
 
@@ -85,7 +83,7 @@ def test_new_file_takes_the_full_path(
     built: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
     calls = _spy_extract(monkeypatch)
-    (built / "src" / "c.ts").write_text("export const C = 3;\n")
+    _graph_write_text(built / "src" / "c.ts", "export const C = 3;\n")
 
     assert _rebuild_code(built, acquire_lock=False) is True
     assert SKIP_MESSAGE not in capsys.readouterr().out
@@ -96,7 +94,7 @@ def test_deleted_file_takes_the_full_path(
     built: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
     calls = _spy_extract(monkeypatch)
-    (built / "src" / "m.py").unlink()
+    _graph_unlink(built / "src" / "m.py")
 
     assert _rebuild_code(built, acquire_lock=False) is True
     assert SKIP_MESSAGE not in capsys.readouterr().out
@@ -107,9 +105,7 @@ def test_edited_tsconfig_takes_the_full_path(
     built: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
     calls = _spy_extract(monkeypatch)
-    (built / "tsconfig.json").write_text(
-        '{"compilerOptions": {"baseUrl": ".", "paths": {"@app/*": ["src/*"]}}}\n'
-    )
+    _graph_write_text(built / "tsconfig.json", '{"compilerOptions": {"baseUrl": ".", "paths": {"@app/*": ["src/*"]}}}\n')
 
     assert _rebuild_code(built, acquire_lock=False) is True
     assert SKIP_MESSAGE not in capsys.readouterr().out
@@ -120,7 +116,7 @@ def test_edited_package_json_takes_the_full_path(
     built: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
     calls = _spy_extract(monkeypatch)
-    (built / "package.json").write_text('{"name": "x", "version": "2.0.0"}\n')
+    _graph_write_text(built / "package.json", '{"name": "x", "version": "2.0.0"}\n')
 
     assert _rebuild_code(built, acquire_lock=False) is True
     assert SKIP_MESSAGE not in capsys.readouterr().out
@@ -133,9 +129,7 @@ def test_edited_lock_file_takes_the_full_path(
     # The lock files are resolution inputs detect() skips by name, so they are
     # the ones the manifest has to carry under the resolution bucket.
     calls = _spy_extract(monkeypatch)
-    (built / "package-lock.json").write_text(
-        '{"lockfileVersion": 3, "packages": {"node_modules/x": {}}}\n'
-    )
+    _graph_write_text(built / "package-lock.json", '{"lockfileVersion": 3, "packages": {"node_modules/x": {}}}\n')
 
     assert _rebuild_code(built, acquire_lock=False) is True
     assert SKIP_MESSAGE not in capsys.readouterr().out
@@ -189,7 +183,7 @@ def test_force_does_not_use_the_gate(
 def test_gate_fails_closed_without_a_manifest(
     built: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
-    (built / "graphify-out" / "manifest.json").unlink()
+    _graph_unlink(built / "graphify-out" / "manifest.json")
     calls = _spy_extract(monkeypatch)
 
     assert _rebuild_code(built, acquire_lock=False) is True
@@ -225,7 +219,7 @@ def test_inputs_unchanged_treats_a_scanned_file_with_no_manifest_row_as_changed(
     assert str((built / "src" / "m.py").resolve()) in manifest
 
     manifest = {k: v for k, v in manifest.items() if not k.endswith("m.py")}
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    _graph_write_text(manifest_path, json.dumps(manifest), encoding="utf-8")
 
     detected = detect(built)
     assert _inputs_unchanged(detected, manifest_path, built) is False
@@ -238,16 +232,16 @@ def test_scan_digest_tracks_the_file_set_not_the_contents(built: Path) -> None:
     from graphify.watch import _scan_digest
 
     before = _scan_digest(detect(built))
-    (built / "src" / "new.py").write_text("def added(): return 1\n")
+    _graph_write_text(built / "src" / "new.py", "def added(): return 1\n")
     assert _scan_digest(detect(built)) != before
 
-    (built / "src" / "new.py").unlink()
+    _graph_unlink(built / "src" / "new.py")
     assert _scan_digest(detect(built)) == before
 
 
 # --- #4748: a stamp may only describe outputs that are fully on disk ----------
 #
-# A stamp is a promise that the next run may skip. Writing one over a graph.json
+# A stamp is a promise that the next run may skip. Writing one over a graph.grafeo
 # that a failed or partial write left behind turns that promise into a stale
 # graph nothing repairs. Failing to skip only costs time, so every test here
 # expects the conservative direction.
@@ -258,7 +252,7 @@ FAILURE_TARGETS = [
     # Each one aborts the run after extraction, at a different write point, so
     # the next run has to notice that the rebuild never finished.
     "graphify.cluster.cluster",
-    "graphify.watch.os_replace_with_fallback",
+    "graphify.store.io.write_graph",
     "graphify.watch._reconcile_graph_html",
 ]
 
@@ -276,7 +270,7 @@ def test_a_rebuild_that_never_finishes_its_outputs_is_not_skipped_next_run(
 
     # A topology change, so this run has real work and cannot take one of the
     # no-rewrite short circuits.
-    (built / "src" / "m.py").write_text("def renamed_marker():\n    return 1\n")
+    _graph_write_text(built / "src" / "m.py", "def renamed_marker():\n    return 1\n")
 
     monkeypatch.setattr(module, attr, boom)
     try:
@@ -290,45 +284,29 @@ def test_a_rebuild_that_never_finishes_its_outputs_is_not_skipped_next_run(
     assert calls, "a rebuild that never finished its outputs must not be skipped"
 
 
-def test_partially_published_graph_is_never_stamped(
-    built: Path, monkeypatch: pytest.MonkeyPatch, capsys
-) -> None:
-    # The atomic replace exists because a crash mid-write must not leave a
-    # truncated graph.json (#2689). Its non-atomic fallback can still land part of
-    # the bytes and report success. Stamping that file records the truncated size,
-    # and the next run matches the stamp and skips over the damage forever.
-    graph = built / "graphify-out" / "graph.json"
+def test_failed_database_transaction_is_never_stamped(built, monkeypatch, capsys):
+    from graphify.store import GrafeoStore
+    from graphify.store.io import connection
+    graph = built / "graphify-out" / "graph.grafeo"
     stamp = built / "graphify-out" / STAMP_NAME
-    stamp_before = stamp.read_bytes()
+    before_stamp = _graph_read_bytes(stamp)
+    with connection(graph) as store:
+        before = store.snapshot()
+    real = GrafeoStore.upsert_nodes
 
-    real_replace = watch_mod.os_replace_with_fallback
+    def fail(self, nodes):
+        real(self, nodes)
+        raise RuntimeError("interrupted native transaction")
 
-    def partial_publish(src, dst):
-        if Path(dst).name == "graph.json":
-            Path(dst).write_bytes(Path(src).read_bytes()[:40])
-            try:
-                Path(src).unlink()
-            except OSError:
-                pass
-            return
-        return real_replace(src, dst)
-
-    (built / "src" / "m.py").write_text("def renamed_marker():\n    return 1\n")
-    monkeypatch.setattr(watch_mod, "os_replace_with_fallback", partial_publish)
-    try:
-        _rebuild_code(built, acquire_lock=False)
-    finally:
-        monkeypatch.setattr(watch_mod, "os_replace_with_fallback", real_replace)
-
-    assert graph.stat().st_size == 40, "the publish must have landed incomplete bytes"
-    assert stamp.read_bytes() == stamp_before, (
-        "a partial graph.json must not be stamped"
-    )
-
-    _rebuild_code(built, acquire_lock=False)
-    assert SKIP_MESSAGE not in capsys.readouterr().out, (
-        "the next run must not skip over a partially written graph"
-    )
+    _graph_write_text(built / "src" / "m.py", "def renamed_marker():\n    return 1\n")
+    with monkeypatch.context() as patch:
+        patch.setattr(GrafeoStore, "upsert_nodes", fail)
+        assert _rebuild_code(built, acquire_lock=False) is False
+    with connection(graph) as store:
+        assert store.snapshot() == before
+    assert _graph_read_bytes(stamp) == before_stamp
+    assert _rebuild_code(built, acquire_lock=False)
+    assert SKIP_MESSAGE not in capsys.readouterr().out
 
 
 def test_write_build_state_refuses_a_graph_that_is_not_a_whole_json_object(
@@ -336,14 +314,14 @@ def test_write_build_state_refuses_a_graph_that_is_not_a_whole_json_object(
 ) -> None:
     from graphify.watch import _write_build_state
 
-    graph = built / "graphify-out" / "graph.json"
+    graph = built / "graphify-out" / "graph.grafeo"
     stamp = built / "graphify-out" / STAMP_NAME
-    graph.write_bytes(graph.read_bytes()[:40])
-    stamp.unlink()
+    graph.write_bytes(_graph_read_bytes(graph)[:40])
+    _graph_unlink(stamp)
 
     _write_build_state(built / "graphify-out", {}, full_clean=True)
 
-    assert not stamp.exists()
+    assert not _graph_exists(stamp)
 
 
 def test_write_build_state_refuses_while_a_html_rerender_is_pending(
@@ -353,11 +331,11 @@ def test_write_build_state_refuses_while_a_html_rerender_is_pending(
     from graphify.watch import _write_build_state
 
     stamp = built / "graphify-out" / STAMP_NAME
-    stamp.unlink()
+    _graph_unlink(stamp)
     # The marker means graph.html does not describe the graph yet, so there is no
     # consistent state to promise the next run.
     (built / "graphify-out" / _HTML_STALE_MARKER).touch()
 
     _write_build_state(built / "graphify-out", {}, full_clean=True)
 
-    assert not stamp.exists()
+    assert not _graph_exists(stamp)

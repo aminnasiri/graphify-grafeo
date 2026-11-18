@@ -66,7 +66,7 @@ Begitu saja. Anda mendapatkan **tiga berkas**:
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 Graf yang disimpan menyertakan `graph.schema_version` sehingga integrasi dapat mendeteksi
@@ -117,7 +117,7 @@ Apa yang Anda dapatkan langsung dari awal:
 | **God nodes** | Konsep yang paling banyak terhubung, sehingga Anda melihat ke mana semuanya mengalir |
 | **Communities** | Graf dibagi menjadi subsistem (Leiden), dengan label tanpa LLM |
 | **Cross-file links** | `calls` / `imports` / `inherits` / `mixes_in` diselesaikan lintas berkas di ~40 bahasa melalui tree-sitter AST |
-| **Query, path, explain** | Ajukan pertanyaan, telusuri jalur antara dua hal, atau jelaskan satu konsep, semuanya terhadap `graph.json` |
+| **Query, path, explain** | Ajukan pertanyaan, telusuri jalur antara dua hal, atau jelaskan satu konsep, semuanya terhadap `graph.grafeo` |
 | **Rationale + doc refs** | Komentar `# NOTE:` / `# WHY:` dan kutipan ADR/RFC menjadi node kelas satu yang tertaut ke kode |
 | **Beyond code** | Dokumen, PDF, gambar, dan video/audio semuanya dipetakan ke graf yang sama |
 | **Local-first** | Kode diurai secara lokal dengan tree-sitter (tanpa LLM, tidak ada yang keluar dari mesin Anda); hanya tahap semantik atas dokumen/media yang memanggil backend, dan hanya jika Anda mengonfigurasi satu |
@@ -402,7 +402,7 @@ Commit atau bagikan graf agar seluruh tim Anda meng-query konteks yang sama, dan
 
 ## Menggunakan graf secara langsung
 
-Di luar asisten AI Anda, query `graph.json` langsung dari CLI dengan `graphify query`, `graphify path`, dan `graphify explain`. Nama yang cocok dengan beberapa node akan ditolak dengan kandidatnya didaftarkan alih-alih ditebak. Skrip dapat membaca hasilnya dari exit code: `0` sebuah jawaban, `3` nama yang ambigu, `4` tidak ada node yang cocok. Lihat **[Ask better graph questions](https://docs.graphify.com/guides/querying)** dan **[query reference](https://docs.graphify.com/reference/query)**.
+Di luar asisten AI Anda, query `graph.grafeo` langsung dari CLI dengan `graphify query`, `graphify path`, dan `graphify explain`. Nama yang cocok dengan beberapa node akan ditolak dengan kandidatnya didaftarkan alih-alih ditebak. Skrip dapat membaca hasilnya dari exit code: `0` sebuah jawaban, `3` nama yang ambigu, `4` tidak ada node yang cocok. Lihat **[Ask better graph questions](https://docs.graphify.com/guides/querying)** dan **[query reference](https://docs.graphify.com/reference/query)**.
 
 ---
 

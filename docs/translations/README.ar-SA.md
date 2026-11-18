@@ -66,7 +66,7 @@ graphify install               # detects your assistant and registers the skill
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 يتضمن الرسم البياني المحفوظ `graph.schema_version` ليتمكن التكامل من اكتشاف
@@ -117,7 +117,7 @@ Shortest path (3 hops):
 | **God nodes** | أكثر المفاهيم اتصالًا، فترى ما يتدفق كل شيء من خلاله |
 | **Communities** | الرسم البياني مقسّم إلى أنظمة فرعية (Leiden)، بتسميات بلا نموذج لغوي كبير |
 | **Cross-file links** | `calls` / `imports` / `inherits` / `mixes_in` محلولة عبر ~40 لغة بواسطة tree-sitter AST |
-| **Query, path, explain** | اطرح سؤالًا، أو تتبّع المسار بين شيئين، أو اشرح مفهومًا واحدًا، كل ذلك مقابل `graph.json` |
+| **Query, path, explain** | اطرح سؤالًا، أو تتبّع المسار بين شيئين، أو اشرح مفهومًا واحدًا، كل ذلك مقابل `graph.grafeo` |
 | **Rationale + doc refs** | تعليقات `# NOTE:` / `# WHY:` واستشهادات ADR/RFC تصبح عقدًا من الدرجة الأولى مرتبطة بالكود |
 | **Beyond code** | المستندات وملفات PDF والصور والفيديو/الصوت كلها تُرسم في الرسم البياني ذاته |
 | **Local-first** | يُحلَّل الكود محليًا بـ tree-sitter (بلا نموذج لغوي كبير، ولا شيء يغادر جهازك)؛ فقط التمريرة الدلالية على المستندات/الوسائط تستدعي خلفية، وفقط إذا هيّأت واحدة |
@@ -402,7 +402,7 @@ viz_node_limit=0
 
 ## Using the graph directly
 
-إلى جانب مساعد الذكاء الاصطناعي لديك، استعلم عن `graph.json` مباشرة من CLI بـ `graphify query` و`graphify path` و`graphify explain`. الاسم الذي يطابق عدة عقد يُرفض بسرد المرشحين بدلًا من التخمين. يمكن للسكربتات قراءة النتيجة من رمز الخروج: `0` إجابة، `3` اسم غامض، `4` لا عقدة مطابقة. راجع **[Ask better graph questions](https://docs.graphify.com/guides/querying)** و**[query reference](https://docs.graphify.com/reference/query)**.
+إلى جانب مساعد الذكاء الاصطناعي لديك، استعلم عن `graph.grafeo` مباشرة من CLI بـ `graphify query` و`graphify path` و`graphify explain`. الاسم الذي يطابق عدة عقد يُرفض بسرد المرشحين بدلًا من التخمين. يمكن للسكربتات قراءة النتيجة من رمز الخروج: `0` إجابة، `3` اسم غامض، `4` لا عقدة مطابقة. راجع **[Ask better graph questions](https://docs.graphify.com/guides/querying)** و**[query reference](https://docs.graphify.com/reference/query)**.
 
 ---
 

@@ -9,7 +9,7 @@ root-mismatch prune fallbacks (#2446).
   The guard now diffs the ON-DISK baseline by node identity (mirroring
   watch._check_shrink) and excuses only losses explained by this run's own
   re-extraction (same tier) or an explicit prune.
-- #2446: with `root` omitted and a non-standard layout (graph.json not under
+- #2446: with `root` omitted and a non-standard layout (graph.grafeo not under
   <root>/graphify-out/), the inferred root was wrong, absolute prune_sources
   matched nothing, and build_merge reported "already clean" while counting
   EVERY prune entry as pruned-from. Now: a derived-root fallback
@@ -18,6 +18,8 @@ root-mismatch prune fallbacks (#2446).
   on a true zero-match.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import json
 from pathlib import Path
@@ -43,16 +45,13 @@ def _node(i: int, sf: str) -> dict:
 
 def _write_graph(graph_path: Path, nodes, edges=(), hyperedges=()) -> None:
     graph_path.parent.mkdir(parents=True, exist_ok=True)
-    graph_path.write_text(
-        json.dumps({"nodes": list(nodes), "edges": list(edges),
-                    "hyperedges": list(hyperedges)}),
-        encoding="utf-8",
-    )
+    _graph_write_text(graph_path, json.dumps({"nodes": list(nodes), "edges": list(edges),
+                    "hyperedges": list(hyperedges)}), encoding="utf-8")
 
 
 def _seed_12(tmp_path: Path) -> Path:
     """Standard layout, 12 nodes: 10 from a.md + 2 from b.md."""
-    gp = tmp_path / "graphify-out" / "graph.json"
+    gp = tmp_path / "graphify-out" / "graph.grafeo"
     _write_graph(
         gp,
         [_node(i, "a.md") for i in range(10)] + [_node(i, "b.md") for i in range(2)],
@@ -84,7 +83,7 @@ def test_unexplained_loss_blocked(tmp_path, monkeypatch):
     """A build that drops a node from an UNTOUCHED file (neither re-extracted
     nor pruned this run) must raise instead of silently destroying it — the
     exact failure the dead #479 guard waved through (#2497)."""
-    gp = tmp_path / "graphify-out" / "graph.json"
+    gp = tmp_path / "graphify-out" / "graph.grafeo"
     _write_graph(
         gp,
         [_node(i, "a.md") for i in range(10)]
@@ -128,7 +127,7 @@ def test_replacement_is_reported_and_own_file_loss_excused(tmp_path, capsys):
 def test_dedup_skip_preserved(tmp_path, monkeypatch):
     """dedup=True legitimately merges ids, so the guard stays off there — even
     for a loss the dedup=False path would refuse."""
-    gp = tmp_path / "graphify-out" / "graph.json"
+    gp = tmp_path / "graphify-out" / "graph.grafeo"
     _write_graph(
         gp,
         [_node(i, "a.md") for i in range(10)]
@@ -151,23 +150,23 @@ def test_dedup_skip_preserved(tmp_path, monkeypatch):
 
 def test_no_existing_graph_path_unchanged(tmp_path):
     """Fresh/no-graph merges never trip the guard."""
-    gp = tmp_path / "graphify-out" / "graph.json"  # does not exist
+    gp = tmp_path / "graphify-out" / "graph.grafeo"  # does not exist
     G = build_merge([{"nodes": [_node(0, "a.md")], "edges": []}], gp, dedup=False)
     assert G.number_of_nodes() == 1
-    G2 = build_merge([], tmp_path / "elsewhere" / "graph.json", dedup=False)
+    G2 = build_merge([], tmp_path / "elsewhere" / "graph.grafeo", dedup=False)
     assert G2.number_of_nodes() == 0
 
 
 # ── #2446: absolute prune_sources with a wrong/missing inferred root ──────────
 
 def test_absolute_prune_custom_layout_derives_root(tmp_path):
-    """graph.json directly in <root> (no graphify-out dir, no marker): the
+    """graph.grafeo directly in <root> (no graphify-out dir, no marker): the
     grandparent heuristic guesses wrong, so absolute prune entries used to
     match nothing and silently no-op. The derived-root fallback must recover
     the scan root by suffix-matching and prune correctly."""
     root = tmp_path / "proj"
     root.mkdir()
-    gp = root / "graph.json"
+    gp = root / "graph.grafeo"
     _write_graph(gp, [_node(i, "a.md") for i in range(2)] + [_node(0, "b.md")])
     G = build_merge([], gp, prune_sources=[str(root / "b.md")], dedup=False)
     sfs = {d.get("source_file") for _, d in G.nodes(data=True)}
@@ -181,8 +180,8 @@ def test_absolute_prune_standard_layout_marker_still_prunes(tmp_path):
     root = tmp_path / "repo"
     out = root / "graphify-out"
     out.mkdir(parents=True)
-    (out / ".graphify_root").write_text(str(root), encoding="utf-8")
-    gp = out / "graph.json"
+    _graph_write_text(out / ".graphify_root", str(root), encoding="utf-8")
+    gp = out / "graph.grafeo"
     _write_graph(gp, [_node(0, "keep.md"), _node(0, "gone.md")])
     G = build_merge([], gp, prune_sources=[str(root / "gone.md")], dedup=False)
     assert {d["source_file"] for _, d in G.nodes(data=True)} == {"keep.md"}
@@ -193,7 +192,7 @@ def test_zero_match_prune_warns_instead_of_already_clean(tmp_path, capsys):
     stored source_file) and suggest root=, not claim the graph is clean."""
     root = tmp_path / "repo"
     (root / "graphify-out").mkdir(parents=True)
-    gp = root / "graphify-out" / "graph.json"
+    gp = root / "graphify-out" / "graph.grafeo"
     _write_graph(gp, [_node(0, "a.md")])
     G = build_merge(
         [], gp, prune_sources=["/nowhere/else/x.md"], dedup=False
@@ -212,7 +211,7 @@ def test_partial_match_reports_only_matched_entry_count(tmp_path, capsys):
     be 1 (the entry that matched), not len(prune_sources) == 2."""
     root = tmp_path / "repo"
     (root / "graphify-out").mkdir(parents=True)
-    gp = root / "graphify-out" / "graph.json"
+    gp = root / "graphify-out" / "graph.grafeo"
     _write_graph(gp, [_node(0, "a.md"), _node(0, "b.md"), _node(1, "b.md")])
     G = build_merge(
         [], gp,
@@ -229,7 +228,7 @@ def test_merge_raw_extraction_absolute_prune_custom_layout(tmp_path):
     derived-root fallback (#2446 parity)."""
     root = tmp_path / "proj"
     root.mkdir()
-    gp = root / "graph.json"
+    gp = root / "graph.grafeo"
     _write_graph(gp, [_node(0, "a.md"), _node(0, "b.md")])
     new = {"nodes": [], "edges": [], "hyperedges": []}
     merged = merge_raw_extraction(new, gp, prune_sources=[str(root / "b.md")])

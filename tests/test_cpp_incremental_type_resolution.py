@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 """Public incremental rebuilds retain unchanged C++ alias/base/include facts."""
 import importlib.util
 import json
@@ -18,17 +20,15 @@ pytestmark = pytest.mark.skipif(
 
 
 def _corpus(tmp_path):
-    (tmp_path / "worker.hpp").write_text("struct Worker { void Work(); };", encoding="utf-8")
-    (tmp_path / "types.hpp").write_text(
-        '#include "worker.hpp"\nstruct Base { using Alias = Worker; Alias actions; }; struct Derived : Base {};',
-        encoding="utf-8")
+    _graph_write_text(tmp_path / "worker.hpp", "struct Worker { void Work(); };", encoding="utf-8")
+    _graph_write_text(tmp_path / "types.hpp", '#include "worker.hpp"\nstruct Base { using Alias = Worker; Alias actions; }; struct Derived : Base {};', encoding="utf-8")
     caller = tmp_path / "use.cpp"
-    caller.write_text('#include "types.hpp"\nvoid Run(Derived& x) { x.actions.Work(); }', encoding="utf-8")
+    _graph_write_text(caller, '#include "types.hpp"\nvoid Run(Derived& x) { x.actions.Work(); }', encoding="utf-8")
     return caller
 
 
 def _assert_call(tmp_path):
-    graph = json.loads((tmp_path / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+    graph = json.loads(_graph_read_text(tmp_path / "graphify-out" / "graph.grafeo", encoding="utf-8"))
     nodes = {n["id"]: n for n in graph["nodes"]}
     assert any(nodes[e["source"]]["label"] == "Run()"
                and nodes[e["target"]]["label"] == ".Work()"
@@ -48,7 +48,7 @@ def test_watcher_rebuild_retains_unchanged_cpp_type_facts(tmp_path, monkeypatch)
         return real(paths, **kwargs)
 
     monkeypatch.setattr(extract_mod, "extract", record)
-    caller.write_text(caller.read_text(encoding="utf-8") + "\n// changed caller\n", encoding="utf-8")
+    _graph_write_text(caller, caller.read_text(encoding="utf-8") + "\n// changed caller\n", encoding="utf-8")
     assert _rebuild_code(tmp_path, incremental=True, no_cluster=True, acquire_lock=False)
     assert batches == [["use.cpp"]]
     _assert_call(tmp_path)
@@ -65,6 +65,6 @@ def test_cli_extract_retains_unchanged_cpp_type_facts(tmp_path):
 
     run()
     _assert_call(tmp_path)
-    caller.write_text(caller.read_text(encoding="utf-8") + "\n// changed caller\n", encoding="utf-8")
+    _graph_write_text(caller, caller.read_text(encoding="utf-8") + "\n// changed caller\n", encoding="utf-8")
     run()
     _assert_call(tmp_path)

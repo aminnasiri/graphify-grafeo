@@ -38,7 +38,7 @@ Turn any folder of files into a navigable knowledge graph with community detecti
 graphify is built around Andrej Karpathy's /raw folder workflow: drop anything into a folder - papers, tweets, screenshots, code, notes - and get a structured knowledge graph that shows you what you didn't know was connected.
 
 Three things it does that your AI assistant alone cannot:
-1. **Persistent graph** - relationships are stored in `graphify-out/graph.json` and survive across sessions. Ask questions weeks later without re-reading everything.
+1. **Persistent graph** - relationships are stored in `graphify-out/graph.grafeo` and survive across sessions. Ask questions weeks later without re-reading everything.
 2. **Honest audit trail** - every edge is tagged EXTRACTED, INFERRED, or AMBIGUOUS. You know what was found vs invented.
 3. **Cross-document surprise** - community detection finds connections between concepts in different files that you would never think to ask about directly.
 
@@ -440,7 +440,7 @@ detection  = json.loads(Path('.graphify_detect.json').read_text())
 INPUT_PATH = Path('graphify-out/.graphify_root').read_text(encoding=\"utf-8-sig\").strip()
 
 G = build_from_json(extraction, directed=IS_DIRECTED)
-# Guard BEFORE any write: an empty extraction must not clobber a good graph.json /
+# Guard BEFORE any write: an empty extraction must not clobber a good graph.grafeo /
 # GRAPH_REPORT.md / analysis sidecar. Check immediately after build (#1392).
 if G.number_of_nodes() == 0:
     print('ERROR: Graph is empty - extraction produced no nodes.')
@@ -456,11 +456,11 @@ labels = {cid: 'Community ' + str(cid) for cid in communities}
 questions = suggest_questions(G, communities, labels)
 
 # Persist the graph first and only write the report/analysis if it actually
-# persisted - to_json refuses to shrink an existing graph.json (#479), and a
+# persisted - to_json refuses to shrink an existing graph.grafeo (#479), and a
 # report describing a graph we did not write would be a lie (#1392).
-wrote = to_json(G, communities, 'graphify-out/graph.json')
+wrote = to_json(G, communities, 'graphify-out/graph.grafeo')
 if not wrote:
-    print('ERROR: refused to shrink graphify-out/graph.json (fewer nodes than the existing graph). Run a full rebuild to be safe.')
+    print('ERROR: refused to shrink graphify-out/graph.grafeo (fewer nodes than the existing graph). Run a full rebuild to be safe.')
     raise SystemExit(1)
 report = generate(G, communities, cohesion, labels, gods, surprises, detection, tokens, INPUT_PATH, suggested_questions=questions)
 Path('graphify-out/GRAPH_REPORT.md').write_text(report)
@@ -472,7 +472,7 @@ analysis = {
     'surprises': surprises,
     'questions': questions,
 }
-Path('.graphify_analysis.json').write_text(json.dumps(analysis, indent=2))
+__import__('graphify.store.io', fromlist=['write_state_text']).write_state_text(Path('.graphify_analysis.json'), json.dumps(analysis, indent=2))
 print(f'Graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges, {len(communities)} communities')
 "
 ```
@@ -499,7 +499,7 @@ from pathlib import Path
 
 extraction = json.loads(Path('.graphify_extract.json').read_text())
 detection  = json.loads(Path('.graphify_detect.json').read_text())
-analysis   = json.loads(Path('.graphify_analysis.json').read_text())
+analysis   = __import__('graphify.store.io', fromlist=['read_json']).read_json(Path('.graphify_analysis.json'))
 INPUT_PATH = Path('graphify-out/.graphify_root').read_text(encoding=\"utf-8-sig\").strip()
 
 G = build_from_json(extraction, directed=IS_DIRECTED)
@@ -515,13 +515,13 @@ questions = suggest_questions(G, communities, labels)
 
 report = generate(G, communities, cohesion, labels, analysis['gods'], analysis['surprises'], detection, tokens, INPUT_PATH, suggested_questions=questions)
 Path('graphify-out/GRAPH_REPORT.md').write_text(report)
-Path('.graphify_labels.json').write_text(json.dumps({str(k): v for k, v in labels.items()}))
-# Re-export so graph.json nodes carry the curated community_name (#2490).
+__import__('graphify.store.io', fromlist=['write_state_text']).write_state_text(Path('.graphify_labels.json'), json.dumps({str(k): v for k, v in labels.items()}))
+# Re-export so graph.grafeo nodes carry the curated community_name (#2490).
 # Same extraction as Step 4, so the #479 shrink-guard passes on node count;
 # if it still refuses, surface the guard message - do not force past it.
-wrote = to_json(G, communities, 'graphify-out/graph.json', community_labels=labels)
+wrote = to_json(G, communities, 'graphify-out/graph.grafeo', community_labels=labels)
 if not wrote:
-    print('ERROR: refused to shrink graphify-out/graph.json (fewer nodes than the existing graph). Run a full rebuild to be safe.')
+    print('ERROR: refused to shrink graphify-out/graph.grafeo (fewer nodes than the existing graph). Run a full rebuild to be safe.')
 print('Report updated with community labels')
 "
 ```
@@ -543,8 +543,8 @@ from graphify.export import to_obsidian, to_canvas
 from pathlib import Path
 
 extraction = json.loads(Path('.graphify_extract.json').read_text())
-analysis   = json.loads(Path('.graphify_analysis.json').read_text())
-labels_raw = json.loads(Path('.graphify_labels.json').read_text()) if Path('.graphify_labels.json').exists() else {}
+analysis   = __import__('graphify.store.io', fromlist=['read_json']).read_json(Path('.graphify_analysis.json'))
+labels_raw = __import__('graphify.store.io', fromlist=['read_json']).read_json(__import__('graphify.store.io', fromlist=['state_exists']).state_exists(Path('.graphify_labels.json')) if Path('.graphify_labels.json')) else {}
 
 G = build_from_json(extraction, directed=IS_DIRECTED)
 communities = {int(k): v for k, v in analysis['communities'].items()}
@@ -574,8 +574,8 @@ from graphify.export import to_html
 from pathlib import Path
 
 extraction = json.loads(Path('.graphify_extract.json').read_text())
-analysis   = json.loads(Path('.graphify_analysis.json').read_text())
-labels_raw = json.loads(Path('.graphify_labels.json').read_text()) if Path('.graphify_labels.json').exists() else {}
+analysis   = __import__('graphify.store.io', fromlist=['read_json']).read_json(Path('.graphify_analysis.json'))
+labels_raw = __import__('graphify.store.io', fromlist=['read_json']).read_json(__import__('graphify.store.io', fromlist=['state_exists']).state_exists(Path('.graphify_labels.json')) if Path('.graphify_labels.json')) else {}
 
 G = build_from_json(extraction, directed=IS_DIRECTED)
 communities = {int(k): v for k, v in analysis['communities'].items()}
@@ -617,7 +617,7 @@ from graphify.export import push_to_neo4j
 from pathlib import Path
 
 extraction = json.loads(Path('.graphify_extract.json').read_text())
-analysis   = json.loads(Path('.graphify_analysis.json').read_text())
+analysis   = __import__('graphify.store.io', fromlist=['read_json']).read_json(Path('.graphify_analysis.json'))
 G = build_from_json(extraction, directed=IS_DIRECTED)
 communities = {int(k): v for k, v in analysis['communities'].items()}
 
@@ -638,8 +638,8 @@ from graphify.export import to_svg
 from pathlib import Path
 
 extraction = json.loads(Path('.graphify_extract.json').read_text())
-analysis   = json.loads(Path('.graphify_analysis.json').read_text())
-labels_raw = json.loads(Path('.graphify_labels.json').read_text()) if Path('.graphify_labels.json').exists() else {}
+analysis   = __import__('graphify.store.io', fromlist=['read_json']).read_json(Path('.graphify_analysis.json'))
+labels_raw = __import__('graphify.store.io', fromlist=['read_json']).read_json(__import__('graphify.store.io', fromlist=['state_exists']).state_exists(Path('.graphify_labels.json')) if Path('.graphify_labels.json')) else {}
 
 G = build_from_json(extraction, directed=IS_DIRECTED)
 communities = {int(k): v for k, v in analysis['communities'].items()}
@@ -660,7 +660,7 @@ from graphify.export import to_graphml
 from pathlib import Path
 
 extraction = json.loads(Path('.graphify_extract.json').read_text())
-analysis   = json.loads(Path('.graphify_analysis.json').read_text())
+analysis   = __import__('graphify.store.io', fromlist=['read_json']).read_json(Path('.graphify_analysis.json'))
 
 G = build_from_json(extraction, directed=IS_DIRECTED)
 communities = {int(k): v for k, v in analysis['communities'].items()}
@@ -673,7 +673,7 @@ print('graph.graphml written - open in Gephi, yEd, or any GraphML tool')
 ### Step 7d - MCP server (only if --mcp flag)
 
 ```bash
-python3 -m graphify.serve graphify-out/graph.json
+python3 -m graphify.serve graphify-out/graph.grafeo
 ```
 
 This starts a stdio MCP server that exposes tools: `query_graph`, `get_node`, `get_section`, `get_neighbors`, `get_community`, `god_nodes`, `graph_stats`, `shortest_path`. Add to Claude Desktop or any MCP-compatible agent orchestrator so other agents can query the graph live.
@@ -684,7 +684,7 @@ To configure in Claude Desktop, add to `claude_desktop_config.json`:
   "mcpServers": {
     "graphify": {
       "command": "python3",
-      "args": ["-m", "graphify.serve", "/absolute/path/to/graphify-out/graph.json"]
+      "args": ["-m", "graphify.serve", "/absolute/path/to/graphify-out/graph.grafeo"]
     }
   }
 }
@@ -701,7 +701,7 @@ from graphify.benchmark import run_benchmark, print_benchmark
 from pathlib import Path
 
 detection = json.loads(Path('.graphify_detect.json').read_text())
-result = run_benchmark('graphify-out/graph.json', corpus_words=detection['total_words'])
+result = run_benchmark('graphify-out/graph.grafeo', corpus_words=detection['total_words'])
 print_benchmark(result)
 "
 ```
@@ -767,7 +767,7 @@ Graph complete. Outputs in PATH_TO_DIR/graphify-out/
 
   graph.html            - interactive graph, open in browser
   GRAPH_REPORT.md       - audit report
-  graph.json            - raw graph data
+  graph.grafeo            - raw graph data
   obsidian/             - Obsidian vault (only if --obsidian was given)
 ```
 
@@ -887,7 +887,7 @@ import networkx as nx
 from pathlib import Path
 
 # Load existing graph
-existing_data = json.loads(Path('graphify-out/graph.json').read_text())
+existing_data = __import__('graphify.store.io', fromlist=['read_json']).read_json(Path('graphify-out/graph.grafeo'))
 G_existing = json_graph.node_link_graph(existing_data, edges='links')
 
 # Load new extraction
@@ -929,14 +929,14 @@ if old_data:
 "
 ```
 
-Before the merge step, save the old graph: `cp graphify-out/graph.json .graphify_old.json`
+Before the merge step, save the old graph: `graphify export json --out .graphify_old.json`
 Clean up after: `rm -f .graphify_old.json`
 
 ---
 
 ## For --cluster-only
 
-Skip Steps 1–3. Load the existing graph from `graphify-out/graph.json` and re-run clustering:
+Skip Steps 1–3. Load the existing graph from `graphify-out/graph.grafeo` and re-run clustering:
 
 ```bash
 $(cat graphify-out/.graphify_python) -c "
@@ -949,7 +949,7 @@ from networkx.readwrite import json_graph
 import networkx as nx
 from pathlib import Path
 
-data = json.loads(Path('graphify-out/graph.json').read_text())
+data = __import__('graphify.store.io', fromlist=['read_json']).read_json(Path('graphify-out/graph.grafeo'))
 G = json_graph.node_link_graph(data, edges='links')
 
 detection = {'total_files': 0, 'total_words': 99999, 'needs_graph': True, 'warning': None,
@@ -965,8 +965,8 @@ labels = {cid: 'Community ' + str(cid) for cid in communities}
 report = generate(G, communities, cohesion, labels, gods, surprises, detection, tokens, '.')
 Path('graphify-out/GRAPH_REPORT.md').write_text(report)
 # No community_labels here - 'labels' are still placeholders at this point;
-# Step 5 re-exports graph.json with the curated names (#2490).
-to_json(G, communities, 'graphify-out/graph.json')
+# Step 5 re-exports graph.grafeo with the curated names (#2490).
+to_json(G, communities, 'graphify-out/graph.grafeo')
 
 analysis = {
     'communities': {str(k): v for k, v in communities.items()},
@@ -974,7 +974,7 @@ analysis = {
     'gods': gods,
     'surprises': surprises,
 }
-Path('.graphify_analysis.json').write_text(json.dumps(analysis, indent=2))
+__import__('graphify.store.io', fromlist=['write_state_text']).write_state_text(Path('.graphify_analysis.json'), json.dumps(analysis, indent=2))
 print(f'Re-clustered: {len(communities)} communities')
 "
 ```
@@ -996,14 +996,14 @@ First check the graph exists:
 ```bash
 $(cat graphify-out/.graphify_python) -c "
 from pathlib import Path
-if not Path('graphify-out/graph.json').exists():
+if not Path('graphify-out/graph.grafeo').exists():
     print('ERROR: No graph found. Run /graphify <path> first to build the graph.')
     raise SystemExit(1)
 "
 ```
 If it fails, stop and tell the user to run `/graphify <path>` first.
 
-Load `graphify-out/graph.json`, then:
+Load `graphify-out/graph.grafeo`, then:
 
 1. Find the 1-3 nodes whose label best matches key terms in the question.
 2. Run the appropriate traversal from each starting node.
@@ -1018,7 +1018,7 @@ from networkx.readwrite import json_graph
 import networkx as nx
 from pathlib import Path
 
-data = json.loads(Path('graphify-out/graph.json').read_text())
+data = __import__('graphify.store.io', fromlist=['read_json']).read_json(Path('graphify-out/graph.grafeo'))
 G = json_graph.node_link_graph(data, edges='links')
 
 question = 'QUESTION'
@@ -1120,7 +1120,7 @@ First check the graph exists:
 ```bash
 $(cat graphify-out/.graphify_python) -c "
 from pathlib import Path
-if not Path('graphify-out/graph.json').exists():
+if not Path('graphify-out/graph.grafeo').exists():
     print('ERROR: No graph found. Run /graphify <path> first to build the graph.')
     raise SystemExit(1)
 "
@@ -1134,7 +1134,7 @@ import networkx as nx
 from networkx.readwrite import json_graph
 from pathlib import Path
 
-data = json.loads(Path('graphify-out/graph.json').read_text())
+data = __import__('graphify.store.io', fromlist=['read_json']).read_json(Path('graphify-out/graph.grafeo'))
 G = json_graph.node_link_graph(data, edges='links')
 
 a_term = 'NODE_A'
@@ -1193,7 +1193,7 @@ First check the graph exists:
 ```bash
 $(cat graphify-out/.graphify_python) -c "
 from pathlib import Path
-if not Path('graphify-out/graph.json').exists():
+if not Path('graphify-out/graph.grafeo').exists():
     print('ERROR: No graph found. Run /graphify <path> first to build the graph.')
     raise SystemExit(1)
 "
@@ -1207,7 +1207,7 @@ import networkx as nx
 from networkx.readwrite import json_graph
 from pathlib import Path
 
-data = json.loads(Path('graphify-out/graph.json').read_text())
+data = __import__('graphify.store.io', fromlist=['read_json']).read_json(Path('graphify-out/graph.grafeo'))
 G = json_graph.node_link_graph(data, edges='links')
 
 term = 'NODE_NAME'
@@ -1294,7 +1294,7 @@ $(cat graphify-out/.graphify_python) -m graphify.watch "$(cat graphify-out/.grap
 
 This watches the same folder graphify extracted, read from the trusted `graphify-out/.graphify_root` that Step 1 resolved - there is no path to substitute, so a scan root containing shell metacharacters can never be re-interpreted here. Behavior depends on what changed:
 
-- **Code files only (.py, .ts, .go, etc.):** re-runs AST extraction + rebuild + cluster immediately, no LLM needed. `graph.json` and `GRAPH_REPORT.md` are updated automatically.
+- **Code files only (.py, .ts, .go, etc.):** re-runs AST extraction + rebuild + cluster immediately, no LLM needed. `graph.grafeo` and `GRAPH_REPORT.md` are updated automatically.
 - **Docs, papers, or images:** writes a `graphify-out/needs_update` flag and prints a notification to run `/graphify --update` (LLM semantic re-extraction required).
 
 Debounce (default 3s): waits until file activity stops before triggering, so a wave of parallel agent writes doesn't trigger a rebuild per file.
@@ -1315,7 +1315,7 @@ graphify hook uninstall  # remove
 graphify hook status     # check
 ```
 
-After every `git commit`, the hook detects which code files changed (via `git diff HEAD~1`), re-runs AST extraction on those files, and rebuilds `graph.json` and `GRAPH_REPORT.md`. Doc/image changes are ignored by the hook - run `/graphify --update` manually for those.
+After every `git commit`, the hook detects which code files changed (via `git diff HEAD~1`), re-runs AST extraction on those files, and rebuilds `graph.grafeo` and `GRAPH_REPORT.md`. Doc/image changes are ignored by the hook - run `/graphify --update` manually for those.
 
 If a post-commit hook already exists, graphify appends to it rather than replacing it.
 

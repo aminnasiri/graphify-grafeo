@@ -1,4 +1,6 @@
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import hashlib
 import json
@@ -13,7 +15,7 @@ from graphify.extract import _file_node_id, _file_stem, _make_id, extract
 
 def _write(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    _graph_write_text(path, text, encoding="utf-8")
     return path
 
 
@@ -199,11 +201,11 @@ def test_unresolved_ts_reexport_external_stub_is_portable(tmp_path: Path):
     barrel = _write(root / "index.ts", "export * from './missing'\n")
     result = _extract_for([barrel], root)
     graph = build_from_json(result, root=root)
-    output = tmp_path / "graph.json"
+    output = tmp_path / "graph.grafeo"
 
     assert to_json(graph, {}, str(output), force=True)
 
-    payload = json.loads(output.read_text(encoding="utf-8"))
+    payload = json.loads(_graph_read_text(output, encoding="utf-8"))
     expected_id = _unresolved_reexport_id(Path("missing"))
     stub = next(node for node in payload["nodes"] if node["id"] == expected_id)
     assert stub["external"] is True

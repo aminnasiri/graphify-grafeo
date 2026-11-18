@@ -4,9 +4,11 @@ A cache entry is keyed by its own file's content, so an unchanged importer kept
 its import edge to a module after that module was renamed or deleted. The edge
 target was the id minted from the old file's absolute path, which extract() maps
 to a portable id only for targets that exist, so the checkout path reached
-graph.json and a warm update differed from a cold build of the same tree.
+graph.grafeo and a warm update differed from a cold build of the same tree.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 import shutil
@@ -19,7 +21,7 @@ from graphify.cache import load_cached, save_cached
 
 def _write(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    _graph_write_text(path, text, encoding="utf-8")
     return path
 
 
@@ -66,7 +68,7 @@ def test_recorded_targets_are_portable_across_roots(tmp_path: Path):
     b = tmp_path / "b"
     shutil.copytree(a, b)
     assert load_cached(b / "pkg" / "user.py", root=b, kind="ast", cache_root=tmp_path) is not None
-    (b / "pkg" / "slice.py").unlink()
+    _graph_unlink(b / "pkg" / "slice.py")
     assert load_cached(b / "pkg" / "user.py", root=b, kind="ast", cache_root=tmp_path) is None
 
 
@@ -84,10 +86,10 @@ def test_warm_update_after_removing_an_imported_module_matches_a_cold_build(tmp_
         if change == "rename":
             (root / "pkg" / "slice.py").rename(root / "pkg" / "slicing.py")
         else:
-            (root / "pkg" / "slice.py").unlink()
+            _graph_unlink(root / "pkg" / "slice.py")
 
     def graph(root: Path) -> tuple[set[str], set[tuple[str, str, str]]]:
-        data = json.loads((root / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+        data = json.loads(_graph_read_text(root / "graphify-out" / "graph.grafeo", encoding="utf-8"))
         return (
             {n["id"] for n in data["nodes"]},
             {(e["source"], e["target"], e["relation"]) for e in data["links"]},

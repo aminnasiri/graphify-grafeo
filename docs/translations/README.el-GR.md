@@ -66,7 +66,7 @@ graphify install               # detects your assistant and registers the skill
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 Ο αποθηκευμένος γράφος περιλαμβάνει το `graph.schema_version` ώστε οι ενσωματώσεις να μπορούν να εντοπίζουν ασύμβατες αλλαγές μορφής, συν το `graph.graphify_version` που προσδιορίζει την έκδοση Graphify που τον παρήγαγε.
@@ -115,7 +115,7 @@ Shortest path (3 hops):
 | **God nodes** | Οι πιο συνδεδεμένες έννοιες, ώστε να βλέπετε μέσα από τι ρέουν όλα |
 | **Κοινότητες** | Ο γράφος χωρισμένος σε υποσυστήματα (Leiden), με ετικέτες χωρίς LLM |
 | **Σύνδεσμοι μεταξύ αρχείων** | `calls` / `imports` / `inherits` / `mixes_in` επιλυμένοι σε ~40 γλώσσες μέσω tree-sitter AST |
-| **Query, path, explain** | Κάντε μια ερώτηση, εντοπίστε τη διαδρομή μεταξύ δύο πραγμάτων, ή εξηγήστε μία έννοια, όλα πάνω στο `graph.json` |
+| **Query, path, explain** | Κάντε μια ερώτηση, εντοπίστε τη διαδρομή μεταξύ δύο πραγμάτων, ή εξηγήστε μία έννοια, όλα πάνω στο `graph.grafeo` |
 | **Σκεπτικό + αναφορές εγγράφων** | Τα σχόλια `# NOTE:` / `# WHY:` και οι παραπομπές ADR/RFC γίνονται κόμβοι πρώτης κατηγορίας συνδεδεμένοι με τον κώδικα |
 | **Πέρα από τον κώδικα** | Έγγραφα, PDF, εικόνες, και βίντεο/ήχος χαρτογραφούνται όλα στον ίδιο γράφο |
 | **Local-first** | Ο κώδικας αναλύεται τοπικά με tree-sitter (χωρίς LLM, τίποτα δεν φεύγει από το μηχάνημά σας)· μόνο το σημασιολογικό πέρασμα πάνω σε έγγραφα/μέσα καλεί ένα backend, και μόνο αν διαμορφώσετε ένα |
@@ -394,7 +394,7 @@ viz_node_limit=0
 
 ## Χρήση του γράφου απευθείας
 
-Πέρα από τον βοηθό AI σας, ρωτήστε το `graph.json` απευθείας από το CLI με `graphify query`, `graphify path`, και `graphify explain`. Ένα όνομα που ταιριάζει με πολλούς κόμβους απορρίπτεται με τους υποψηφίους να παρατίθενται αντί να γίνεται εικασία. Τα σενάρια μπορούν να διαβάσουν το αποτέλεσμα από τον κωδικό εξόδου: `0` μια απάντηση, `3` ένα ασαφές όνομα, `4` κανένας κόμβος που να ταιριάζει. Δείτε **[Ask better graph questions](https://docs.graphify.com/guides/querying)** και την **[query reference](https://docs.graphify.com/reference/query)**.
+Πέρα από τον βοηθό AI σας, ρωτήστε το `graph.grafeo` απευθείας από το CLI με `graphify query`, `graphify path`, και `graphify explain`. Ένα όνομα που ταιριάζει με πολλούς κόμβους απορρίπτεται με τους υποψηφίους να παρατίθενται αντί να γίνεται εικασία. Τα σενάρια μπορούν να διαβάσουν το αποτέλεσμα από τον κωδικό εξόδου: `0` μια απάντηση, `3` ένα ασαφές όνομα, `4` κανένας κόμβος που να ταιριάζει. Δείτε **[Ask better graph questions](https://docs.graphify.com/guides/querying)** και την **[query reference](https://docs.graphify.com/reference/query)**.
 
 ---
 

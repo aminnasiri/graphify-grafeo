@@ -23,6 +23,8 @@ older forks the extractor was written against:
   extract completely stay silent.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import os
 import re
@@ -35,7 +37,7 @@ def _extract(tmp_path, files: dict[str, str]):
     for name, body in files.items():
         p = tmp_path / name
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(body)
+        _graph_write_text(p, body)
     old = os.getcwd()
     try:
         os.chdir(tmp_path)
@@ -625,21 +627,18 @@ def test_kotlin_object_member_call_survives_incremental_rebuild(tmp_path):
     corpus = tmp_path / "corpus"
     (corpus / "config").mkdir(parents=True)
     (corpus / "app").mkdir(parents=True)
-    (corpus / "config" / "Config.kt").write_text(
-        "package com.demo.config\n\nobject Config {\n    fun load() { }\n}\n",
-        encoding="utf-8",
-    )
+    _graph_write_text(corpus / "config" / "Config.kt", "package com.demo.config\n\nobject Config {\n    fun load() { }\n}\n", encoding="utf-8")
     app = corpus / "app" / "App.kt"
 
     def _app(extra: str = "") -> str:
         return ("package com.demo.app\n\nimport com.demo.config.Config\n\n"
                 "fun Start() {\n    Config.load()\n" + extra + "}\n")
 
-    app.write_text(_app(), encoding="utf-8")
-    graph_path = corpus / "graphify-out" / "graph.json"
+    _graph_write_text(app, _app(), encoding="utf-8")
+    graph_path = corpus / "graphify-out" / "graph.grafeo"
 
     def _resolves() -> bool:
-        data = json.loads(graph_path.read_text(encoding="utf-8"))
+        data = json.loads(_graph_read_text(graph_path, encoding="utf-8"))
         start = next((n["id"] for n in data["nodes"] if n.get("label") == "Start()"), None)
         load = next((n["id"] for n in data["nodes"] if n.get("label") == ".load()"), None)
         if start is None or load is None:
@@ -653,7 +652,7 @@ def test_kotlin_object_member_call_survives_incremental_rebuild(tmp_path):
 
     # Change ONLY the caller: Config.kt is unchanged, so its object node + method
     # edge are fed back as resolution context. The call must still resolve.
-    app.write_text(_app("    Config.load()\n"), encoding="utf-8")
+    _graph_write_text(app, _app("    Config.load()\n"), encoding="utf-8")
     assert _rebuild_code(corpus, changed_paths=[app], no_cluster=True,
                          acquire_lock=False) is True
     assert _resolves(), "call stays resolved after an incremental rebuild"

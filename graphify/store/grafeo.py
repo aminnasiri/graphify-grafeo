@@ -124,24 +124,30 @@ class GrafeoStore(GraphStore):
             if not nodes:
                 return
             nodes = list({node.id: node for node in nodes}.values())
-            prior = {row['id']: row['kind'] for row in self._execute(
+            prior = {row['id']: row for row in self._execute(
                 "MATCH (n:_GraphifyNode) WHERE n.id IN $ids "
-                "RETURN n.id AS id, n._graphify_kind AS kind", {"ids": [n.id for n in nodes]})}
+                "RETURN n.id AS id, n._graphify_kind AS kind, n._graphify_order AS position",
+                {"ids": [n.id for n in nodes]})}
+            next_order = self.get_metadata("_next_node_order", 0)
             groups: dict[str, list[dict]] = defaultdict(list)
             for node in nodes:
-                if not isinstance(node.id, str) or not node.id:
-                    raise ValueError("nodes require nonempty string IDs")
+                if not isinstance(node.id, str):
+                    raise ValueError("nodes require string IDs")
                 kind = _kind(node.attributes)
                 _identifier(kind)
                 props = encode_record(node.attributes)
                 props.update(id=node.id, _graphify_kind=kind)
-                old = prior.get(node.id)
+                previous = prior.get(node.id, {})
+                old = previous.get("kind")
+                position = previous.get("position")
+                if position is None:
+                    position, next_order = next_order, next_order + 1
+                props["_graphify_order"] = position
                 if old and old != kind:
                     self._execute(
                         f"MATCH (n:_GraphifyNode {{id:$id}}) REMOVE n:{_identifier(old)}",
                         {"id": node.id},
                     )
-                prior[node.id] = kind
                 groups[kind].append({"id": node.id, "props": props})
             for kind, rows in groups.items():
                 self._execute(
@@ -149,6 +155,7 @@ class GrafeoStore(GraphStore):
                     f"SET n = row.props SET n:{_identifier(kind)}", {"rows": rows},
                 )
                 self._dirty = True
+            self.set_metadata("_next_node_order", next_order)
 
     def upsert_edges(self, edges: Iterable[EdgeRecord]) -> None:
         with self.transaction():
@@ -166,8 +173,9 @@ class GrafeoStore(GraphStore):
             prior = {row['id']: row for row in self._execute(
                 "MATCH (a:_GraphifyNode)-[e]->(b:_GraphifyNode) "
                 "WHERE e._graphify_edge_id IN $ids RETURN e._graphify_edge_id AS id, "
-                "a.id AS source, b.id AS target, type(e) AS relation",
+                "a.id AS source, b.id AS target, type(e) AS relation, e._graphify_order AS position",
                 {"ids": [edge.id for edge in edges]})}
+            next_order = self.get_metadata("_next_edge_order", 0)
             inserts: dict[str, list[dict]] = defaultdict(list)
             updates: dict[str, list[dict]] = defaultdict(list)
             for edge in edges:
@@ -180,6 +188,10 @@ class GrafeoStore(GraphStore):
                 props = encode_record(edge.attributes)
                 props["_graphify_edge_id"] = edge.id
                 old = prior.get(edge.id)
+                position = old.get("position") if old else None
+                if position is None:
+                    position, next_order = next_order, next_order + 1
+                props["_graphify_order"] = position
                 same = old and (old['source'], old['target'], old['relation']) == (
                     edge.source, edge.target, relation)
                 if old and not same:
@@ -199,6 +211,7 @@ class GrafeoStore(GraphStore):
                     "WHERE e._graphify_edge_id = row.id SET e = row.props", {"rows": rows},
                 )
             self._dirty = True
+            self.set_metadata("_next_edge_order", next_order)
 
     def delete_edges(self, ids: Iterable[str]) -> None:
         with self.transaction():
@@ -266,7 +279,8 @@ class GrafeoStore(GraphStore):
             nodes = [
                 NodeRecord(row["id"], decode_record(row["props"]))
                 for row in self._execute(
-                    "MATCH (n:_GraphifyNode) RETURN n.id AS id, properties(n) AS props ORDER BY id"
+                    "MATCH (n:_GraphifyNode) RETURN n.id AS id, properties(n) AS props "
+                    "ORDER BY n._graphify_order, n.id"
                 )
             ]
             edges = [
@@ -274,7 +288,7 @@ class GrafeoStore(GraphStore):
                 for row in self._execute(
                     "MATCH (a:_GraphifyNode)-[e]->(b:_GraphifyNode) "
                     "RETURN e._graphify_edge_id AS id, a.id AS source, b.id AS target, "
-                    "properties(e) AS props ORDER BY id"
+                    "properties(e) AS props ORDER BY e._graphify_order, e._graphify_edge_id"
                 )
             ]
             metadata = {
@@ -292,6 +306,17 @@ class GrafeoStore(GraphStore):
             self._execute("MATCH (n:_GraphifyNode) DETACH DELETE n")
             self._execute("MATCH (n:_GraphifyMetadata) DELETE n")
             self._dirty = True
+
+    def get_revision(self) -> int:
+        with self._lock:
+            rows = self._execute("MATCH (n:_GraphifyRevision) RETURN n.value AS value")
+            return int(rows[0]["value"]) if rows else 0
+
+    def backup(self, path: str | Path) -> None:
+        with self._lock:
+            if self._tx is not None:
+                raise RuntimeError("cannot back up an uncommitted transaction")
+            self._db.save(str(path))
 
     def close(self) -> None:
         with self._lock:

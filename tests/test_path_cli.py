@@ -1,6 +1,8 @@
 """Regression tests for `graphify path` arrow direction (#849) and determinism +
 honest edge labels (#2074)."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 import json
 import os
 import subprocess
@@ -26,8 +28,8 @@ def _write_graph(tmp_path):
              "relation": "calls", "confidence": "EXTRACTED"},
         ],
     }
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps(graph_data))
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps(graph_data))
     return p
 
 
@@ -84,8 +86,8 @@ def _write_misranking_graph(tmp_path):
              "relation": "mentions", "confidence": "EXTRACTED"},
         ],
     }
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps(graph_data))
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps(graph_data))
     return p
 
 
@@ -136,8 +138,8 @@ def _diamond_graph(tmp_path):
             {"source": "q", "target": "b", "relation": "calls", "confidence": "EXTRACTED"},
         ],
     }
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps(data))
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps(data))
     return p
 
 
@@ -176,8 +178,8 @@ def test_path_relation_matches_stored_edge_not_fabricated(monkeypatch, tmp_path,
             {"source": "a", "target": "b", "relation": "references", "confidence": "INFERRED"},
         ],
     }
-    gp = tmp_path / "graph.json"
-    gp.write_text(json.dumps(data))
+    gp = tmp_path / "graph.grafeo"
+    _graph_write_text(gp, json.dumps(data))
     out = _run(monkeypatch, gp, "Alpha", "Beta", capsys)
     assert "--references [INFERRED]-->" in out
     assert "calls" not in out
@@ -194,8 +196,8 @@ def test_path_relation_fallback_related_when_missing(monkeypatch, tmp_path, caps
         ],
         "links": [{"source": "a", "target": "b"}],
     }
-    gp = tmp_path / "graph.json"
-    gp.write_text(json.dumps(data))
+    gp = tmp_path / "graph.grafeo"
+    _graph_write_text(gp, json.dumps(data))
     out = _run(monkeypatch, gp, "Alpha", "Beta", capsys)
     assert "--related-->" in out
     assert "---->" not in out.replace("--related-->", "")
@@ -227,8 +229,8 @@ def _flipped_marker_graph(tmp_path):
              "relation": "imports_from", "confidence": "EXTRACTED"},
         ],
     }
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps(data))
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps(data))
     return p
 
 
@@ -260,8 +262,8 @@ def test_path_canonical_marker_graph_still_forward(monkeypatch, tmp_path, capsys
              "relation": "calls", "confidence": "EXTRACTED"},
         ],
     }
-    gp = tmp_path / "graph.json"
-    gp.write_text(json.dumps(data))
+    gp = tmp_path / "graph.grafeo"
+    _graph_write_text(gp, json.dumps(data))
     out = _run(monkeypatch, gp, "Alpha", "Beta", capsys)
     assert "Alpha --calls [EXTRACTED]--> Beta" in out
     # And walking the same edge backwards still reverses the arrow (#2487:
@@ -287,8 +289,8 @@ def _file_to_symbol_only_graph(tmp_path):
             {"source": "b", "target": "helper", "relation": "contains", "confidence": "EXTRACTED"},
         ],
     }
-    p = tmp_path / "graph.json"
-    p.write_text(json.dumps(data))
+    p = tmp_path / "graph.grafeo"
+    _graph_write_text(p, json.dumps(data))
     return p
 
 
@@ -318,8 +320,8 @@ def test_explain_direction_recovered_from_src_tgt_markers(monkeypatch, tmp_path,
              "relation": "calls", "confidence": "EXTRACTED"},
         ],
     }
-    gp = tmp_path / "graph.json"
-    gp.write_text(json.dumps(data))
+    gp = tmp_path / "graph.grafeo"
+    _graph_write_text(gp, json.dumps(data))
     monkeypatch.setattr(mainmod, "_check_skill_version", lambda _: None)
     monkeypatch.setattr(mainmod.sys, "argv",
         ["graphify", "explain", "hub", "--graph", str(gp)])
@@ -370,8 +372,8 @@ def _twin_method_graph(tmp_path):
              "relation": "method", "confidence": "EXTRACTED"},
         ],
     }
-    gp = tmp_path / "graph.json"
-    gp.write_text(json.dumps(data))
+    gp = tmp_path / "graph.grafeo"
+    _graph_write_text(gp, json.dumps(data))
     return gp
 
 
@@ -407,7 +409,7 @@ def test_path_endpoint_selects_named_node(monkeypatch, tmp_path, capsys, target)
 def test_shortest_path_tool_refuses_ambiguous_endpoint(tmp_path):
     """The MCP `shortest_path` tool shares the resolution and refuses the same way."""
     from graphify.serve import _shortest_path_text
-    raw = json.loads(_twin_method_graph(tmp_path).read_text())
+    raw = json.loads(_graph_read_text(_twin_method_graph(tmp_path)))
     G = json_graph.node_link_graph({**raw, "directed": True}, edges="links")
     out = _shortest_path_text(G, {"source": "run()", "target": ".nonce()"})
     assert out.startswith("Ambiguous: '.nonce()' matches 2 nodes in different files.")
@@ -419,8 +421,8 @@ def test_shortest_path_tool_refuses_ambiguous_endpoint(tmp_path):
 
 
 def _write_nodes(tmp_path, nodes, links):
-    gp = tmp_path / "graph.json"
-    gp.write_text(json.dumps({
+    gp = tmp_path / "graph.grafeo"
+    _graph_write_text(gp, json.dumps({
         "directed": False, "multigraph": False, "graph": {},
         "nodes": [
             {"id": i, "label": lbl, "source_file": sf, "source_location": loc}
@@ -491,7 +493,7 @@ def test_ambiguity_hint_names_symbol_not_query(monkeypatch, tmp_path, capsys):
         ("b_index_foo", "foo()", "b/index.ts", "L3"),
     ], [])
     G = json_graph.node_link_graph(
-        {**json.loads(gp.read_text()), "directed": True}, edges="links")
+        {**json.loads(_graph_read_text(gp)), "directed": True}, edges="links")
     out = _shortest_path_text(G, {"source": "index.ts::foo()", "target": "a_index_foo"})
     assert "(e.g. <path>::foo())" in out
     assert "<path>::index.ts::" not in out
@@ -516,6 +518,7 @@ def _cross_file_symbol_graph(tmp_path):
         ("src_seats_route_readroute", "readRoute()", "src/seats/route.ts", "L3"),
         ("src_admin_route", "route.ts", "src/admin/route.ts", "L1"),
         ("src_admin_route_listadmins", "listAdmins()", "src/admin/route.ts", "L3"),
+        ("src_billing_charge", "charge.ts", "src/billing/charge.ts", "L1"),
         ("src_billing_charge_chargecard", "chargeCard()", "src/billing/charge.ts", "L2"),
     ], [
         ("src_billing_route", "src_billing_route_readroute", "contains"),
@@ -547,7 +550,7 @@ def test_path_scoped_endpoint_refuses_when_file_has_no_symbol(monkeypatch, tmp_p
 def test_shortest_path_tool_refuses_scoped_endpoint_miss(tmp_path):
     """The MCP shortest_path tool shares the resolver, so it refuses the same way."""
     from graphify.serve import _shortest_path_text
-    raw = json.loads(_cross_file_symbol_graph(tmp_path).read_text())
+    raw = json.loads(_graph_read_text(_cross_file_symbol_graph(tmp_path)))
     G = json_graph.node_link_graph({**raw, "directed": True}, edges="links")
     out = _shortest_path_text(G, {"source": "src/admin/route.ts::readRoute", "target": "chargeCard"})
     assert "Shortest path" not in out
@@ -606,7 +609,7 @@ def test_path_refuses_endpoint_that_names_no_node(monkeypatch, tmp_path, capsys)
 def test_shortest_path_tool_refuses_endpoint_that_names_no_node(tmp_path):
     """The MCP tool shares the resolver, so a bare name it cannot place is a miss too."""
     from graphify.serve import _shortest_path_text
-    raw = json.loads(_no_such_node_graph(tmp_path).read_text())
+    raw = json.loads(_graph_read_text(_no_such_node_graph(tmp_path)))
     G = json_graph.node_link_graph(raw, edges="links")
     out = _shortest_path_text(G, {"source": _NO_SUCH_NODE, "target": "src/b.ts::format()"})
     assert "Shortest path" not in out

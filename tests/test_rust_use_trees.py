@@ -9,6 +9,8 @@ Plain `use` declarations are unchanged, and so are call edges: v8's edge for a
 group still serves the call pass, which does not see the new ones.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 from pathlib import Path
@@ -25,7 +27,7 @@ _FILES = {"src/lib.rs": "pub mod util;\npub mod user;\n", "src/util.rs": "pub fn
 def _write(root: Path, files: dict[str, str]) -> None:
     for name, body in {"Cargo.toml": _CARGO, **files}.items():
         (root / name).parent.mkdir(parents=True, exist_ok=True)
-        (root / name).write_text(body, encoding="utf-8")
+        _graph_write_text(root / name, body, encoding="utf-8")
 
 
 def _extract(root: Path, files: dict[str, str]) -> dict:
@@ -38,7 +40,7 @@ def _build(root: Path, changed: list[Path] | None = None) -> dict:
     from graphify.watch import _rebuild_code
 
     assert _rebuild_code(root, changed_paths=changed, no_cluster=True, acquire_lock=False) is True
-    return json.loads((root / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+    return json.loads(_graph_read_text(root / "graphify-out" / "graph.grafeo", encoding="utf-8"))
 
 
 def _edges(edges: list[dict], kind: str = "import") -> list[str]:
@@ -142,7 +144,7 @@ def test_calls_are_the_ones_v8_finds(tmp_path: Path, monkeypatch):
     for name, body in _CALLS.items():
         for form in ("fix", "v8"):
             (tmp_path / form / name).parent.mkdir(parents=True, exist_ok=True)
-            (tmp_path / form / name).write_text(body, encoding="utf-8")
+            _graph_write_text(tmp_path / form / name, body, encoding="utf-8")
     fixed = calls(tmp_path / "fix")
     monkeypatch.setattr(rust_module, "_rust_use_bindings", lambda *args: [])  # v8: no binding edges
     assert fixed and fixed == calls(tmp_path / "v8")
@@ -159,7 +161,7 @@ def _parity(tmp_path: Path, monkeypatch, steps: list) -> None:
             mainmod.main()
         except SystemExit as exc:
             assert exc.code in (None, 0)
-        return json.loads((root / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+        return json.loads(_graph_read_text(root / "graphify-out" / "graph.grafeo", encoding="utf-8"))
 
     def view(graph: dict) -> tuple:
         # v8 keeps external stubs across incremental builds (unreferenced ones too)
@@ -173,10 +175,10 @@ def _parity(tmp_path: Path, monkeypatch, steps: list) -> None:
         _write(root, files)
         _build(root) if mode == "watch" else cli(root)
         for number, (name, text) in enumerate(steps):
-            (root / name).write_text(text, encoding="utf-8")
+            _graph_write_text(root / name, text, encoding="utf-8")
             incremental = _build(root, [root / name]) if mode == "watch" else cli(root)
             fresh = tmp_path / f"{mode}-fresh-{number}"
-            _write(fresh, {path: (root / path).read_text(encoding="utf-8") for path in files})
+            _write(fresh, {path: _graph_read_text(root / path, encoding="utf-8") for path in files})
             assert view(incremental) == view(_build(fresh) if mode == "watch" else cli(fresh)), (mode, name)
 
 

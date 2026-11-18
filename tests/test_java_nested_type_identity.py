@@ -1,5 +1,7 @@
 """Qualified Java receivers keep distinct nested owners (#5185)."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 
 import json
 from pathlib import Path
@@ -14,7 +16,7 @@ def _extract(root: Path, sources: dict[str, str], *, reverse: bool = False) -> d
     for name, body in sources.items():
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body, encoding="utf-8")
+        _graph_write_text(path, body, encoding="utf-8")
         paths.append(path)
     if reverse:
         paths.reverse()
@@ -179,24 +181,24 @@ def test_qualified_calls_match_full_build_after_incremental_addition(tmp_path: P
     for root in (inc, full):
         root.mkdir()
         for name, body in sources.items():
-            (root / name).write_text(body, encoding="utf-8")
+            _graph_write_text(root / name, body, encoding="utf-8")
     assert _rebuild_code(inc, no_cluster=True, acquire_lock=False, force=True)
     for root in (inc, full):
-        (root / "Other.java").write_text(_type("Other"), encoding="utf-8")
+        _graph_write_text(root / "Other.java", _type("Other"), encoding="utf-8")
     assert _rebuild_code(
         inc, changed_paths=[inc / "Other.java"], no_cluster=True, acquire_lock=False,
     )
     assert _rebuild_code(full, no_cluster=True, acquire_lock=False, force=True)
 
     def targets(root: Path) -> list[str]:
-        graph = json.loads((root / "graphify-out" / "graph.json").read_text(encoding="utf-8"))
+        graph = json.loads(_graph_read_text(root / "graphify-out" / "graph.grafeo", encoding="utf-8"))
         graph["edges"] = graph.get("links", graph.get("edges", []))
         return [node["id"] for node in _targets(graph)]
 
     assert targets(inc) == targets(full)
     assert len(targets(full)) == 1
     caller = inc / "Loader.java"
-    caller.write_text(caller.read_text(encoding="utf-8") + "\n// changed\n", encoding="utf-8")
+    _graph_write_text(caller, caller.read_text(encoding="utf-8") + "\n// changed\n", encoding="utf-8")
     assert _rebuild_code(
         inc, changed_paths=[caller], no_cluster=True, acquire_lock=False,
     )
@@ -227,7 +229,7 @@ def test_java_cache_schema_retires_flat_nested_identities(tmp_path: Path, monkey
     from graphify.extract import extract_java
 
     path = tmp_path / "Types.java"
-    path.write_text(_type("Other") + "\n" + _type("Item"), encoding="utf-8")
+    _graph_write_text(path, _type("Other") + "\n" + _type("Item"), encoding="utf-8")
     schema = cache._AST_CACHE_SCHEMA
     monkeypatch.setattr(cache, "_AST_CACHE_SCHEMA", schema - 1)
     stale = extract_java(path)

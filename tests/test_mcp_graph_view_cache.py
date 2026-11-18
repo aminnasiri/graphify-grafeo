@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 """The MCP server's traversal view and shortest-path graphs are built once per graph.
 
 `query_graph` used to copy every edge of the loaded graph into an undirected
@@ -21,7 +23,7 @@ from graphify.serve import (
 )
 
 
-def _write(tmp_path, edges, name="graph.json"):
+def _write(tmp_path, edges, name="graph.grafeo"):
     G = nx.Graph()
     for n in sorted({n for e in edges for n in e[:2]}):
         G.add_node(n, label=f"{n}_fn", source_file=f"{n}.py", source_location="L1", community=0)
@@ -31,7 +33,7 @@ def _write(tmp_path, edges, name="graph.json"):
         for u, v, rel, ctx in edges
     ]
     path = tmp_path / name
-    path.write_text(json.dumps(data))
+    _graph_write_text(path, json.dumps(data))
     return path
 
 

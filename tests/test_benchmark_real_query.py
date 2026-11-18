@@ -1,5 +1,7 @@
 """`graphify benchmark` counts the answer query_graph really returns."""
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import json
 
@@ -12,7 +14,7 @@ from graphify.serve import _load_graph, _query_graph_text, _read_graph
 
 
 def _write(G: nx.Graph, path) -> str:
-    path.write_text(json.dumps(json_graph.node_link_data(G, edges="links")), encoding="utf-8")
+    _graph_write_text(path, json.dumps(json_graph.node_link_data(G, edges="links")), encoding="utf-8")
     return str(path)
 
 
@@ -37,7 +39,7 @@ def _hub_graph(spokes: int = 400) -> nx.DiGraph:
 
 
 def test_tokens_are_those_of_the_mcp_query_graph_answer(tmp_path):
-    path = _write(_small_graph(), tmp_path / "graph.json")
+    path = _write(_small_graph(), tmp_path / "graph.grafeo")
     question = "how does authentication work"
     answer = _query_graph_text(_load_graph(path), question, mode="bfs", depth=3, token_budget=2000)
     result = run_benchmark(path, corpus_words=10_000, questions=[question])
@@ -47,7 +49,7 @@ def test_tokens_are_those_of_the_mcp_query_graph_answer(tmp_path):
 def test_tokens_stop_at_the_query_budget(tmp_path):
     # 400 callees: query_graph cuts the answer at its ~2000-token budget, the
     # benchmark must count that cut answer, not every node BFS reaches.
-    path = _write(_hub_graph(), tmp_path / "graph.json")
+    path = _write(_hub_graph(), tmp_path / "graph.grafeo")
     G = _read_graph(path)
     full = _query_graph_text(G, "authentication", token_budget=10**6)
     tokens = _query_subgraph_tokens(G, "authentication")
@@ -56,12 +58,12 @@ def test_tokens_stop_at_the_query_budget(tmp_path):
 
 
 def test_a_larger_budget_buys_a_larger_answer(tmp_path):
-    G = _read_graph(_write(_hub_graph(), tmp_path / "graph.json"))
+    G = _read_graph(_write(_hub_graph(), tmp_path / "graph.grafeo"))
     assert _query_subgraph_tokens(G, "authentication", token_budget=500) < _query_subgraph_tokens(G, "authentication")
 
 
 def test_no_answer_counts_zero_and_is_left_out(tmp_path):
-    path = _write(_small_graph(), tmp_path / "graph.json")
+    path = _write(_small_graph(), tmp_path / "graph.grafeo")
     assert _query_subgraph_tokens(_read_graph(path), "xyzzy plugh") == 0
     result = run_benchmark(path, corpus_words=10_000, questions=["xyzzy plugh", "authentication"])
     assert [p["question"] for p in result["per_question"]] == ["authentication"]

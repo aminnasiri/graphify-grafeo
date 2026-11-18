@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, write_text as _graph_write_text
 """Dedicated Grep shares Read's once-per-session strict orientation gate."""
 import io
 import json
@@ -30,7 +32,7 @@ def test_fresh_query_bypasses_grep_deny(tmp_path, monkeypatch):
     _fixture(tmp_path)
     stamp = tmp_path / "graphify-out" / "cache" / "last_query_stamp"
     stamp.parent.mkdir(parents=True)
-    stamp.write_text(str(time.time()), encoding="utf-8")
+    _graph_write_text(stamp, str(time.time()), encoding="utf-8")
     out = _invoke("search", _grep(), tmp_path, monkeypatch, strict=True)
     assert not _is_deny(out) and "knowledge graph at" in out
     assert _invoke("search", _grep(), tmp_path, monkeypatch, strict=True) == ""
@@ -61,7 +63,7 @@ def test_read_and_grep_share_one_deny(tmp_path, monkeypatch, first_kind):
     assert not _is_deny(out) and "knowledge graph at" in out
 
 
-@pytest.mark.parametrize("target", ["external", "../outside", "graphify-out", "graphify-out/graph.json"])
+@pytest.mark.parametrize("target", ["external", "../outside", "graphify-out", "graphify-out/graph.grafeo"])
 def test_grep_external_and_output_paths_bypass(tmp_path, monkeypatch, target):
     _fixture(tmp_path)
     path = tmp_path.parent / "outside" if target == "external" else target
@@ -70,7 +72,7 @@ def test_grep_external_and_output_paths_bypass(tmp_path, monkeypatch, target):
     assert _is_deny(_invoke("search", _grep(), tmp_path, monkeypatch, strict=True))
 
 
-@pytest.mark.parametrize("target", ["external", "../outside", "graphify-out", "graphify-out/graph.json"])
+@pytest.mark.parametrize("target", ["external", "../outside", "graphify-out", "graphify-out/graph.grafeo"])
 def test_soft_grep_suppresses_irrelevant_path_nudges(tmp_path, monkeypatch, target):
     _fixture(tmp_path)
     path = tmp_path.parent / "outside" if target == "external" else target
@@ -80,7 +82,7 @@ def test_soft_grep_suppresses_irrelevant_path_nudges(tmp_path, monkeypatch, targ
 
 def test_grep_on_one_unindexed_file_keeps_the_deny(tmp_path, monkeypatch):
     _fixture(tmp_path)  # manifest indexes src/mod.py only
-    (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+    _graph_write_text(tmp_path / "pyproject.toml", "[project]\n", encoding="utf-8")
     out = _invoke("search", _grep("pyproject.toml"), tmp_path, monkeypatch, strict=True)
     assert not _is_deny(out) and "knowledge graph at" in out
     # The session's one deny is still available for an indexed target.
@@ -92,7 +94,7 @@ def test_grep_custom_output_bypasses(tmp_path, monkeypatch):
     _fixture(tmp_path)
     custom = tmp_path / "artifacts" / "graphify"
     custom.mkdir(parents=True)
-    (custom / "graph.json").write_text('{"nodes":[],"links":[]}', encoding="utf-8")
+    _graph_write_text(custom / "graph.grafeo", '{"nodes":[],"links":[]}', encoding="utf-8")
     monkeypatch.setattr(paths, "GRAPHIFY_OUT", str(custom))
     assert _invoke("search", _grep("artifacts/graphify"), tmp_path, monkeypatch, strict=True) == ""
     assert _invoke("search", _grep("graphify-out"), tmp_path, monkeypatch, strict=True) == ""
@@ -107,14 +109,14 @@ def test_grep_safe_without_gate_prerequisites(tmp_path, monkeypatch, state):
     if state == "no_session":
         payload.pop("session_id")
     elif state == "no_graph":
-        (out_dir / "graph.json").unlink()
+        _graph_unlink(out_dir / "graph.grafeo")
     elif state == "needs_update":
         (out_dir / "needs_update").touch()
     else:
-        (out_dir / "cache").write_text("not a directory", encoding="utf-8")
+        _graph_write_text(out_dir / "cache", "not a directory", encoding="utf-8")
     out = _invoke("search", payload, tmp_path, monkeypatch, strict=True)
     assert not _is_deny(out)
-    assert not (out_dir / "cache" / "hook_sessions" / "s1.denied").exists()
+    assert not _graph_exists(out_dir / "cache" / "hook_sessions" / "s1.denied")
 
 
 @pytest.mark.parametrize("payload", [

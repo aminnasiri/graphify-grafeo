@@ -66,7 +66,7 @@ graphify install               # detects your assistant and registers the skill
 graphify-out/
 ├── graph.html       open in any browser: click nodes, filter, search
 ├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
-└── graph.json       the full graph: query it anytime without re-reading your files
+└── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
 永続化されたグラフには `graph.schema_version` が含まれており、統合側は互換性のないフォーマット変更を検出できます。さらに、それを生成した Graphify のリリースを示す `graph.graphify_version` も含まれます。
@@ -115,7 +115,7 @@ Shortest path (3 hops):
 | **God nodes** | 最も多く接続された概念。すべてが何を通って流れているかが見えます |
 | **Communities** | グラフをサブシステムに分割（Leiden）し、LLM 不要のラベルを付けます |
 | **Cross-file links** | `calls` / `imports` / `inherits` / `mixes_in` を tree-sitter AST により ~40 languages にわたって解決します |
-| **Query, path, explain** | 質問する、2 つのものの間のパスをたどる、1 つの概念を説明する。すべて `graph.json` に対して行います |
+| **Query, path, explain** | 質問する、2 つのものの間のパスをたどる、1 つの概念を説明する。すべて `graph.grafeo` に対して行います |
 | **Rationale + doc refs** | `# NOTE:` / `# WHY:` コメントや ADR/RFC の引用が一級ノードになり、コードにリンクされます |
 | **Beyond code** | ドキュメント、PDF、画像、動画/音声がすべて同じグラフにマッピングされます |
 | **Local-first** | コードは tree-sitter でローカルに解析されます（LLM なし、何もマシンの外に出ません）。ドキュメント/メディアに対する意味的なパスだけがバックエンドを呼び出し、それも設定した場合のみです |
@@ -394,7 +394,7 @@ viz_node_limit=0
 
 ## グラフを直接使う
 
-AI アシスタントに加えて、`graphify query`、`graphify path`、`graphify explain` で CLI から直接 `graph.json` をクエリできます。複数のノードに一致する名前は、推測するのではなく候補を列挙して拒否されます。スクリプトは終了コードから結果を読み取れます。`0` は答え、`3` はあいまいな名前、`4` は一致するノードなし、です。**[Ask better graph questions](https://docs.graphify.com/guides/querying)** と **[query reference](https://docs.graphify.com/reference/query)** を参照してください。
+AI アシスタントに加えて、`graphify query`、`graphify path`、`graphify explain` で CLI から直接 `graph.grafeo` をクエリできます。複数のノードに一致する名前は、推測するのではなく候補を列挙して拒否されます。スクリプトは終了コードから結果を読み取れます。`0` は答え、`3` はあいまいな名前、`4` は一致するノードなし、です。**[Ask better graph questions](https://docs.graphify.com/guides/querying)** と **[query reference](https://docs.graphify.com/reference/query)** を参照してください。
 
 ---
 

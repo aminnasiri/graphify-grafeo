@@ -8,6 +8,8 @@ single-flighted per path, and a caller that already has a (stale) entry gets
 it back immediately instead of queuing behind someone else's reload.
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 import json
 import os
@@ -25,7 +27,7 @@ GRAPH = {
 
 
 def _write_graph(path: Path) -> None:
-    path.write_text(json.dumps(GRAPH))
+    _graph_write_text(path, json.dumps(GRAPH))
 
 
 def _gate(cache: _GraphContextCache, delay: float, slow_for=None):
@@ -48,7 +50,7 @@ def _gate(cache: _GraphContextCache, delay: float, slow_for=None):
 
 
 def test_stale_entry_served_while_a_reload_is_in_flight(tmp_path):
-    graph_path = tmp_path / "graph.json"
+    graph_path = tmp_path / "graph.grafeo"
     _write_graph(graph_path)
     path = str(graph_path)
 
@@ -56,7 +58,9 @@ def test_stale_entry_served_while_a_reload_is_in_flight(tmp_path):
     cache.load(path)  # warm, unpatched
 
     calls = _gate(cache, delay=0.3)
-    os.utime(path, (time.time() + 10, time.time() + 10))  # make the warm entry stale
+    from graphify.store.io import connection
+    with connection(path, write=True) as store:
+        store.set_metadata("cache-test", "changed")  # revision invalidates native snapshots
 
     results: dict[int, float] = {}
 
@@ -85,7 +89,7 @@ def test_concurrent_first_load_of_new_path_builds_once(tmp_path):
     """Control: with no stale entry to fall back to, concurrent first-time
     loads of the same brand-new path must still single-flight to one build,
     not each start (and redundantly pay for) their own."""
-    graph_path = tmp_path / "graph.json"
+    graph_path = tmp_path / "graph.grafeo"
     _write_graph(graph_path)
     path = str(graph_path)
 
@@ -111,8 +115,8 @@ def test_concurrent_first_load_of_new_path_builds_once(tmp_path):
 
 
 def test_reload_of_one_path_does_not_block_another_path(tmp_path):
-    p1 = tmp_path / "p1" / "graph.json"
-    p2 = tmp_path / "p2" / "graph.json"
+    p1 = tmp_path / "p1" / "graph.grafeo"
+    p2 = tmp_path / "p2" / "graph.grafeo"
     p1.parent.mkdir()
     p2.parent.mkdir()
     _write_graph(p1)
@@ -148,7 +152,7 @@ def test_reload_of_one_path_does_not_block_another_path(tmp_path):
 def test_reload_eventually_serves_the_new_graph(tmp_path):
     """Sanity: once an in-flight rebuild finishes, a later call sees the new
     data, not the stale one forever."""
-    graph_path = tmp_path / "graph.json"
+    graph_path = tmp_path / "graph.grafeo"
     _write_graph(graph_path)
     path = str(graph_path)
 
@@ -161,7 +165,7 @@ def test_reload_eventually_serves_the_new_graph(tmp_path):
         "nodes": [{"id": n, "label": n, "community": 0} for n in "abc"],
         "edges": [],
     }
-    graph_path.write_text(json.dumps(bigger))
+    _graph_write_text(graph_path, json.dumps(bigger))
     os.utime(path, (time.time() + 10, time.time() + 10))
 
     G2, _ = cache.load(path)

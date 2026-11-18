@@ -13,6 +13,15 @@ from typing import Any, Iterable, Self
 import networkx as nx
 
 
+def infer_multigraph(data: dict) -> bool:
+    """Missing legacy flags must never collapse parallel or reverse arcs."""
+    directed = data.get("directed", False)
+    rows = data.get("links", data.get("edges", []))
+    pairs = [(row.get("source"), row.get("target")) for row in rows if isinstance(row, dict)]
+    keys = pairs if directed else [frozenset(pair) for pair in pairs]
+    return len(set(keys)) != len(pairs)
+
+
 @dataclass(frozen=True)
 class NodeRecord:
     id: str
@@ -40,7 +49,9 @@ class GraphSnapshot:
         """Preserve the interchange envelope and every original record attribute."""
         data = deepcopy(self.metadata.get("json_envelope", {}))
         data.setdefault("directed", False)
-        data.setdefault("multigraph", False)
+        if "multigraph" not in data:
+            data["multigraph"] = infer_multigraph({**data, "links": [
+                {"source": e.source, "target": e.target} for e in self.edges]})
         graph = data.setdefault("graph", {})
         graph.setdefault("schema_version", 1)
         for key in ("schema_version", "graphify_version"):
@@ -141,6 +152,14 @@ class GraphStore(ABC):
         ...
 
     @abstractmethod
+    def backup(self, path: str | Path) -> None:
+        """Write an engine-consistent backup while owning the database."""
+        ...
+
+    @abstractmethod
+    def get_revision(self) -> int: ...
+
+    @abstractmethod
     def close(self) -> None: ...
 
     def __enter__(self) -> Self:
@@ -195,6 +214,8 @@ class GraphStore(ABC):
     def export_json(self, path: str | Path) -> None:
         from graphify.paths import write_json_atomic
 
+        if Path(path).suffix.lower() == ".grafeo":
+            raise ValueError("JSON export cannot overwrite a Grafeo database")
         write_json_atomic(path, self.snapshot().to_node_link(), compact=True)
 
     def import_json(self, path: str | Path, *, replace: bool = False) -> None:

@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import read_text as _graph_read_text, write_text as _graph_write_text
 """Calls through injected fields and annotated method results keep provenance."""
 
 from pathlib import Path
@@ -39,7 +41,7 @@ FILES = {
 def _project(root: Path, overrides=None):
     files = {**FILES, **(overrides or {})}
     for name, text in files.items():
-        (root / name).write_text(text, encoding="utf-8")
+        _graph_write_text(root / name, text, encoding="utf-8")
     return extract([root / name for name in files], root=root, cache_root=root, parallel=False)
 
 
@@ -112,7 +114,7 @@ def test_cache_and_changed_file_rebuild_preserve_calls(tmp_path):
     assert key(cold) == key(warm)
     assert _edge(warm, "services_taskservice_complete_task", "models_task_complete") is not None
     service = tmp_path / "services.py"
-    service.write_text(service.read_text() + "\n# changed\n")
+    _graph_write_text(service, service.read_text() + "\n# changed\n")
     context_nodes = [n for n in cold["nodes"] if n.get("source_file") != "services.py"]
     context_edges = [e for e in cold["edges"] if e.get("source_file") != "services.py"]
     changed = extract(
@@ -136,9 +138,9 @@ def test_changed_file_watch_rebuild_keeps_unchanged_return_annotations(tmp_path)
     _project(tmp_path)
     assert _rebuild_code(tmp_path, no_cluster=True, acquire_lock=False, force=True)
     service = tmp_path / "services.py"
-    service.write_text(service.read_text() + "\n# changed\n")
+    _graph_write_text(service, service.read_text() + "\n# changed\n")
     assert _rebuild_code(tmp_path, changed_paths=[service], no_cluster=True, acquire_lock=False)
-    graph = json.loads((tmp_path / "graphify-out/graph.json").read_text())
+    graph = json.loads(_graph_read_text(tmp_path / "graphify-out/graph.grafeo"))
     assert _edge({"edges": graph.get("links", graph.get("edges", []))}, "services_taskservice_complete_task", "models_task_complete") is not None
 
 
@@ -154,10 +156,10 @@ def test_changed_file_cli_extract_keeps_unchanged_return_annotations(tmp_path):
     for changed in (False, True):
         if changed:
             service = tmp_path / "services.py"
-            service.write_text(service.read_text() + "\n# changed\n")
+            _graph_write_text(service, service.read_text() + "\n# changed\n")
         run = subprocess.run(command, cwd=tmp_path, env=env, capture_output=True, text=True)
         assert run.returncode == 0, run.stderr[-2000:]
-        graph = json.loads((tmp_path / "graphify-out/graph.json").read_text())
+        graph = json.loads(_graph_read_text(tmp_path / "graphify-out/graph.grafeo"))
         assert _edge({"edges": graph.get("links", graph.get("edges", []))}, "services_taskservice_complete_task", "models_task_complete") is not None
 
 

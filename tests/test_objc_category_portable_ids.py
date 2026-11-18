@@ -7,9 +7,11 @@ starts with its own file's stem prefix (`.../Foo+Cat`), so these ids kept the
 absolute form: `/home/me/proj/Lib/NSString+Extra.h` produced a `NSString` node
 `home_me_proj_lib_nsstring_nsstring`. A method of a category on an in-corpus class
 (`Foo (Cat) -bar`) kept it too. The same repo checked out in two places gave two
-different graphs, and graph.json carried the checkout path (#502).
+different graphs, and graph.grafeo carried the checkout path (#502).
 """
 from __future__ import annotations
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import write_text as _graph_write_text
 
 from pathlib import Path
 
@@ -28,7 +30,7 @@ _FILES = {
 def _project(root: Path) -> list[Path]:
     for rel, text in _FILES.items():
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
-        (root / rel).write_text(text, encoding="utf-8")
+        _graph_write_text(root / rel, text, encoding="utf-8")
     return sorted(root / rel for rel in _FILES)
 
 
