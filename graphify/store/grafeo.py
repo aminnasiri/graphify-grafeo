@@ -304,6 +304,7 @@ class GrafeoStore(GraphStore):
     def clear(self) -> None:
         with self.transaction():
             self._execute("MATCH (n:_GraphifyNode) DETACH DELETE n")
+            self._execute("MATCH (n:_GraphifyChunk) DELETE n")
             self._execute("MATCH (n:_GraphifyMetadata) DELETE n")
             self._dirty = True
 

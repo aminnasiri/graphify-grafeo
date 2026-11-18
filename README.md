@@ -82,6 +82,12 @@ graphify export json              # explicit graphify-out/graph.json export
 graphify import json legacy.json  # refuses an occupied store; --replace is explicit
 ```
 
+Optional document retrieval uses Grafeo HNSW + BM25 before graph expansion:
+`graphify query "your question" --semantic`. Configure a local embedding model
+with `--embedding-backend sentence-transformers:/local/model`, or a trusted
+`python:module:function` adapter. The default hash vectors are lexical; ordinary
+queries remain embedding-free. See [retrieval details](docs/graph-store.md#optional-document-retrieval-phase-4).
+
 Select another database with `--database path.grafeo`, `GRAPHIFY_DATABASE`, or
 `database_path` in `.graphifyrc`, in that precedence order. See
 [storage and migration](docs/graph-store.md) for concurrency and measured limits.

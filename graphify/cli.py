@@ -2147,7 +2147,7 @@ def dispatch_command(cmd: str) -> None:
             print("Usage: graphify hook [install|uninstall|status]", file=sys.stderr)
             sys.exit(1)
     elif cmd == "query":
-        _query_usage = "Usage: graphify query \"<question>\" [--dfs] [--no-doc-demotion] [--context C] [--seed X] [--budget N] [--depth N] [--graph path]"
+        _query_usage = "Usage: graphify query \"<question>\" [--dfs] [--no-doc-demotion] [--context C] [--seed X] [--budget N] [--depth N] [--graph path] [--semantic] [--embedding-backend BACKEND] [--reindex]"
         if len(sys.argv) < 3:
             print(_query_usage, file=sys.stderr)
             sys.exit(1)
@@ -2166,6 +2166,9 @@ def dispatch_command(cmd: str) -> None:
 
         question = sys.argv[2]
         use_dfs = "--dfs" in sys.argv
+        semantic = "--semantic" in sys.argv[3:]
+        embedding_spec = os.environ.get("GRAPHIFY_EMBEDDING_BACKEND", "hash")
+        reindex = "--reindex" in sys.argv[3:]
         demote_docs_flag: bool | None = None
         if "--no-doc-demotion" in sys.argv or "--no-demote-docs" in sys.argv:
             demote_docs_flag = False
@@ -2179,7 +2182,20 @@ def dispatch_command(cmd: str) -> None:
         args = sys.argv[3:]
         i = 0
         while i < len(args):
-            if args[i] in ("--no-doc-demotion", "--no-demote-docs"):
+            if args[i] == "--embedding-backend" or args[i].startswith("--embedding-backend="):
+                if args[i] == "--embedding-backend":
+                    if i + 1 >= len(args):
+                        print("error: --embedding-backend needs a value", file=sys.stderr)
+                        sys.exit(1)
+                    embedding_spec = args[i + 1]
+                    i += 2
+                else:
+                    embedding_spec = args[i].split("=", 1)[1]
+                    i += 1
+                if not semantic:
+                    print("error: --embedding-backend requires --semantic", file=sys.stderr)
+                    sys.exit(1)
+            elif args[i] in ("--no-doc-demotion", "--no-demote-docs"):
                 demote_docs_flag = False
                 i += 1
             elif args[i] in ("--demote-docs", "--doc-demotion"):
@@ -2307,6 +2323,19 @@ def dispatch_command(cmd: str) -> None:
         import time as _time
         _t0 = _time.perf_counter()
         _mode = "dfs" if use_dfs else "bfs"
+        if reindex and not semantic:
+            print("error: --reindex requires --semantic", file=sys.stderr)
+            sys.exit(1)
+        if semantic:
+            try:
+                from graphify.store.retrieval import semantic_seeds
+                from graphify.sections import section_root
+                retrieved = semantic_seeds(gp, question, root=section_root(gp),
+                                           backend=embedding_spec, reindex=reindex)
+                seeds = list(dict.fromkeys([*seeds, *retrieved]))
+            except (ValueError, OSError, ImportError, AttributeError, RuntimeError) as exc:
+                print(f"error: semantic retrieval failed: {exc}", file=sys.stderr)
+                sys.exit(1)
         _result = _query_graph_text(
             G,
             question,

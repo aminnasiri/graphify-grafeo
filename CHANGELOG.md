@@ -4,6 +4,12 @@ Full release notes with details on each version: [GitHub Releases](https://githu
 
 ## Unreleased
 
+- Optional retrieval: `query --semantic` indexes document heading chunks using
+  Grafeo HNSW + BM25 and expands structural parents with existing budgets/depth.
+  Add configurable local embedding backends and recoverable derived indexes;
+  ordinary queries keep the no-embeddings default and JSON schema is unchanged.
+
+
 - Grafeo integration: every graph consumer now uses the embedded database;
   transactional updates preserve unchanged records and file hashes. Add verified
   `migrate --to grafeo`, `import json`, `export json`, custom database paths,
