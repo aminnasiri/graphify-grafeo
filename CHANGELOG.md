@@ -2,6 +2,16 @@
 
 Full release notes with details on each version: [GitHub Releases](https://github.com/Graphify-Labs/graphify/releases)
 
+## Unreleased
+
+- Breaking: require Python 3.12+ and `grafeo>=0.6.3,<0.7`; update the CI matrix
+  and lint/type-check targets accordingly.
+- Add the Phase 1 `GraphStore` contract and its sole implementation,
+  `GrafeoStore`, with transactional records/metadata, revisions, source/tier
+  deletion, graph snapshots and JSON interchange. Preserve nulls, float-list
+  precision, parallel edges and large values inside the database. Existing CLI
+  consumers will be ported in subsequent phases; no JSON store backend is added.
+
 ## 0.9.112 (2026-11-17)
 
 - Docs: **python** the README, its translations, CONTRIBUTING, RELEASING, the bug-report template and the ruff/pyright targets now state Python 3.11 as the minimum, matching the floor that shipped in 0.9.111 (#5238, thanks @Deepanshu-Mehta; @Max17190 sent the same fix in #5237).

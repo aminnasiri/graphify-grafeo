@@ -1,0 +1,142 @@
+# Graph storage migration
+
+## Revised scope
+
+Graphify requires Python 3.12+ and Grafeo. Grafeo will be the sole persistent
+graph backend for every feature. There is no `JsonStore`, optional Grafeo extra,
+or `store=json` selection. JSON remains an explicit import/export format, with
+the existing node-link schema (version 1).
+
+**Phase 1 status:** the storage contract, database adapter and interchange API
+are implemented. Existing extraction, CLI, watch, hook, MCP, PR and export
+consumers have not yet switched to it. They still read/write `graph.json` until
+their integration phase. Do not delete a project's current graph or assume that
+opening a store migrates it automatically.
+
+## Storage API
+
+```python
+from graphify.store import EdgeRecord, NodeRecord, open_store
+
+with open_store(root="/path/to/project") as store:
+    with store.transaction():
+        store.upsert_nodes([
+            NodeRecord("a", {"label": "Alpha", "type": "function", "source_file": "a.py"}),
+            NodeRecord("b", {"label": "Beta", "type": "class", "source_file": "b.py"}),
+        ])
+        store.upsert_edges([
+            EdgeRecord("a-calls-b", "a", "b", {"relation": "calls", "confidence": "EXTRACTED"}),
+        ])
+        store.set_metadata("file_hashes", {"a.py": {"ast_hash": "...", "semantic_hash": ""}})
+
+    snapshot = store.snapshot()
+    graph = store.export_networkx(directed=True)
+    store.export_json("/path/to/interchange.json")
+```
+
+`open_store()` defaults to `<root>/<GRAPHIFY_OUT>/graph.grafeo`. Its explicit
+`path` argument may be absolute or relative to the root. JSON paths are refused
+as database paths. An empty store can ingest a legacy graph with
+`store.import_json(path)`; replacing existing records requires `replace=True`.
+CLI import/migrate commands are deferred to the integration phase.
+
+The contract lives in `graphify/store/base.py`, the Grafeo adapter in
+`grafeo.py`, lossless attribute encoding in `codec.py`, and the factory in
+`__init__.py`. Imports defer loading the native Grafeo module until a database
+is opened, although Grafeo is a required package dependency.
+
+Node and edge upserts replace complete attribute maps. Edge storage IDs are
+caller-supplied and separate from exported `key` attributes. Imported links
+receive deterministic content-derived IDs with occurrence suffixes, preserving
+even identical parallel links. Reads are sorted by storage identity; retrieval
+consumers must preserve their existing explicit ordering and tie-breaking rules.
+
+`GraphSnapshot` holds a consistent revision, records and metadata. NetworkX
+exports use multigraphs to preserve parallel relationships and retain logical
+direction separately from an explicitly requested directed traversal view.
+Legacy `_src`/`_tgt` markers remain authoritative in that view. JSON exports
+preserve original arc order, attributes and envelope fields, including hyperedges
+and `built_at_commit`, and include `graph.schema_version` (legacy files without
+it are normalized to version 1). Label signatures and other store-only metadata
+do not leak into the interchange envelope.
+
+`neighbors`, `shortest_path`, `query_subgraph` and `list_communities` provide
+common read primitives. Initially they use snapshots/NetworkX. The path method
+is unweighted; it does not replace the CLI's confidence-aware path selection.
+Query ranking, token budgets and ambiguity handling remain retrieval concerns.
+
+## Persistence and correctness
+
+Each user node has a `_GraphifyNode` label, a unique indexed `id`, and a kind
+label derived from `type`, `kind`, `metadata.kind`, or `file_type`, in that order.
+Edges use the original relation as their type. Labels and types are quoted GQL
+identifiers; values are bound parameters. All three confidence categories,
+`EXTRACTED`, `INFERRED` and `AMBIGUOUS`, survive unchanged.
+
+Grafeo 0.6.3 drops top-level null properties and converts all-float lists to
+float32 vectors, including nested lists. `codec.py` therefore keeps a lossless
+JSON encoding per record in database properties, with native scalar projections
+for lookup and source ownership. User properties using the internal prefix are
+also retained in the encoded record. The encoding is split into bounded
+properties, so documents larger than Grafeo's default 16 MiB property cap stay
+inside the database. No external document file or JSON graph is required by the
+store. Non-finite JSON numbers are rejected before writing.
+
+Internal nodes hold metadata and a monotonically increasing revision; they are
+excluded from graph snapshots and exports. Transactions cover graph records,
+metadata and one revision increment. They use `tx.execute()` exclusively:
+database-level direct/batch writes do not join that transaction. An error rolls
+back everything. Nested operations join the outer transaction; an inner failure
+marks the outer transaction for rollback even if a caller catches the error.
+
+`delete_by_source_file(source, origin=...)` is an explicit purge primitive.
+It deletes matching owned nodes and edges, plus edges incident on removed nodes.
+It is **not** a safe incremental replacement algorithm on its own. Phase 2 must
+reuse Graphify's existing successful-source authorization, AST/semantic tier
+rules, shared/folded identities and cross-file reconciliation, retaining incoming
+evidence for surviving nodes. Community assignments can change outside an edited
+file after clustering. Shrink/provenance guards must run before a transaction
+commits; derived reports must be written after it.
+
+## Process access and durability
+
+Grafeo permits one read-write owner, excluding all other opens. Several
+read-only owners may coexist while no writer is open. `GrafeoStore` retries only
+Grafeo's database-busy error, then raises `StoreBusyError` after `timeout`
+seconds (default 5). Other errors propagate immediately. The Grafeo OS lock is
+authoritative; Python threads sharing a store are serialized by an `RLock`.
+Always use short context-managed lifetimes. MCP integration must cache detached,
+revision-keyed snapshots rather than a permanently open database handle.
+
+The installed Python package includes WAL support. `close()` checkpoints and
+releases the database lock. Default WAL durability batches disk synchronization;
+power-loss durability is not equivalent to a sync on every commit. Grafeo
+checkpoints can rewrite substantial data even when Graphify applies a small
+transaction. Incremental application writes do not promise proportional disk
+I/O. Active-file copies are not backups; use Grafeo's supported backup/snapshot
+APIs. See [persistence](https://docs.grafeo.dev/operate/persistence/persistent/)
+and [Python database operations](https://docs.grafeo.dev/languages/python/database/).
+
+## Remaining phases and validation
+
+Phase 2 adds the incremental reconciliation and clustering persistence needed by
+the pipeline, including transactional manifest/label state and performance work.
+Phase 3 ports every consumer listed in the investigation: extraction (raw and
+clustered), update/watch/hooks, cluster/label, query/path/explain/affected/section,
+merge/global graphs, every exporter, MCP, PR impact, reflection, benchmarks,
+diagnostics, installers and generated assistant instructions. Existing command
+formats, token budgets, depth and exit codes must remain stable. Automatic
+`graph.json` persistence is removed when that integration is complete. Phase 4
+remains a separate opt-in semantic retrieval change.
+
+The Phase 1 tests use the real Grafeo engine for lossless `worked/` round-trips,
+parallel links, precision/null preservation, long documents, rollback and nested
+failure, source/tier purges, revisions, persistence, read-only mode and process
+lock contention. End-to-end CLI parity, hook/watch/MCP scheduling, migration,
+mid-size repository benchmarks and Windows execution remain integration work.
+
+The supported Grafeo range is `>=0.6.3,<0.7`. Its public API is stable by default
+within a minor release, while experimental APIs may change in patches. This
+adapter avoids experimental streaming and native CSV loaders. Revalidate the
+adapter and database format before accepting a new minor release; see
+[Grafeo stability](https://docs.grafeo.dev/project/stability/).

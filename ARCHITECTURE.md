@@ -1,5 +1,10 @@
 # Architecture
 
+The Grafeo storage migration is being implemented in phases. The new
+`graphify.store` API is described in [Graph storage](docs/graph-store.md).
+Its sole backend is Grafeo; JSON is an interchange format. The pipeline below
+still describes existing command implementations until their integration phase.
+
 graphify is a Claude Code skill backed by a Python library. The skill orchestrates the library; the library can be used standalone.
 
 ## Pipeline

@@ -1,5 +1,9 @@
 # How graphify works
 
+Python 3.12+ is required. [Graph storage](graph-store.md) documents the Grafeo
+migration: the storage API is available, while the existing CLI pipeline below
+will be ported in the subsequent integration phases.
+
 ## The three passes
 
 graphify processes your files in three passes:
