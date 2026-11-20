@@ -94,8 +94,8 @@ def test_query_cli_preserves_calls_direction_when_seeded_on_callee(monkeypatch, 
     )
     mainmod.main()
     out = capsys.readouterr().out
-    assert "caller_fn --calls" in out
-    assert "callee_fn --calls" not in out
+    assert "caller_fn calls" in out
+    assert "callee_fn calls" not in out
 
 
 def test_query_cli_preserves_calls_direction_when_seeded_on_caller(monkeypatch, tmp_path, capsys):
@@ -109,8 +109,8 @@ def test_query_cli_preserves_calls_direction_when_seeded_on_caller(monkeypatch, 
     )
     mainmod.main()
     out = capsys.readouterr().out
-    assert "caller_fn --calls" in out
-    assert "callee_fn --calls" not in out
+    assert "caller_fn calls" in out
+    assert "callee_fn calls" not in out
 
 
 def test_query_cli_rejects_oversized_graph(monkeypatch, tmp_path, capsys):
@@ -491,3 +491,14 @@ def test_query_root_unexpected_runtime_error_propagates(monkeypatch, tmp_path, o
     monkeypatch.setattr(Path, operation, unexpected)
     with pytest.raises(RuntimeError, match="unexpected marker operation"):
         _graph_root_for(directory / "graph.grafeo")
+
+
+def test_raw_flag_preserves_graph_records(monkeypatch, tmp_path, capsys):
+    graph_path = _write_calls_graph(tmp_path)
+    monkeypatch.setattr(mainmod, '_check_skill_version', lambda _: None)
+    monkeypatch.setattr(mainmod.sys, 'argv',
+                        ['graphify', 'query', 'callee_fn', '--raw', '--graph', str(graph_path)])
+    mainmod.main()
+    out = capsys.readouterr().out
+    assert 'NODE callee_fn' in out
+    assert 'caller_fn --calls' in out

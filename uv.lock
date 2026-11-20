@@ -932,7 +932,7 @@ wheels = [
 
 [[package]]
 name = "graphifyy"
-version = "0.9.112"
+version = "0.9.113+grafeo"
 source = { editable = "." }
 dependencies = [
     { name = "grafeo" },

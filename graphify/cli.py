@@ -2147,7 +2147,7 @@ def dispatch_command(cmd: str) -> None:
             print("Usage: graphify hook [install|uninstall|status]", file=sys.stderr)
             sys.exit(1)
     elif cmd == "query":
-        _query_usage = "Usage: graphify query \"<question>\" [--dfs] [--no-doc-demotion] [--context C] [--seed X] [--budget N] [--depth N] [--graph path] [--semantic] [--embedding-backend BACKEND] [--reindex]"
+        _query_usage = "Usage: graphify query \"<question>\" [--dfs] [--no-doc-demotion] [--context C] [--seed X] [--budget N] [--depth N] [--graph path] [--semantic] [--embedding-backend BACKEND] [--reindex] [--raw]"
         if len(sys.argv) < 3:
             print(_query_usage, file=sys.stderr)
             sys.exit(1)
@@ -2347,6 +2347,7 @@ def dispatch_command(cmd: str) -> None:
             seeds=seeds or None,
             seed_root=graph_root,
             demote_docs=effective_demote_docs,
+            readable="--raw" not in args,
         )
         querylog.log_query(
             kind="query",
@@ -2805,7 +2806,7 @@ def dispatch_command(cmd: str) -> None:
         _touch_query_stamp(gp)
 
     elif cmd == "explain":
-        _explain_usage = 'Usage: graphify explain "<node>" [--all] [--graph path]'
+        _explain_usage = 'Usage: graphify explain "<node>" [--all] [--raw] [--graph path]'
         if len(sys.argv) < 3:
             print(_explain_usage, file=sys.stderr)
             sys.exit(1)
@@ -2832,6 +2833,15 @@ def dispatch_command(cmd: str) -> None:
             print(refusal)
             sys.exit(EXIT_AMBIGUOUS if _is_ambiguity_refusal(refusal) else EXIT_NOT_FOUND)
         d = G.nodes[nid]
+        if "--raw" not in args:
+            from graphify.query_presentation import describe_subgraph
+            print(describe_subgraph(G, list(G.nodes), list(G.edges), [nid],
+                                    100_000 if show_all else 2000, direct_only=True))
+            from graphify import querylog
+            querylog.log_query(kind="explain", question=label, corpus=str(gp),
+                               nodes_returned=len(set(G.successors(nid)) | set(G.predecessors(nid))))
+            _touch_query_stamp(gp)
+            return
         print(f"Node: {d.get('label', nid)}")
         print(f"  ID:        {nid}")
         print(
@@ -5009,6 +5019,18 @@ def dispatch_command(cmd: str) -> None:
                 file=sys.stderr,
             )
             sys.exit(1)
+        if (needs_llm and backend is None and code_files and not dedup_llm
+                and "--allow-code-only" in sys.argv):
+            print(
+                f"[graphify extract] No LLM backend configured: indexing code locally; "
+                f"{len(semantic_files)} doc/paper/image file(s) deferred. "
+                "Configure --backend and rerun to include them."
+            )
+            semantic_files = []
+            doc_files = []
+            paper_files = []
+            image_files = []
+            needs_llm = False
         if needs_llm:
             if backend is None:
                 reasons = []
@@ -6372,6 +6394,7 @@ def dispatch_command(cmd: str) -> None:
         # copy-pasting skill invocations without the leading slash.
         sys.argv.insert(2, sys.argv[1])
         sys.argv[1] = "extract"
+        sys.argv.append("--allow-code-only")
         _reenter_main()
     else:
         print(f"error: unknown command '{cmd}'", file=sys.stderr)

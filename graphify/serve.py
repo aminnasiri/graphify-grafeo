@@ -1694,6 +1694,7 @@ def _query_graph_text(
     seeds: list[str] | None = None,
     seed_root: Path | None = None,
     demote_docs: bool = True,
+    readable: bool = False,
 ) -> str:
     # Explicit start nodes: an external ranker -- embeddings, a learned
     # retriever, grep -- can choose where the traversal begins instead of the
@@ -1725,7 +1726,7 @@ def _query_graph_text(
                 return "\n".join(ambiguous_refusals)
             return "No unique node match for --seed: " + ", ".join(seeds)
         return _render_query(G, question, start_nodes, mode=mode, depth=depth, token_budget=token_budget,
-                             context_filters=context_filters, graph_path=graph_path, given=True, unresolved=unresolved)
+                             context_filters=context_filters, graph_path=graph_path, given=True, unresolved=unresolved, readable=readable)
     # A question that is itself the exact name of several nodes is refused,
     # matching `explain` and `path` (#4511). A sentence, or a bare keyword that
     # only prefix/substring-matches labels, is not an ambiguous node name and
@@ -1764,7 +1765,7 @@ def _query_graph_text(
         return _QUERY_NO_MATCH
     return _render_query(G, question, start_nodes, mode=mode, depth=depth, token_budget=token_budget,
                          context_filters=context_filters, graph_path=graph_path,
-                         scores={nid: sc for sc, nid in qs.ranked})
+                         scores={nid: sc for sc, nid in qs.ranked}, readable=readable)
 
 
 def _render_query(
@@ -1780,6 +1781,7 @@ def _render_query(
     given: bool = False,
     unresolved: list[str] | None = None,
     scores: dict[str, float] | None = None,
+    readable: bool = False,
 ) -> str:
     resolved_filters, filter_source = _resolve_context_filters(question, context_filters)
     traversal_graph = _filter_graph_by_context(_traversal_view(G), resolved_filters)
@@ -1813,6 +1815,9 @@ def _render_query(
     # Pass the seeds so the queried symbol renders first and survives truncation
     # (#BUG2): a branch merge had silently dropped this argument, leaving the
     # seed-first ordering as dead code.
+    if readable:
+        from graphify.query_presentation import describe_subgraph
+        return header + describe_subgraph(traversal_graph, nodes, edges, start_nodes, token_budget)
     return header + _subgraph_to_text(traversal_graph, nodes, edges, token_budget, seeds=start_nodes, scores=scores)
 
 

@@ -4,6 +4,8 @@ Full release notes with details on each version: [GitHub Releases](https://githu
 
 ## Unreleased
 
+## 0.9.113+grafeo (2026-11-18)
+
 - Optional retrieval: `query --semantic` indexes document heading chunks using
   Grafeo HNSW + BM25 and expands structural parents with existing budgets/depth.
   Add configurable local embedding backends and recoverable derived indexes;
@@ -2978,3 +2980,10 @@ Initial release.
 - Security module - URL validation, safe fetch with size cap, path guards, label sanitisation
 - `graphify install` CLI - copies skill to `~/.claude/skills/` and registers in `CLAUDE.md`
 - Parallel subagent extraction for docs, papers, and images
+
+### Console usability
+
+- Query and explain now describe graph relationships with confidence and source
+  citations. `--raw` retains the prior output; MCP output is unchanged.
+- A bare `graphify .` can build code locally without a semantic backend, while
+  reporting deferred documents and media. Explicit extraction remains strict.

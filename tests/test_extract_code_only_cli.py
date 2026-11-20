@@ -434,3 +434,19 @@ def test_code_only_force_rescan_re_resolves_tsconfig_paths_and_preserves_semanti
     assert "doc_arch" in nodes2, (
         "existing semantic nodes must survive --code-only --force (#2923/#3125)"
     )
+
+
+def test_bare_path_without_backend_builds_code_and_defers_docs(tmp_path):
+    repo = _mixed_repo(tmp_path)
+    env = {k: v for k, v in os.environ.items() if k not in _KEY_VARS}
+    env['GRAPHIFY_OUT'] = str(repo / 'graphify-out')
+    result = subprocess.run([PYTHON, '-m', 'graphify', '.', '--no-cluster'],
+                            cwd=repo, capture_output=True, text=True, env=env)
+    assert result.returncode == 0, result.stderr
+    assert 'doc/paper/image file(s) deferred' in result.stdout
+    graph = json.loads(_graph_read_text(repo / 'graphify-out' / 'graph.grafeo'))
+    assert any(str(n.get('label', '')).startswith('hello') for n in graph['nodes'])
+    # A subsequent strict extraction must still see the unprocessed documents.
+    retry = _run(repo, '--no-cluster')
+    assert retry.returncode != 0
+    assert 'no LLM API key found' in retry.stderr

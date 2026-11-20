@@ -37,7 +37,7 @@ Type `/graphify` in your AI coding assistant and it maps your entire project (co
 
 - **Code maps for free, fully local.** Code is parsed with tree-sitter AST: deterministic, no LLM, nothing leaves your machine. (Docs, PDFs, images and video use your assistant's model, or a configured API key, for a semantic pass.)
 - **Every edge is explained.** Each connection is tagged `EXTRACTED` (explicit in the source) or `INFERRED` (resolved by graphify), so you can tell what was read directly from what was inferred.
-- **Not a vector index.** No embeddings, no vector store: a real graph you traverse. Ask a question, trace the path between two things, or explain one concept.
+- **Graph traversal by default.** Ask a question, trace a path, or explain a concept without loading an embedding model. [Optional document search](#grafeo) adds vector and keyword matches before traversal.
 
 > [!NOTE]
 > **Want this always-on?** [Graphify Cloud](https://app.graphify.com/signup?utm_source=github&utm_medium=readme&utm_campaign=oss) keeps the graph live across your entire SDLC: monorepo and cross-repo support, formal verification, and code review with a bird's-eye view of your SDLC, plus connectors for Sentry, Jira, and more so incidents and tickets sit in the same graph as your code. **[Start free, no card required](https://app.graphify.com/signup?utm_source=github&utm_medium=readme&utm_campaign=oss)**.
@@ -71,38 +71,84 @@ graphify-out/
 └── graph.grafeo       the full graph: query it anytime without re-reading your files
 ```
 
-Graphify requires Python 3.12+ and embeds Grafeo locally. All commands use the
-database, including watch, hooks and MCP. JSON is available for interchange:
+**One install, any assistant, any OS.** Claude Code, Cursor, Codex, Gemini CLI, GitHub Copilot, and 20+ more, on macOS, Linux, and Windows: [pick your platform](#install).
+
+## Grafeo
+
+Graphify uses a local Grafeo database at `graphify-out/graph.grafeo` for the CLI,
+watcher, hooks, and MCP. Graphify requires Python 3.12+.
+
+### Migrate, import, and export
 
 ```bash
-graphify migrate --to grafeo       # verify and convert an existing graphify-out/graph.json
-graphify update .                 # deterministic AST update, no API cost
-graphify query "authentication"
-graphify export json              # explicit graphify-out/graph.json export
-graphify import json legacy.json  # refuses an occupied store; --replace is explicit
+graphify migrate --to grafeo
+graphify migrate ./my-project --graph ./legacy.json --database ./project.grafeo
+graphify import json ./legacy.json --database ./imported.grafeo
+graphify export json
+graphify export json --graph ./project.grafeo --out ./graph-export.json
 ```
 
-Optional document retrieval uses Grafeo HNSW + BM25 before graph expansion:
-`graphify query "your question" --semantic`. Configure a local embedding model
-with `--embedding-backend sentence-transformers:/local/model`, or a trusted
-`python:module:function` adapter. The default hash vectors are lexical; ordinary
-queries remain embedding-free. See [retrieval details](docs/graph-store.md#optional-document-retrieval-phase-4).
+`migrate` verifies the legacy graph before creating the database and leaves the
+source JSON in place. The project directory defaults to `.` and the legacy source
+defaults to its `graphify-out/graph.json`. Migration requires a new destination.
 
-Select another database with `--database path.grafeo`, `GRAPHIFY_DATABASE`, or
-`database_path` in `.graphifyrc`, in that precedence order. See
-[storage and migration](docs/graph-store.md) for concurrency and measured limits.
+`import json` accepts `--graph` as an alias for `--database`. Add `--replace` to
+explicitly overwrite an occupied database. `export json` writes `graph.json`
+next to the selected database by default. `--output` is an alias for `--out`.
+The export includes `graph.schema_version` for consumers of the JSON format and
+preserves `graph.graphify_version` when present.
 
-The explicit JSON export includes `graph.schema_version` so integrations can detect
-incompatible format changes, plus `graph.graphify_version` identifying the
-Graphify release that produced it.
+### Select a database
 
-**Grafeo migration (in progress):** Python 3.12+ and the embedded `grafeo`
-dependency are now required. The new storage API uses `graphify-out/graph.grafeo`
-and supports JSON only for import/export; it has no JSON backend. Phase 1 adds
-this foundation. Existing CLI commands still use the pipeline described above
-until they are ported in the following phases. See [the storage migration](docs/graph-store.md).
+```bash
+graphify update . --database ./project.grafeo
+graphify query "authentication" --database ./project.grafeo
+```
 
-**One install, any assistant, any OS.** Claude Code, Cursor, Codex, Gemini CLI, GitHub Copilot, and 20+ more, on macOS, Linux, and Windows: [pick your platform](#install).
+For commands that use the default graph path, `--database PATH` takes precedence
+over `GRAPHIFY_DATABASE`, then `database_path` in `.graphifyrc`. Commands that
+accept `--graph` can select an explicit graph file for that invocation. Existing
+commands such as `global add`, `merge-graphs`, and `benchmark` also accept
+`.grafeo` inputs. See the [storage guide](docs/graph-store.md) for migration,
+concurrency, and performance details.
+
+### Search documents locally
+
+```bash
+graphify query "exclusive writer locks" --semantic
+graphify query "safe concurrent updates" --semantic --reindex
+graphify query "safe concurrent updates" --semantic --embedding-backend sentence-transformers:/absolute/path/to/local/model
+graphify query "safe concurrent updates" --semantic --embedding-backend python:my_embeddings:embed
+```
+
+`--semantic` combines Grafeo HNSW vector search and BM25 keyword search over
+indexed text and Markdown sections, then expands the matches through the graph.
+The default `hash` backend uses lexical similarity. A Sentence Transformers
+backend requires the optional `sentence-transformers` package and an existing
+local model directory. A Python backend calls a trusted local adapter.
+`GRAPHIFY_EMBEDDING_BACKEND` sets the default backend for semantic queries.
+`--reindex` forces a rebuild, for example after changing a model or adapter at the
+same path. Both `--embedding-backend` and `--reindex` require `--semantic`.
+See [document retrieval](docs/graph-store.md#optional-document-retrieval-phase-4).
+
+### Query output and local builds
+
+```bash
+graphify query "How does extraction work?" --raw
+graphify explain "extract_corpus_parallel" --raw
+graphify .
+graphify extract . --code-only
+```
+
+`query` and `explain` describe recorded relationships with confidence and source
+locations by default. `--raw` shows the previous node and edge output. `query`
+still accepts `--seed`, `--context`, `--depth`, and `--budget` to control traversal.
+The readable output can also quote source docstrings recorded in the graph.
+
+`graphify .` can build a code graph from a mixed project without a semantic
+backend and reports deferred documents and media. Configure a backend and rerun
+to include them. For an explicit `graphify extract .` on a mixed project, use a
+backend or pass `--code-only` to index code alone.
 
 ---
 
