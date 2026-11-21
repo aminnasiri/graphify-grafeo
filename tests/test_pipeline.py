@@ -1,3 +1,5 @@
+from tests.graph_io import unlink as _graph_unlink, read_bytes as _graph_read_bytes, canonical_expected as _canonical_expected
+from tests.graph_io import state_exists as _graph_exists, read_text as _graph_read_text
 """
 End-to-end pipeline test: detect → extract → build → cluster → analyze → report → export.
 Uses the existing test fixtures (code + markdown). No LLM calls - AST extraction only.
@@ -51,7 +53,7 @@ def run_pipeline(tmp_path: Path) -> dict:
     # Step 5: analyze
     gods = god_nodes(G)
     assert len(gods) > 0
-    assert all("id" in g and "edges" in g for g in gods)
+    assert all("id" in g and "degree" in g for g in gods)
 
     surprises = surprising_connections(G, communities)
     assert isinstance(surprises, list)
@@ -68,18 +70,18 @@ def run_pipeline(tmp_path: Path) -> dict:
     assert len(report) > 100
 
     # Step 7: export - JSON
-    json_path = tmp_path / "graph.json"
+    json_path = tmp_path / "graph.grafeo"
     to_json(G, communities, str(json_path))
-    assert json_path.exists()
-    data = json.loads(json_path.read_text())
+    assert _graph_exists(json_path)
+    data = json.loads(_graph_read_text(json_path))
     assert "nodes" in data and "links" in data
     assert all("community" in n for n in data["nodes"])
 
     # Step 8: export - HTML
     html_path = tmp_path / "graph.html"
     to_html(G, communities, str(html_path), community_labels=labels)
-    assert html_path.exists()
-    html = html_path.read_text()
+    assert _graph_exists(html_path)
+    html = _graph_read_text(html_path)
     assert "vis-network" in html
     assert "RAW_NODES" in html
 
@@ -87,7 +89,7 @@ def run_pipeline(tmp_path: Path) -> dict:
     vault_path = tmp_path / "obsidian"
     n_notes = to_obsidian(G, communities, str(vault_path), community_labels=labels, cohesion=cohesion)
     assert n_notes > 0
-    assert (vault_path / ".obsidian" / "graph.json").exists()
+    assert _graph_exists(vault_path / ".obsidian" / "graph.json")
     md_files = list(vault_path.glob("*.md"))
     assert len(md_files) > 0
 
